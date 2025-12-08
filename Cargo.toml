@@ -72,3 +72,7 @@ path = "src/bin/setup.rs"
 [[test]]
 name = "e2e_pir"
 path = "tests/e2e_pir.rs"
+
+[[example]]
+name = "generate_test_data"
+path = "examples/generate_test_data.rs"

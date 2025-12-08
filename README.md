@@ -82,6 +82,28 @@ cargo build --release
 cargo test
 ```
 
+## Quick Start with Test Data
+
+Generate test data files:
+
+```bash
+cargo run --example generate_test_data
+```
+
+This creates:
+- `testdata/database.bin` - 1024 entries of 32 bytes
+- `testdata/account-mapping.bin` - 10 test accounts
+- `testdata/storage-mapping.bin` - 20 test storage slots
+
+Run PIR setup:
+
+```bash
+cargo run --release --bin inspire-setup -- \
+  --database testdata/database.bin \
+  --entry-size 32 \
+  --output-dir testdata/pir
+```
+
 ## Documentation
 
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) - Architecture details
