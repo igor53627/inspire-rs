@@ -12,6 +12,7 @@
 //! This rotation brings y_k to coefficient 0 of the result polynomial.
 
 use eyre::{eyre, Result};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::math::NttContext;
@@ -33,7 +34,7 @@ pub struct ServerResponse {
 
 /// PIR.Respond(crs, D', query) → response
 ///
-/// Computes the PIR response using homomorphic rotation.
+/// Computes the PIR response using homomorphic rotation (parallel version).
 ///
 /// # Algorithm
 /// 1. For each database polynomial h(X) (one per column):
@@ -50,6 +51,59 @@ pub struct ServerResponse {
 /// # Returns
 /// Server response containing encrypted entry value
 pub fn respond(
+    crs: &ServerCrs,
+    encoded_db: &EncodedDatabase,
+    query: &ClientQuery,
+) -> Result<ServerResponse> {
+    let d = crs.ring_dim();
+    let q = crs.modulus();
+    let delta = crs.params.delta();
+
+    let shard = encoded_db
+        .shards
+        .iter()
+        .find(|s| s.id == query.shard_id)
+        .ok_or_else(|| eyre!("Shard {} not found", query.shard_id))?;
+
+    if shard.polynomials.is_empty() {
+        let zero = RlweCiphertext::zero(&crs.params);
+        return Ok(ServerResponse {
+            ciphertext: zero.clone(),
+            column_ciphertexts: vec![zero],
+        });
+    }
+
+    let column_ciphertexts: Vec<RlweCiphertext> = shard
+        .polynomials
+        .par_iter()
+        .map(|db_poly| {
+            let local_ctx = NttContext::new(d, q);
+            let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
+            external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
+        })
+        .collect();
+
+    let combined = if column_ciphertexts.len() == 1 {
+        column_ciphertexts[0].clone()
+    } else {
+        column_ciphertexts
+            .iter()
+            .skip(1)
+            .fold(column_ciphertexts[0].clone(), |acc, ct| acc.add(ct))
+    };
+
+    Ok(ServerResponse {
+        ciphertext: combined,
+        column_ciphertexts,
+    })
+}
+
+/// Sequential respond using homomorphic rotation
+///
+/// Same as `respond` but processes columns sequentially.
+/// Kept as a correctness baseline for testing and benchmarking the parallel implementation.
+#[allow(dead_code)]
+pub fn respond_sequential(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
     query: &ClientQuery,
@@ -79,60 +133,6 @@ pub fn respond(
         let rotated = external_product(&rlwe_db, &query.rgsw_ciphertext, &ctx);
         column_ciphertexts.push(rotated);
     }
-
-    let combined = if column_ciphertexts.len() == 1 {
-        column_ciphertexts[0].clone()
-    } else {
-        column_ciphertexts
-            .iter()
-            .skip(1)
-            .fold(column_ciphertexts[0].clone(), |acc, ct| acc.add(ct))
-    };
-
-    Ok(ServerResponse {
-        ciphertext: combined,
-        column_ciphertexts,
-    })
-}
-
-/// Parallel respond using homomorphic rotation
-///
-/// Same as `respond` but processes columns in parallel.
-#[allow(dead_code)]
-pub fn respond_parallel(
-    crs: &ServerCrs,
-    encoded_db: &EncodedDatabase,
-    query: &ClientQuery,
-) -> Result<ServerResponse> {
-    use rayon::prelude::*;
-
-    let d = crs.ring_dim();
-    let q = crs.modulus();
-    let delta = crs.params.delta();
-
-    let shard = encoded_db
-        .shards
-        .iter()
-        .find(|s| s.id == query.shard_id)
-        .ok_or_else(|| eyre!("Shard {} not found", query.shard_id))?;
-
-    if shard.polynomials.is_empty() {
-        let zero = RlweCiphertext::zero(&crs.params);
-        return Ok(ServerResponse {
-            ciphertext: zero.clone(),
-            column_ciphertexts: vec![zero],
-        });
-    }
-
-    let column_ciphertexts: Vec<RlweCiphertext> = shard
-        .polynomials
-        .par_iter()
-        .map(|db_poly| {
-            let local_ctx = NttContext::new(d, q);
-            let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
-            external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
-        })
-        .collect();
 
     let combined = if column_ciphertexts.len() == 1 {
         column_ciphertexts[0].clone()

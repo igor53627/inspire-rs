@@ -60,10 +60,11 @@ inspire-pir/
 │   ├── pir/
 │   │   ├── setup.rs           # InsPIRe.Setup
 │   │   ├── query.rs           # InsPIRe.Query
-│   │   ├── respond.rs         # InsPIRe.Respond
+│   │   ├── respond.rs         # InsPIRe.Respond (parallel by default)
 │   │   ├── extract.rs         # InsPIRe.Extract
 │   │   ├── encode_db.rs       # EncodeDB, Interpolate
-│   │   └── eval_poly.rs       # Homomorphic polynomial evaluation
+│   │   ├── eval_poly.rs       # Homomorphic polynomial evaluation
+│   │   └── mmap.rs            # Memory-mapped database support
 │   ├── ethereum_db/
 │   │   ├── mapping.rs         # Parse account/storage mappings
 │   │   └── adapter.rs         # Convert to InsPIRe shards
@@ -164,6 +165,8 @@ Core (no external FHE library needed):
 - CRS model: random components fixed but secret keys re-sampled per query
 - No client-specific server state (supports anonymity)
 - Circular security assumption (standard for lattice FHE)
+- Secret keys separated from CRS (ServerCrs contains only public params)
+- `#[serde(skip)]` on secret key fields prevents accidental serialization
 
 ## Implementation Phases
 

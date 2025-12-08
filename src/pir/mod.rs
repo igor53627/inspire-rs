@@ -45,12 +45,14 @@
 mod encode_db;
 mod eval_poly;
 mod extract;
+mod mmap;
 mod query;
 mod respond;
 mod setup;
 
 pub use encode_db::{encode_column, encode_database, encode_direct, inverse_monomial};
 pub use extract::extract;
+pub use mmap::{save_shards_binary, load_shard_binary, MmapDatabase};
 pub use query::{query, ClientQuery, ClientState};
 pub use respond::{respond, ServerResponse};
 pub use setup::{setup, EncodedDatabase, InspireCrs, ServerCrs, ShardData};
