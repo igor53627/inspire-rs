@@ -1,0 +1,411 @@
+//! inspire-client: PIR client CLI
+//!
+//! Performs PIR queries against an inspire-server instance.
+
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::time::Instant;
+
+use clap::{Parser, Subcommand};
+use eyre::{Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
+use serde::Deserialize;
+use tracing::{info, Level};
+use tracing_subscriber::FmtSubscriber;
+
+use inspire_pir::math::GaussianSampler;
+use inspire_pir::params::ShardConfig;
+use inspire_pir::pir::{extract, query, ClientQuery, InspireCrs, ServerResponse};
+
+#[derive(Parser)]
+#[command(name = "inspire-client")]
+#[command(about = "InsPIRe PIR client")]
+#[command(version)]
+struct Args {
+    /// Server URL
+    #[arg(long, default_value = "http://localhost:3000")]
+    server: String,
+
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Query account balance
+    Account {
+        /// Ethereum address (hex, with or without 0x prefix)
+        #[arg(long)]
+        address: String,
+    },
+    /// Query storage slot
+    Storage {
+        /// Contract address (hex, with or without 0x prefix)
+        #[arg(long)]
+        address: String,
+        /// Storage slot key (hex, with or without 0x prefix)
+        #[arg(long)]
+        slot: String,
+    },
+    /// Query by raw index
+    Index {
+        /// Database index
+        #[arg(long)]
+        index: u64,
+    },
+    /// Batch query from file
+    Batch {
+        /// File with addresses/slots (one per line)
+        #[arg(long)]
+        file: PathBuf,
+    },
+    /// Get server parameters
+    Params,
+    /// Health check
+    Health,
+}
+
+#[derive(Deserialize)]
+struct ParamsResponse {
+    version: String,
+    ring_dim: usize,
+    modulus: String,
+    plaintext_modulus: u64,
+    gadget_base: u64,
+    gadget_len: usize,
+    entry_count: u64,
+    shard_count: usize,
+    crs_a_vectors_count: usize,
+}
+
+#[derive(Deserialize)]
+struct QueryResponse {
+    response: ServerResponse,
+    processing_time_ms: u64,
+}
+
+#[derive(Deserialize)]
+struct HealthResponse {
+    status: String,
+    version: String,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::INFO)
+        .with_target(false)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)?;
+
+    let args = Args::parse();
+
+    match args.command {
+        Commands::Health => {
+            check_health(&args.server).await?;
+        }
+        Commands::Params => {
+            get_params(&args.server).await?;
+        }
+        Commands::Index { index } => {
+            query_by_index(&args.server, index).await?;
+        }
+        Commands::Account { address } => {
+            query_account(&args.server, &address).await?;
+        }
+        Commands::Storage { address, slot } => {
+            query_storage(&args.server, &address, &slot).await?;
+        }
+        Commands::Batch { file } => {
+            batch_query(&args.server, &file).await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn check_health(server: &str) -> Result<()> {
+    let url = format!("{}/health", server);
+    let client = reqwest::Client::new();
+
+    let response: HealthResponse = client.get(&url).send().await?.json().await?;
+
+    println!("Server status: {}", response.status);
+    println!("Server version: {}", response.version);
+
+    Ok(())
+}
+
+async fn get_params(server: &str) -> Result<()> {
+    let url = format!("{}/params", server);
+    let client = reqwest::Client::new();
+
+    let params: ParamsResponse = client.get(&url).send().await?.json().await?;
+
+    println!("=== Server Parameters ===");
+    println!("Version: {}", params.version);
+    println!("Ring dimension: {}", params.ring_dim);
+    println!("Modulus: {}", params.modulus);
+    println!("Plaintext modulus: {}", params.plaintext_modulus);
+    println!("Gadget base: {}", params.gadget_base);
+    println!("Gadget length: {}", params.gadget_len);
+    println!("Entry count: {}", params.entry_count);
+    println!("Shard count: {}", params.shard_count);
+    println!("CRS vectors: {}", params.crs_a_vectors_count);
+
+    Ok(())
+}
+
+async fn query_by_index(server: &str, index: u64) -> Result<()> {
+    let total_start = Instant::now();
+
+    info!("Fetching CRS from server...");
+    let fetch_start = Instant::now();
+
+    let crs = fetch_crs(server).await?;
+    let params_response = fetch_params(server).await?;
+
+    info!("CRS fetch time: {:.2?}", fetch_start.elapsed());
+
+    let shard_config = ShardConfig {
+        shard_size_bytes: (crs.ring_dim() as u64) * 32,
+        entry_size_bytes: 32,
+        total_entries: params_response.entry_count,
+    };
+
+    info!("Generating PIR query for index {}...", index);
+    let query_start = Instant::now();
+
+    let mut sampler = GaussianSampler::new(crs.params.sigma);
+    let (state, client_query) = query(&crs, index, &shard_config, &mut sampler)
+        .with_context(|| "Failed to generate query")?;
+
+    info!("Query generation time: {:.2?}", query_start.elapsed());
+
+    info!("Sending query to server...");
+    let send_start = Instant::now();
+
+    let response = send_query(server, &client_query).await?;
+
+    info!(
+        "Server processing time: {} ms",
+        response.processing_time_ms
+    );
+    info!("Network round-trip: {:.2?}", send_start.elapsed());
+
+    info!("Extracting result...");
+    let extract_start = Instant::now();
+
+    let entry = extract(&crs, &state, &response.response, 32)
+        .with_context(|| "Failed to extract result")?;
+
+    info!("Extraction time: {:.2?}", extract_start.elapsed());
+
+    let total_time = total_start.elapsed();
+
+    println!();
+    println!("=== Query Result ===");
+    println!("Index: {}", index);
+    println!("Shard: {}", state.shard_id);
+    println!("Local index: {}", state.local_index);
+    println!("Entry (hex): 0x{}", hex_encode(&entry));
+    println!();
+    println!("=== Timing ===");
+    println!("Query generation: {:.2?}", query_start.elapsed());
+    println!("Server processing: {} ms", response.processing_time_ms);
+    println!("Extraction: {:.2?}", extract_start.elapsed());
+    println!("Total: {:.2?}", total_time);
+
+    Ok(())
+}
+
+async fn query_account(_server: &str, address: &str) -> Result<()> {
+    let address_bytes = parse_hex_address(address)?;
+
+    println!("Account query not yet implemented for address: 0x{}", hex_encode(&address_bytes));
+    println!("Use --index to query by raw database index");
+    println!();
+    println!("To find the index for an address, you would need the account mapping from setup.");
+
+    Ok(())
+}
+
+async fn query_storage(_server: &str, address: &str, slot: &str) -> Result<()> {
+    let address_bytes = parse_hex_address(address)?;
+    let slot_bytes = parse_hex_slot(slot)?;
+
+    println!(
+        "Storage query not yet implemented for address: 0x{}, slot: 0x{}",
+        hex_encode(&address_bytes),
+        hex_encode(&slot_bytes)
+    );
+    println!("Use --index to query by raw database index");
+    println!();
+    println!("To find the index for a storage slot, you would need the storage mapping from setup.");
+
+    Ok(())
+}
+
+async fn batch_query(server: &str, file: &PathBuf) -> Result<()> {
+    let file = File::open(file).with_context(|| format!("Failed to open batch file"))?;
+    let reader = BufReader::new(file);
+
+    let indices: Vec<u64> = reader
+        .lines()
+        .filter_map(|line| {
+            line.ok().and_then(|l| {
+                let trimmed = l.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    None
+                } else {
+                    trimmed.parse().ok()
+                }
+            })
+        })
+        .collect();
+
+    if indices.is_empty() {
+        println!("No valid indices found in batch file");
+        return Ok(());
+    }
+
+    println!("Processing {} queries...", indices.len());
+
+    info!("Fetching CRS from server...");
+    let crs = fetch_crs(server).await?;
+    let params_response = fetch_params(server).await?;
+
+    let shard_config = ShardConfig {
+        shard_size_bytes: (crs.ring_dim() as u64) * 32,
+        entry_size_bytes: 32,
+        total_entries: params_response.entry_count,
+    };
+
+    let pb = ProgressBar::new(indices.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")?
+            .progress_chars("#>-"),
+    );
+
+    let mut results = Vec::new();
+    let mut total_server_time = 0u64;
+
+    for index in &indices {
+        let mut sampler = GaussianSampler::new(crs.params.sigma);
+        let (state, client_query) = query(&crs, *index, &shard_config, &mut sampler)?;
+
+        let response = send_query(server, &client_query).await?;
+        total_server_time += response.processing_time_ms;
+
+        let entry = extract(&crs, &state, &response.response, 32)?;
+        results.push((*index, entry));
+
+        pb.inc(1);
+    }
+
+    pb.finish_with_message("Done");
+
+    println!();
+    println!("=== Batch Results ===");
+    for (index, entry) in &results {
+        println!("Index {}: 0x{}", index, hex_encode(entry));
+    }
+    println!();
+    println!("Total queries: {}", results.len());
+    println!("Total server time: {} ms", total_server_time);
+    println!(
+        "Average server time: {:.2} ms",
+        total_server_time as f64 / results.len() as f64
+    );
+
+    Ok(())
+}
+
+async fn fetch_crs(server: &str) -> Result<InspireCrs> {
+    let url = format!("{}/crs", server);
+    let client = reqwest::Client::new();
+
+    let crs: InspireCrs = client
+        .get(&url)
+        .send()
+        .await
+        .with_context(|| "Failed to connect to server")?
+        .json()
+        .await
+        .with_context(|| "Failed to parse CRS response")?;
+
+    Ok(crs)
+}
+
+async fn fetch_params(server: &str) -> Result<ParamsResponse> {
+    let url = format!("{}/params", server);
+    let client = reqwest::Client::new();
+
+    let params: ParamsResponse = client
+        .get(&url)
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    Ok(params)
+}
+
+async fn send_query(server: &str, query: &ClientQuery) -> Result<QueryResponse> {
+    let url = format!("{}/query", server);
+    let client = reqwest::Client::new();
+
+    let response: QueryResponse = client
+        .post(&url)
+        .json(query)
+        .send()
+        .await
+        .with_context(|| "Failed to send query")?
+        .json()
+        .await
+        .with_context(|| "Failed to parse query response")?;
+
+    Ok(response)
+}
+
+fn parse_hex_address(s: &str) -> Result<[u8; 20]> {
+    let s = s.strip_prefix("0x").unwrap_or(s);
+
+    if s.len() != 40 {
+        return Err(eyre::eyre!(
+            "Invalid address length: expected 40 hex chars, got {}",
+            s.len()
+        ));
+    }
+
+    let bytes = hex_decode(s)?;
+    let mut result = [0u8; 20];
+    result.copy_from_slice(&bytes);
+    Ok(result)
+}
+
+fn parse_hex_slot(s: &str) -> Result<[u8; 32]> {
+    let s = s.strip_prefix("0x").unwrap_or(s);
+
+    if s.len() != 64 {
+        return Err(eyre::eyre!(
+            "Invalid slot length: expected 64 hex chars, got {}",
+            s.len()
+        ));
+    }
+
+    let bytes = hex_decode(s)?;
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&bytes);
+    Ok(result)
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    hex::encode(bytes)
+}
+
+fn hex_decode(s: &str) -> Result<Vec<u8>> {
+    hex::decode(s).map_err(|e| eyre::eyre!("Invalid hex: {}", e))
+}

@@ -1,0 +1,836 @@
+{
+  "metadata": {
+    "title": "InsPIRe: Communication-Efficient PIR with Server-side Preprocessing",
+    "authors": [
+      {
+        "name": "Rasoul Akhavan Mahdavi",
+        "affiliations": ["Google", "University of Waterloo"],
+        "email": "rasoul.akhavan.mahdavi@uwaterloo.ca"
+      },
+      {
+        "name": "Sarvar Patel",
+        "affiliations": ["Google"],
+        "email": "sarvar@google.com"
+      },
+      {
+        "name": "Joon Young Seo",
+        "affiliations": ["Google"],
+        "email": "jyseo@google.com"
+      },
+      {
+        "name": "Kevin Yeo",
+        "affiliations": ["Google", "Columbia University"],
+        "email": "kwlyeo@google.com"
+      }
+    ],
+    "publication_venue": null,
+    "keywords": ["Private Information Retrieval", "PIR", "Ring Packing", "RLWE", "LWE", "Homomorphic Encryption", "Server-side Preprocessing"]
+  },
+  "abstract": "We present InsPIRe that is the first private information retrieval (PIR) construction simultaneously obtaining both high-throughput and low query communication while using only server-side preprocessing (meaning no offline communication). Prior PIR schemes with both high-throughput and low query communication required substantial offline communication of either downloading a database hint that is 10-100x larger than the communication cost of a single query (such as SimplePIR and DoublePIR) or streaming the entire database (such as Piano). In contrast, recent works such as YPIR avoid offline communication at the cost of increasing the query size by 1.8-2x, up to 1-2 MB per query. Our new PIR protocol, InsPIRe, obtains the best of both worlds by obtaining high-throughput and low communication without requiring any offline communication. Compared to YPIR, InsPIRe requires 5x smaller cryptographic keys, requires up to 50% less online query communication while obtaining up to 25% higher throughput. We show that InsPIRe enables improvements across a wide range of applications and database shapes including the InterPlanetary File System and private device enrollment. At the core of InsPIRe, we develop a novel ring packing algorithm, InspiRING, for transforming LWE ciphertexts into RLWE ciphertexts. InspiRING is more amenable to the server-side preprocessing setting that allows moving the majority of the necessary operations to offline preprocessing. InspiRING only requires two key-switching matrices whereas prior approaches needed logarithmic key-switching matrices. We also show that InspiRING has smaller noise growth and faster packing times than prior works in the setting when the total key-switching material sizes must be small. To further reduce communication costs in the PIR protocol, InsPIRe performs the second level of PIR using homomorphic polynomial evaluation, which only requires one additional ciphertext from the client.",
+  "sections": [
+    {
+      "number": "1",
+      "title": "Introduction",
+      "content": {
+        "overview": "Private information retrieval (PIR) is a powerful cryptographic protocol enabling users to privately query entries from a public database held by a server. In this protocol, the server holds a database with N entries and the client wishes to retrieve the i-th entry. PIR ensures the client's query index i remains hidden from the server.",
+        "applications": [
+          "Advertising",
+          "Blocklists",
+          "Certificate transparency",
+          "Contact discovery",
+          "Databases",
+          "File systems",
+          "Media consumption",
+          "Metadata-hiding communication",
+          "Password leak checks",
+          "Web search"
+        ],
+        "industry_adoption": ["Apple", "Google", "Microsoft"],
+        "pir_settings": {
+          "single_server": "Focus of this work - avoids non-collusion trust assumptions",
+          "multi_server": "Efficient but requires stronger trust assumptions"
+        },
+        "efficiency_metrics": [
+          {
+            "metric": "Throughput",
+            "description": "Ratio of database size and server time (amount of time needed per database entry)"
+          },
+          {
+            "metric": "Communication",
+            "description": "Bandwidth needed for each PIR query"
+          }
+        ],
+        "prior_work_categories": [
+          {
+            "category": "Server-Stored Client-Specific Keys",
+            "examples": ["XPIR", "OnionPIR", "Spiral"],
+            "drawbacks": ["Large computational costs", "Server must store client-specific keys of several megabytes", "Large total communication cost for few queries"]
+          },
+          {
+            "category": "Client-Stored Database Hints",
+            "examples": ["SimplePIR", "DoublePIR", "FrodoPIR", "Piano", "ThorPIR"],
+            "drawbacks": ["Large database hints must be downloaded", "Hints must be re-downloaded when database changes", "Some require streaming entire database"]
+          },
+          {
+            "category": "Server-side Preprocessing with No Offline Communication",
+            "examples": ["Tiptoe", "HintlessPIR", "YPIR", "RLWEPIR", "WhisPIR", "KSPIR"],
+            "drawbacks": ["Sacrifice online communication to eliminate offline communication", "YPIR requires up to megabytes of online communication"]
+          }
+        ],
+        "research_question": "Can we construct a PIR without offline communication obtaining high-throughput and low query communication?"
+      },
+      "subsections": [
+        {
+          "number": "1.1",
+          "title": "The Case for Server-side Preprocessing with no Offline Communication",
+          "use_cases": [
+            {
+              "name": "Singular Query",
+              "description": "Client may only make one query to a server, making large initial costs infeasible"
+            },
+            {
+              "name": "Cold Start",
+              "description": "Client may not have time for offline communication (e.g., device enrollment upon startup)"
+            },
+            {
+              "name": "User Anonymity",
+              "description": "Per-client state contradicts anonymity goals; server could correlate queries"
+            },
+            {
+              "name": "Large User Bases",
+              "description": "Server storage grows linearly with users for client-specific keys"
+            },
+            {
+              "name": "Database Changes",
+              "description": "Client-held hints need updating with database changes, adding complexity"
+            }
+          ]
+        },
+        {
+          "number": "1.2",
+          "title": "Technical Overview & Contributions",
+          "contributions": [
+            {
+              "name": "InsPIRe Protocol",
+              "description": "New PIR protocol achieving high-throughput and low query communication using only server-side preprocessing in the CRS model",
+              "improvements": {
+                "vs_hintless_pir": "10% higher throughput and 67-90% lower communication",
+                "communication_reduction": "78-93% reduction while maintaining better throughput"
+              }
+            },
+            {
+              "name": "InspiRING Ring Packing",
+              "description": "Novel ring packing algorithm translating LWE ciphertexts into RLWE ciphertexts using three steps",
+              "features": [
+                "Uses only two key-switching matrices (vs logarithmic in prior work)",
+                "Smaller noise growth",
+                "Faster packing times"
+              ]
+            },
+            {
+              "name": "Homomorphic Polynomial Evaluation",
+              "description": "Novel technique to reduce PIR response size by representing database entries using polynomials"
+            },
+            {
+              "name": "Applications",
+              "examples": [
+                "Private queries in IPFS - up to 51% communication improvement, 86% computation improvement",
+                "Private device enrollment - less than 300 KB communication for 40M identifiers"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "2",
+      "title": "Preliminaries",
+      "content": {
+        "notation": {
+          "vectors": "Lowercase bold letters",
+          "matrices": "Uppercase bold letters",
+          "row_matrix": "[a1, ..., an]",
+          "column_matrix": "[a1, ..., an]^T",
+          "security_parameter": "λ"
+        },
+        "gaussian_subgaussian": {
+          "definition": "A random variable X is subgaussian with parameter σ if Pr[|X| > t] ≤ 2 exp(-πt²/σ²) for all t ≥ 0",
+          "properties": [
+            "If X is subgaussian with σ, cX is subgaussian with parameter |c|σ",
+            "Sum of k independent subgaussian variables is subgaussian with parameter sqrt(Σσ²ᵢ)"
+          ]
+        },
+        "cyclotomic_rings": {
+          "R": "Z[X]/(X^d + 1)",
+          "R_q": "Z_q[X]/(X^d + 1)",
+          "d": "Power of two"
+        },
+        "encryption_schemes": {
+          "LWE": {
+            "ciphertext": "(a, b) ∈ Z_q^d × Z_q",
+            "formula": "b = -⟨a, s⟩ + e + Δ·m",
+            "secret_key": "s ← χ(Z^d)",
+            "error": "e ← χ(Z)",
+            "scaling_factor": "Δ = ⌊q/p⌋"
+          },
+          "RLWE": {
+            "ciphertext": "(a, b) ∈ R_q × R_q",
+            "formula": "b = -as + e + Δ·m",
+            "secret_key": "s ← χ(R)",
+            "error": "e ← χ(R)"
+          }
+        },
+        "gadget_matrices": {
+          "definition": "g_z = [1, z, ..., z^(ℓ-1)]^T ∈ Z_q^ℓ",
+          "ℓ": "⌈log q / log z⌉",
+          "decomposition": "g_z^(-1): Z_q → Z^(1×ℓ) - base-z digit decomposition"
+        },
+        "rgsw_external_product": {
+          "rgsw_encryption": "[a', b'] := [a, -sa + e] + m · G_{2,z}",
+          "operation": "RLWE(m₀) × RGSW(m₁) → RLWE(m₀m₁)"
+        },
+        "rlwe_key_switching": {
+          "setup": "KS.Setup(s, s') generates key-switching matrix K",
+          "switch": "KS.Switch((a, b), K) transforms ciphertext from key s to s'"
+        },
+        "galois_group": {
+          "automorphism": "τ_g: R → R, τ_g(p) = p(X^g)",
+          "generators": "Two generators for g ∈ {1, 3, ..., 2d-1}",
+          "isomorphic_to": "Z_{d/2} × Z_2"
+        }
+      },
+      "subsections": [
+        {
+          "number": "2.1",
+          "title": "The Common Reference String (CRS) Model",
+          "description": "All parties have access to a global string generated by a trusted entity. Random components of LWE/RLWE ciphertexts are fixed, remaining secure as long as secret keys are re-sampled for each query."
+        },
+        {
+          "number": "2.2",
+          "title": "Convention of Pseudocode Presentation",
+          "description": "Highlighted operations are performable during offline preprocessing. Two-pass interpretation: (1) Offline pass executes highlighted portions, (2) Online pass executes non-highlighted portions using cached values."
+        }
+      ],
+      "pir_definition": {
+        "algorithms": [
+          {
+            "name": "Setup",
+            "input": "(1^λ, D)",
+            "output": "(pp, D')",
+            "executor": "Server"
+          },
+          {
+            "name": "Query",
+            "input": "(pp, idx)",
+            "output": "(st, qry)",
+            "executor": "Client"
+          },
+          {
+            "name": "Respond",
+            "input": "(pp, D', qry)",
+            "output": "resp",
+            "executor": "Server"
+          },
+          {
+            "name": "Extract",
+            "input": "(pp, st, resp)",
+            "output": "entry",
+            "executor": "Client"
+          }
+        ]
+      }
+    },
+    {
+      "number": "3",
+      "title": "Ring Packing with Preprocessing",
+      "content": {
+        "overview": "InspiRING is specifically designed for the CRS model where random components of ciphertexts are fixed and can be preprocessed.",
+        "comparison_to_cdks": {
+          "cdks_approach": "Requires lg(d) key-switching matrices due to recursive merging",
+          "inspiring_approach": "Requires only two key-switching matrices"
+        },
+        "three_stages": [
+          {
+            "stage": 1,
+            "name": "LWE to Intermediate Ciphertexts",
+            "description": "Transform each LWE ciphertext into an intermediate representation with message encoded as constant term of plaintext polynomial"
+          },
+          {
+            "stage": 2,
+            "name": "Aggregation of Intermediate Ciphertexts",
+            "description": "Combine multiple ciphertexts into one consolidated ciphertext"
+          },
+          {
+            "stage": 3,
+            "name": "Conversion to RLWE Ciphertext",
+            "description": "Convert intermediate ciphertext to standard RLWE format using iterative key-switching"
+          }
+        ]
+      },
+      "subsections": [
+        {
+          "number": "3.1",
+          "title": "Revisiting CDKS Packing",
+          "description": "CDKS interprets LWE ciphertexts as RLWE ciphertexts and uses recursive merging. Each level uses a distinct automorphism requiring a unique key-switching matrix, resulting in lg(d) total matrices."
+        },
+        {
+          "number": "3.2",
+          "title": "Packing with Two Key-switching Matrices",
+          "description": "Our construction packs d LWE ciphertexts into one RLWE ciphertext using only two key-switching matrices K_g and K_h."
+        },
+        {
+          "number": "3.3",
+          "title": "Partial Packing with One Key-switching Matrix",
+          "description": "PartialInspiRING packs γ ≤ d/2 LWE ciphertexts using only one key-switching matrix, reducing key material by half."
+        }
+      ],
+      "lemmas": [
+        {
+          "number": 1,
+          "statement": "Let p(X) ∈ Z[X]/(X^d + 1) such that p(X) = Σᵢ cᵢXⁱ where d is a power of two. Let g = 5 and h = 2d-1, and define Tr: R → R as Tr(p) := Σⱼ τ_g^j(p) + τ_h ∘ τ_g^j(p). Then Tr(p) = d·c₀."
+        }
+      ],
+      "theorems": [
+        {
+          "number": 1,
+          "statement": "InspiRING in the CRS model can pack d LWE ciphertexts in O(d³ + ℓd²lg d) offline time and O(ℓ·d²) online time where ℓ is the dimension of the key-switching matrix."
+        },
+        {
+          "number": 2,
+          "statement": "Let the error distribution χ be subgaussian with parameter σ_χ. Let ℓ be the dimension of the key-switching matrix and z be the decomposition base. Under the independence heuristic, InspiRING incurs an additive noise e_pack ∈ R_q, which has subgaussian coefficients with parameter σ_pack and σ²_pack ≤ ℓd²z²σ²_χ/4."
+        },
+        {
+          "number": 3,
+          "statement": "PartialInspiRING in the CRS model can pack γ ≤ d/2 LWE ciphertexts in O(γ²d + ℓγd lg d) offline time and O(ℓγd) online time."
+        },
+        {
+          "number": 4,
+          "statement": "Let the error distribution χ be subgaussian with parameter σ_χ. Under the independence heuristic, PartialInspiRING incurs an additive noise e_pack ∈ R_q, such that the first γ coefficients of e_pack are subgaussian with parameter σ_pack and σ²_pack ≤ ℓγdz²σ²_χ/4."
+        }
+      ]
+    },
+    {
+      "number": "4",
+      "title": "InsPIRe₀: PIR from Ring Packing",
+      "content": {
+        "description": "Direct application of InspiRING to PIR, instantiated on top of DoublePIR by using InspiRING or PartialInspiRING to pack the DoublePIR responses.",
+        "use_case": "Useful when entry size is small (e.g., 1 bit) and when optimizing for specific metrics such as runtime."
+      }
+    },
+    {
+      "number": "5",
+      "title": "InsPIRe⁽²⁾: PIR from Double Ring Packing",
+      "content": {
+        "description": "Protocol using two levels of ring packing (partial ring packing) designed for offline preprocessing.",
+        "structure": {
+          "first_level": "PIR using LWE with partial packing using γ₀. Packed RLWE ciphertexts are modulus switched and decomposed into plaintexts for second layer.",
+          "second_level": "PIR using LWE with packing in two parts using γ₁ and γ₂."
+        },
+        "database_structure": "N records in Z_p^γ₀, restructured into matrix D ∈ Z_p^(tγ₀ × N/t)"
+      },
+      "theorems": [
+        {
+          "number": 5,
+          "statement": "In the CRS model, InsPIRe⁽²⁾ runs in offline time O(Nγ₀d + t(γ₀²d + γ₀ℓ_ks d lg d) + τtd² + τd(γ₁d + ℓ_ks d lg d)) and online time O(Nγ₀ + tγ₀dℓ_ks + tτγ₀ + τd²ℓ_ks + τγ₀d(γ₂ + ℓ_ks lg d))."
+        },
+        {
+          "number": 6,
+          "statement": "The total communication cost of InsPIRe⁽²⁾ is α·dℓ_ks log₂q + (N/t)log₂q + t log₂q + (τd/γ₁)(d + γ₁)log₂q̃ + (τγ₀/γ₂)(d + γ₂)log₂q̃, where α is the number of distinct packing parameters."
+        },
+        {
+          "number": 7,
+          "statement": "Under the independence heuristic, the error terms satisfy bounds with σ̃₀² ≤ Σ₀, σ̃₁² ≤ Σ₁, σ̃₂² ≤ Σ₂ as defined in the paper."
+        },
+        {
+          "number": 8,
+          "statement": "InsPIRe⁽²⁾ is (1 - δ₀ - δ₁ - δ₂)-correct under the specified conditions."
+        }
+      ]
+    },
+    {
+      "number": "6",
+      "title": "InsPIRe: PIR from Ring Packing and Homomorphic Polynomial Evaluation",
+      "content": {
+        "overview": "Low query communication and high-throughput PIR protocol combining InspiRING with polynomial evaluation for further communication improvements.",
+        "database_encoding": "Each column represented as coefficients of a polynomial that evaluates to entries at fixed evaluation points."
+      },
+      "subsections": [
+        {
+          "number": "6.1",
+          "title": "Homomorphic Polynomial Evaluation",
+          "key_ideas": [
+            {
+              "concept": "Polynomial Database Encoding",
+              "description": "Implicitly represent columns as coefficients of polynomial h⁽ⁱ⁾(Z) where h⁽ⁱ⁾(z_j) = y_j⁽ⁱ⁾"
+            },
+            {
+              "concept": "Evaluation Points",
+              "description": "Use unit monomials (±X^k) as evaluation points for additive noise growth"
+            },
+            {
+              "concept": "Horner's Method",
+              "description": "Homomorphic evaluation using RLWE-RGSW external products"
+            }
+          ],
+          "evaluation_points": {
+            "primitive_root": "ω = X^(2d/t)",
+            "points": "z_k := ω^k for k = 0...t-1",
+            "property": "All evaluation points are unit monomials"
+          },
+          "constraints": [
+            "t ≤ 2d (required for unit monomials)",
+            "t is power of two (for Cooley-Tukey FFT)"
+          ]
+        },
+        {
+          "number": "6.2",
+          "title": "Putting It Together",
+          "description": "Complete InsPIRe protocol with Setup, Query, Respond, and Extract algorithms."
+        }
+      ],
+      "theorems": [
+        {
+          "number": 9,
+          "statement": "The error polynomial of the RLWE ciphertext ct has the form e = e_main + e_overflow. Under independence heuristics, e_main has subgaussian coefficients with parameter σ²_main ≤ Np²σ²_χ + tℓ_ks d²z²_ks σ²_χ/4 + tℓ_gsw·dz²_gsw·σ²_χ/2 and ||e_overflow||_∞ ≤ tp/2."
+        },
+        {
+          "number": 10,
+          "statement": "For δ > 2d exp(-π(Δ/2 - tp/2)²/σ̄²_main), InsPIRe is (1 - δ)-correct."
+        },
+        {
+          "number": 11,
+          "statement": "In the CRS model, InsPIRe runs in offline time O(Nd² + t(d³ + ℓ_ks d²lg d)) and online time O(Nd + tℓ_ks d² + tℓ_gsw d lg(d))."
+        },
+        {
+          "number": 12,
+          "statement": "The total communication cost of InsPIRe is dℓ_ks log₂q + (N/t)log₂q + 4ℓ_gsw d log₂q + 2d log₂q."
+        }
+      ],
+      "lemmas": [
+        {
+          "number": 2,
+          "statement": "Given RLWE(m₀), let RGSW(m₁) be a fresh ciphertext encrypting a unit monomial m₁ = ±X^k. Under the independence heuristic, the external product RLWE(m₀) ⊡ RGSW(m₁) incurs additive noise e_ep with σ²_ep ≤ ℓdz²σ²_χ/2."
+        }
+      ]
+    },
+    {
+      "number": "7",
+      "title": "Experimental Evaluation",
+      "content": {
+        "implementation": {
+          "language": "Rust",
+          "lines_of_code": {
+            "inspiring": 3000,
+            "inspire_2": 3000,
+            "inspire": 2000
+          },
+          "dependencies": ["spiral-rs", "YPIR implementation"],
+          "repository": "https://github.com/google/private-membership/tree/main/research/InsPIRe"
+        },
+        "evaluation_setup": {
+          "cpu": "Intel Xeon @ 2.6 GHz",
+          "mode": "Single-threaded",
+          "security": "128-bit (based on lattice-estimator)",
+          "correctness_parameter": "δ = 2^(-40)"
+        }
+      },
+      "subsections": [
+        {
+          "number": "7.1",
+          "title": "Parameterizing InsPIRe⁽²⁾",
+          "key_findings": [
+            "γ₀ determines return entry size",
+            "γ₁ = d/2 optimal for second packing",
+            "γ₀ = γ₂ allows key material reuse",
+            "t offers communication-computation tradeoff"
+          ]
+        },
+        {
+          "number": "7.2",
+          "title": "Parameterizing InsPIRe",
+          "key_findings": [
+            "Larger interpolation degree → higher runtime",
+            "Larger interpolation degree → lower query size",
+            "Key size and response size fixed regardless of interpolation degree"
+          ]
+        },
+        {
+          "number": "7.3",
+          "title": "PIR Evaluation with Various Entry Sizes",
+          "entry_sizes_tested": ["1 bit", "64 B", "32 KB"],
+          "comparison_protocols": ["YPIR", "SimpleYPIR", "KSPIR", "HintlessPIR"]
+        },
+        {
+          "number": "7.4",
+          "title": "Benchmarking Ring Packing",
+          "comparison": {
+            "key_material_reduction": {
+              "vs_cdks": "84%",
+              "vs_hintless_pir": "76%"
+            },
+            "online_time_reduction": "28% lower than fastest existing work",
+            "noise_reduction": "Up to 5 bits less than CDKS"
+          }
+        }
+      ],
+      "parameters": {
+        "inspire_0": {
+          "d": [1024, 2048],
+          "log2_q": [32, 56],
+          "sigma_chi": 6.4,
+          "p": [256, 8192],
+          "ell_ks": [null, 3],
+          "z_ks": [null, 524288]
+        },
+        "inspire_2": {
+          "d": 2048,
+          "log2_q": 53,
+          "sigma_chi": 6.4,
+          "p": 65536,
+          "ell_ks": 3,
+          "z_ks": 524288
+        },
+        "inspire": {
+          "d": 2048,
+          "log2_q": 56,
+          "sigma_chi": 6.4,
+          "p": 65535,
+          "ell_ks": 3,
+          "ell_gsw": 3,
+          "z_ks": 524288,
+          "z_gsw": 524288
+        }
+      }
+    },
+    {
+      "number": "8",
+      "title": "Applications of InsPIRe",
+      "subsections": [
+        {
+          "number": "8.1",
+          "title": "Private Queries in IPFS",
+          "description": "IPFS distributed file system for private content access",
+          "functionalities": [
+            {
+              "name": "Peer Routing",
+              "database": "256 × 1.5 KB",
+              "improvement_comm": "32%",
+              "improvement_comp": "8%",
+              "current_comm": "> 100 KB",
+              "inspire_comm": "69 KB"
+            },
+            {
+              "name": "Content Discovery",
+              "database": "200k Records",
+              "improvement_comm": "46%",
+              "improvement_comp": "86%",
+              "current_comm": "> 280 KB",
+              "inspire_comm": "128 KB"
+            },
+            {
+              "name": "Content Retrieval",
+              "database": "2^14 × 256 KB",
+              "improvement_comm": "51%",
+              "improvement_comp": "50%",
+              "current_comm": "> 2.1 MB",
+              "inspire_comm": "1.02 MB"
+            }
+          ]
+        },
+        {
+          "number": "8.2",
+          "title": "Privacy-Preserving Device Enrollment",
+          "description": "Chrome OS device enrollment using PIR for membership check",
+          "deployment": "Chrome 94+",
+          "results": [
+            {
+              "devices": "20M",
+              "db_size": "1.19 GB",
+              "offline_time": "78 s",
+              "communication": "292 KB",
+              "response_time": "416 ms"
+            },
+            {
+              "devices": "40M",
+              "db_size": "2.38 GB",
+              "offline_time": "131 s",
+              "communication": "292 KB",
+              "response_time": "815 ms"
+            },
+            {
+              "devices": "80M",
+              "db_size": "4.76 GB",
+              "offline_time": "241 s",
+              "communication": "304 KB",
+              "response_time": "1400 ms"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "number": "9",
+      "title": "Related Works",
+      "categories": [
+        {
+          "name": "PIR using Server-Stored Client-Specific Keys",
+          "works": ["XPIR", "OnionPIR", "Spiral", "Respire"],
+          "characteristics": "Low query communication but requires server to store client-specific keys"
+        },
+        {
+          "name": "PIR using Client-Stored Database Hints",
+          "works": ["SimplePIR", "FrodoPIR", "Piano", "ThorPIR"],
+          "characteristics": "High throughput but requires client to download and store hints"
+        },
+        {
+          "name": "PIR using the CRS Model",
+          "works": ["Tiptoe", "HintlessPIR", "YPIR"],
+          "characteristics": "No offline communication but sacrificed larger query communication"
+        },
+        {
+          "name": "PIR with Additional Features",
+          "subcategories": ["Batch PIR", "Keyword PIR", "Authenticated PIR", "Symmetric PIR"]
+        },
+        {
+          "name": "Ring Packing",
+          "methods": ["Row method (CDKS)", "Diagonal method", "Column method"]
+        },
+        {
+          "name": "Labeled Unbalanced PSI",
+          "relation": "Uses polynomial interpolation but over plaintext SIMD slots, not entire plaintext ring"
+        }
+      ]
+    },
+    {
+      "number": "10",
+      "title": "Conclusions",
+      "summary": "We present InsPIRe that obtains higher throughput and smaller query communication than all prior PIR schemes, using only server-side preprocessing. Along the way, we introduce a novel ring packing algorithm, InspiRING, requiring smaller cryptographic material and faster online packing times as well as a new approach to PIR using homomorphic polynomial evaluation."
+    }
+  ],
+  "algorithms": [
+    {
+      "number": 1,
+      "name": "InspiRING",
+      "description": "Main ring packing algorithm",
+      "procedures": [
+        {
+          "name": "Pack",
+          "input": "[A, b] ∈ Z_q^(d×(d+1)), K_g, K_h ∈ R_q^(ℓ×2)",
+          "output": "(a_fin, b_fin) ∈ R_q × R_q"
+        },
+        {
+          "name": "Transform",
+          "input": "(a, b) ∈ Z_q^d × Z_q",
+          "output": "(â, b̃) ∈ R_q^d × R_q"
+        },
+        {
+          "name": "Collapse",
+          "input": "(â_agg, b̃_agg), K_g, K_h",
+          "output": "(a, b) ∈ R_q × R_q"
+        },
+        {
+          "name": "CollapseHalf",
+          "input": "(â_half, b̃_half), K_g, ρ",
+          "output": "(a^(0), b^(0)) ∈ R_q × R_q"
+        },
+        {
+          "name": "CollapseOne",
+          "input": "(a, b), K",
+          "output": "(a', b') ∈ R_q^(k-1) × R_q"
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "name": "PartialInspiRING",
+      "description": "Partial packing for γ ≤ d/2 LWE ciphertexts",
+      "procedures": [
+        {
+          "name": "PartialPack",
+          "input": "[A, b] ∈ Z_q^(γ×(d+1)), K_g",
+          "output": "(a_fin, b_fin) ∈ R_q × R_q"
+        },
+        {
+          "name": "TransformPartial",
+          "input": "γ, (a, b)",
+          "output": "(â, b̃) ∈ R_q^γ × R_q"
+        },
+        {
+          "name": "CollapsePartial",
+          "input": "γ, (â_partial, b̃_partial), K_g",
+          "output": "(a^(0), b^(0)) ∈ R_q × R_q"
+        }
+      ]
+    },
+    {
+      "number": "3-6",
+      "name": "InsPIRe⁽²⁾",
+      "description": "PIR from Double Ring Packing",
+      "algorithms": ["Setup", "Query", "Respond", "Extract"]
+    },
+    {
+      "number": "7-10",
+      "name": "InsPIRe",
+      "description": "PIR from Ring Packing and Homomorphic Polynomial Evaluation",
+      "algorithms": ["Setup", "Query", "Respond", "Extract"],
+      "helper_procedures": [
+        "EncodeDB",
+        "Interpolate (Cooley-Tukey)",
+        "GenFixedQueryParts",
+        "GenKSMATY",
+        "EvalPoly"
+      ]
+    }
+  ],
+  "experimental_results": {
+    "pir_performance_1bit": {
+      "database_size": "1 GB (2^33 × 1-bit)",
+      "protocols": {
+        "YPIR": {
+          "total_comm": "858 KB",
+          "server_time": "140 ms",
+          "throughput": "7420 MB/s"
+        },
+        "HintlessPIR": {
+          "total_comm": "2236 KB",
+          "server_time": "750 ms",
+          "throughput": "1370 MB/s"
+        },
+        "InsPIRe_0": {
+          "total_comm": "504 KB",
+          "server_time": "120 ms",
+          "throughput": "8750 MB/s"
+        },
+        "InsPIRe": {
+          "total_comm_range": "236-404 KB",
+          "server_time_range": "280-650 ms",
+          "throughput_range": "1580-3670 MB/s"
+        }
+      }
+    },
+    "pir_performance_64B": {
+      "database_size": "1 GB (2^24 × 64B)",
+      "protocols": {
+        "SimpleYPIR": {
+          "total_comm": "802 KB",
+          "server_time": "600 ms",
+          "throughput": "1720 MB/s"
+        },
+        "HintlessPIR": {
+          "total_comm": "2236 KB",
+          "server_time": "750 ms",
+          "throughput": "1370 MB/s"
+        },
+        "InsPIRe_2": {
+          "total_comm_range": "172-347 KB",
+          "server_time_range": "320-1100 ms",
+          "throughput_range": "930-3230 MB/s"
+        },
+        "InsPIRe": {
+          "total_comm_range": "236-628 KB",
+          "server_time_range": "210-650 ms",
+          "throughput_range": "1580-4850 MB/s"
+        }
+      }
+    },
+    "pir_performance_32KB": {
+      "database_size": "1 GB (2^15 × 32 KB)",
+      "protocols": {
+        "SimpleYPIR": {
+          "total_comm": "802 KB",
+          "server_time": "600 ms",
+          "throughput": "1720 MB/s"
+        },
+        "HintlessPIR": {
+          "total_comm": "2236 KB",
+          "server_time": "750 ms",
+          "throughput": "1370 MB/s"
+        },
+        "InsPIRe": {
+          "total_comm_range": "271-488 KB",
+          "server_time_range": "280-4270 ms",
+          "throughput_range": "240-3620 MB/s"
+        }
+      }
+    },
+    "ring_packing_benchmark": {
+      "input": "2^12 LWE ciphertexts",
+      "comparisons": [
+        {
+          "method": "HintlessPIR",
+          "key_material": "360 KB",
+          "offline_runtime": "2.0 s",
+          "online_runtime": "141 ms"
+        },
+        {
+          "method": "CDKS",
+          "key_material": "462 KB",
+          "offline_runtime": "11 s",
+          "online_runtime": "56 ms"
+        },
+        {
+          "method": "InspiRING (d=1024)",
+          "key_material": "60 KB",
+          "offline_runtime": "2.4 s",
+          "online_runtime": "16 ms"
+        },
+        {
+          "method": "InspiRING (d=2048)",
+          "key_material": "84 KB",
+          "offline_runtime": "36 s",
+          "online_runtime": "40 ms"
+        }
+      ]
+    }
+  },
+  "security": {
+    "assumptions": [
+      "RLWE hardness",
+      "Key-dependent RLWE hardness",
+      "Circular security assumption (standard in lattice-based FHE)"
+    ],
+    "security_level": "128-bit (based on lattice-estimator)",
+    "model": "Common Reference String (CRS) model"
+  },
+  "references_count": 81,
+  "appendices": [
+    {
+      "letter": "A",
+      "title": "Security and Correctness Definitions of PIR"
+    },
+    {
+      "letter": "B",
+      "title": "LWE to Intermediate Ciphertexts"
+    },
+    {
+      "letter": "C",
+      "title": "Conversion to RLWE Ciphertext"
+    },
+    {
+      "letter": "D",
+      "title": "Proof of Lemma 1"
+    },
+    {
+      "letter": "E",
+      "title": "Analysis of InsPIRe"
+    },
+    {
+      "letter": "F",
+      "title": "Security Analysis of InsPIRe",
+      "subsections": ["Extension to Multiple Queries"]
+    },
+    {
+      "letter": "G",
+      "title": "Optimizations and Extensions to InsPIRe",
+      "subsections": ["Approximate Gadget Decomposition", "Multivariate", "Extension to non-power of two t"]
+    },
+    {
+      "letter": "H",
+      "title": "Analysis of InsPIRe⁽²⁾"
+    },
+    {
+      "letter": "I",
+      "title": "Additional Experiments"
+    }
+  ]
+}
