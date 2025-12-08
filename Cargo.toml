@@ -53,6 +53,10 @@ harness = false
 name = "packing"
 harness = false
 
+[[bench]]
+name = "respond"
+harness = false
+
 [[bin]]
 name = "inspire-server"
 path = "src/bin/server.rs"

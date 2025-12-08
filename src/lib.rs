@@ -23,6 +23,7 @@ pub use pir::{
     ServerCrs, InspireCrs, EncodedDatabase, ShardData,
     ClientQuery, ClientState, ServerResponse,
     encode_column, encode_database, encode_direct, inverse_monomial,
+    save_shards_binary, load_shard_binary, MmapDatabase,
 };
 
 pub use params::{InspireParams, SecurityLevel};

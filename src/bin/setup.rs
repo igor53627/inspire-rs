@@ -17,7 +17,7 @@ use tracing_subscriber::FmtSubscriber;
 use inspire_pir::ethereum_db::EthereumStateDb;
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{setup, EncodedDatabase, ServerCrs};
+use inspire_pir::pir::{setup, save_shards_binary, EncodedDatabase, ServerCrs};
 
 #[derive(Parser)]
 #[command(name = "inspire-setup")]
@@ -39,6 +39,10 @@ struct Args {
     /// Random seed for deterministic key generation (optional)
     #[arg(long)]
     seed: Option<u64>,
+
+    /// Save shards as binary files for memory-mapped loading
+    #[arg(long)]
+    binary_output: bool,
 }
 
 fn main() -> Result<()> {
@@ -184,6 +188,14 @@ fn main() -> Result<()> {
     );
 
     info!("Save time: {:.2?}", save_start.elapsed());
+
+    if args.binary_output {
+        info!("Saving shards as binary files for mmap...");
+        let shards_dir = args.output_dir.join("shards");
+        save_shards_binary(&encoded_db.shards, &shards_dir)
+            .with_context(|| "Failed to save binary shards")?;
+        info!("Binary shards saved to {}", shards_dir.display());
+    }
 
     save_metadata(&args.output_dir, &params, &crs, &encoded_db, entry_count)?;
 

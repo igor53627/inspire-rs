@@ -372,7 +372,7 @@ mod tests {
         let mut account_map_file = File::create(dir.path().join("account-mapping.bin")).unwrap();
         let mut storage_map_file = File::create(dir.path().join("storage-mapping.bin")).unwrap();
 
-        let mut current_idx: u32 = 0;
+        let mut current_idx: u64 = 0;
 
         let mut sorted_accounts = accounts.to_vec();
         sorted_accounts.sort_by_key(|(addr, _)| *addr);
@@ -386,7 +386,7 @@ mod tests {
             account_map_file.write_all(addr).unwrap();
             account_map_file.write_all(&current_idx.to_le_bytes()).unwrap();
 
-            current_idx += WORDS_PER_ACCOUNT as u32;
+            current_idx += WORDS_PER_ACCOUNT as u64;
         }
 
         let mut sorted_storage = storage.to_vec();

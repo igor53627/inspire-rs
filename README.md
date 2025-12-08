@@ -1,3 +1,5 @@
+![CI](https://github.com/igor53627/inspire-rs/actions/workflows/ci.yml/badge.svg)
+
 # inspire-rs
 
 **InsPIRe: Communication-Efficient PIR with Server-side Preprocessing**
