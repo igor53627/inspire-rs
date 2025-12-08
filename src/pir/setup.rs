@@ -1,11 +1,15 @@
 //! PIR Setup: Server preprocessing and CRS generation
 //!
-//! Implements PIR.Setup(1^λ, D) → (crs, D')
+//! Implements PIR.Setup(1^λ, D) → (crs, D', sk)
+//!
+//! The setup phase generates:
+//! - `ServerCrs`: Public parameters (key-switching matrices, gadget, CRS vectors)
+//! - `EncodedDatabase`: Database encoded as polynomials
+//! - `RlweSecretKey`: Client secret key for encryption/decryption
 
 use eyre::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::inspiring::PackingPrecomputation;
 use crate::ks::{generate_automorphism_ks_matrix, KeySwitchingMatrix};
 use crate::math::{GaussianSampler, NttContext, Poly};
 use crate::params::{InspireParams, ShardConfig};
@@ -14,9 +18,9 @@ use crate::rlwe::{galois_generators, RlweSecretKey};
 
 use super::encode_db::encode_database;
 
-/// Common Reference String containing public parameters
+/// Server Common Reference String containing public parameters only
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct InspireCrs {
+pub struct ServerCrs {
     /// System parameters
     pub params: InspireParams,
     /// First key-switching matrix (for cyclic generator g)
@@ -29,11 +33,9 @@ pub struct InspireCrs {
     pub rgsw_gadget: GadgetVector,
     /// Fixed random vectors for CRS mode (one per LWE ciphertext slot)
     pub crs_a_vectors: Vec<Vec<u64>>,
-    /// RLWE secret key (used for consistent encryption across setup and query)
-    pub rlwe_secret_key: RlweSecretKey,
 }
 
-impl InspireCrs {
+impl ServerCrs {
     /// Get the ring dimension
     pub fn ring_dim(&self) -> usize {
         self.params.ring_dim
@@ -44,6 +46,9 @@ impl InspireCrs {
         self.params.q
     }
 }
+
+/// Type alias for backward compatibility - InspireCrs is now ServerCrs
+pub type InspireCrs = ServerCrs;
 
 /// Encoded database ready for PIR queries
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -61,11 +66,9 @@ pub struct ShardData {
     pub id: u32,
     /// Database entries encoded as polynomial coefficients
     pub polynomials: Vec<Poly>,
-    /// Precomputed packing data for this shard
-    pub precomputation: PackingPrecomputation,
 }
 
-/// PIR.Setup(1^λ, D) → (crs, D')
+/// PIR.Setup(1^λ, D) → (crs, D', sk)
 ///
 /// Generates the Common Reference String and encodes the database.
 ///
@@ -76,14 +79,15 @@ pub struct ShardData {
 /// * `sampler` - Gaussian sampler for key generation
 ///
 /// # Returns
-/// * `InspireCrs` - Common reference string with public parameters
+/// * `ServerCrs` - Common reference string with public parameters
 /// * `EncodedDatabase` - Database encoded as polynomials ready for PIR
+/// * `RlweSecretKey` - Secret key for client queries (kept separate from public CRS)
 pub fn setup(
     params: &InspireParams,
     database: &[u8],
     entry_size: usize,
     sampler: &mut GaussianSampler,
-) -> Result<(InspireCrs, EncodedDatabase)> {
+) -> Result<(ServerCrs, EncodedDatabase, RlweSecretKey)> {
     params.validate().map_err(|e| eyre::eyre!(e))?;
 
     let d = params.ring_dim;
@@ -122,84 +126,15 @@ pub fn setup(
         })
         .collect();
 
-    let shard_data = encode_database(database, entry_size, params, &shard_config, &crs_a_vectors, &k_g, &k_h);
+    let shard_data = encode_database(database, entry_size, params, &shard_config);
 
-    let crs = InspireCrs {
+    let crs = ServerCrs {
         params: params.clone(),
         k_g,
         k_h,
         galois_keys,
         rgsw_gadget: gadget,
         crs_a_vectors,
-        rlwe_secret_key: rlwe_sk,
-    };
-
-    let encoded_db = EncodedDatabase {
-        shards: shard_data,
-        config: shard_config,
-    };
-
-    Ok((crs, encoded_db))
-}
-
-/// Generate CRS for testing (with known secret key)
-///
-/// This variant returns the secret key for testing purposes.
-#[allow(dead_code)]
-pub fn setup_with_secret_key(
-    params: &InspireParams,
-    database: &[u8],
-    entry_size: usize,
-    sampler: &mut GaussianSampler,
-) -> Result<(InspireCrs, EncodedDatabase, RlweSecretKey)> {
-    params.validate().map_err(|e| eyre::eyre!(e))?;
-
-    let d = params.ring_dim;
-    let q = params.q;
-    let ctx = NttContext::new(d, q);
-
-    let total_entries = database.len() / entry_size;
-    let shard_config = ShardConfig {
-        shard_size_bytes: (d as u64) * (entry_size as u64),
-        entry_size_bytes: entry_size,
-        total_entries: total_entries as u64,
-    };
-
-    let rlwe_sk = RlweSecretKey::generate(params, sampler);
-
-    let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, q);
-
-    let (g1, g2) = galois_generators(d);
-
-    let k_g = generate_automorphism_ks_matrix(&rlwe_sk, g1, &gadget, sampler, &ctx);
-    let k_h = generate_automorphism_ks_matrix(&rlwe_sk, g2, &gadget, sampler, &ctx);
-
-    let mut galois_keys = Vec::new();
-    let mut g_power = g1;
-    let log_d = (d as f64).log2() as usize;
-    for _ in 0..log_d {
-        let ks_matrix = generate_automorphism_ks_matrix(&rlwe_sk, g_power, &gadget, sampler, &ctx);
-        galois_keys.push(ks_matrix);
-        g_power = (g_power * g_power) % (2 * d);
-    }
-
-    let crs_a_vectors: Vec<Vec<u64>> = (0..d)
-        .map(|_| {
-            let poly = Poly::random(d, q);
-            poly.coeffs().to_vec()
-        })
-        .collect();
-
-    let shard_data = encode_database(database, entry_size, params, &shard_config, &crs_a_vectors, &k_g, &k_h);
-
-    let crs = InspireCrs {
-        params: params.clone(),
-        k_g,
-        k_h,
-        galois_keys,
-        rgsw_gadget: gadget,
-        crs_a_vectors,
-        rlwe_secret_key: rlwe_sk.clone(),
     };
 
     let encoded_db = EncodedDatabase {
@@ -208,6 +143,20 @@ pub fn setup_with_secret_key(
     };
 
     Ok((crs, encoded_db, rlwe_sk))
+}
+
+/// Alias for setup() - kept for backward compatibility
+///
+/// Both `setup` and `setup_with_secret_key` now return the secret key separately.
+#[deprecated(since = "0.2.0", note = "Use setup() directly - both now return the secret key")]
+#[allow(dead_code)]
+pub fn setup_with_secret_key(
+    params: &InspireParams,
+    database: &[u8],
+    entry_size: usize,
+    sampler: &mut GaussianSampler,
+) -> Result<(ServerCrs, EncodedDatabase, RlweSecretKey)> {
+    setup(params, database, entry_size, sampler)
 }
 
 #[cfg(test)]
@@ -240,7 +189,7 @@ mod tests {
         let result = setup(&params, &database, entry_size, &mut sampler);
         assert!(result.is_ok());
 
-        let (crs, encoded_db) = result.unwrap();
+        let (crs, encoded_db, _sk) = result.unwrap();
 
         assert_eq!(crs.ring_dim(), params.ring_dim);
         assert_eq!(crs.modulus(), params.q);
@@ -283,7 +232,7 @@ mod tests {
         let result = setup(&params, &database, entry_size, &mut sampler);
         assert!(result.is_ok());
 
-        let (_, encoded_db) = result.unwrap();
+        let (_, encoded_db, _sk) = result.unwrap();
         assert!(encoded_db.shards.is_empty() || encoded_db.shards[0].polynomials.is_empty());
     }
 }

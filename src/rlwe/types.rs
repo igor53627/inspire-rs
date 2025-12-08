@@ -6,7 +6,7 @@ use crate::math::Poly;
 use serde::{Deserialize, Serialize};
 
 /// RLWE secret key: polynomial in R_q sampled from error distribution
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct RlweSecretKey {
     pub poly: Poly,
 }

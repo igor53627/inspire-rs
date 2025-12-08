@@ -21,7 +21,7 @@ use super::setup::InspireCrs;
 /// 3. Reconstruct the entry from polynomial coefficients
 ///
 /// # Arguments
-/// * `crs` - Common reference string
+/// * `crs` - Common reference string (public parameters)
 /// * `state` - Client state from query phase
 /// * `response` - Server's response
 /// * `entry_size` - Size of database entries in bytes
@@ -196,10 +196,10 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, _sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &mut sampler).unwrap();
+        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
 
@@ -221,10 +221,10 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, _sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 10u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &mut sampler).unwrap();
+        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
 
@@ -243,10 +243,10 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, _sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 5u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &mut sampler).unwrap();
+        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
 
@@ -285,10 +285,10 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, _sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 15u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &mut sampler).unwrap();
+        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
 

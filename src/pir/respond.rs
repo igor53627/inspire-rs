@@ -19,7 +19,7 @@ use crate::rgsw::external_product;
 use crate::rlwe::RlweCiphertext;
 
 use super::query::ClientQuery;
-use super::setup::{EncodedDatabase, InspireCrs};
+use super::setup::{EncodedDatabase, ServerCrs};
 
 /// Server response containing RLWE ciphertexts for each column
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -43,14 +43,14 @@ pub struct ServerResponse {
 /// 2. Return encrypted column values
 ///
 /// # Arguments
-/// * `crs` - Common reference string
+/// * `crs` - Common reference string (public parameters)
 /// * `encoded_db` - Pre-encoded database (polynomials with values as coefficients)
 /// * `query` - Client's PIR query containing RGSW encryption of X^(-k)
 ///
 /// # Returns
 /// Server response containing encrypted entry value
 pub fn respond(
-    crs: &InspireCrs,
+    crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
     query: &ClientQuery,
 ) -> Result<ServerResponse> {
@@ -100,7 +100,7 @@ pub fn respond(
 /// Same as `respond` but processes columns in parallel.
 #[allow(dead_code)]
 pub fn respond_parallel(
-    crs: &InspireCrs,
+    crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
     query: &ClientQuery,
 ) -> Result<ServerResponse> {
@@ -179,10 +179,10 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
-        let (_state, client_query) = query(&crs, target_index, &encoded_db.config, &mut sampler).unwrap();
+        let (_state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query);
         assert!(response.is_ok());
@@ -202,10 +202,10 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 0u64;
-        let (_, mut client_query) = query(&crs, target_index, &encoded_db.config, &mut sampler).unwrap();
+        let (_, mut client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
 
         client_query.shard_id = 999;
 
