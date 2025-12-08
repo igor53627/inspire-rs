@@ -117,10 +117,10 @@ async fn main() -> Result<()> {
             query_by_index(&args.server, &args.secret_key, index).await?;
         }
         Commands::Account { address } => {
-            query_account(&args.server, &args.secret_key, &address).await?;
+            query_account(&address).await?;
         }
         Commands::Storage { address, slot } => {
-            query_storage(&args.server, &args.secret_key, &address, &slot).await?;
+            query_storage(&address, &slot).await?;
         }
         Commands::Batch { file } => {
             batch_query(&args.server, &args.secret_key, &file).await?;
@@ -228,18 +228,19 @@ async fn query_by_index(server: &str, sk_path: &PathBuf, index: u64) -> Result<(
     Ok(())
 }
 
-async fn query_account(_server: &str, _sk_path: &PathBuf, address: &str) -> Result<()> {
+async fn query_account(address: &str) -> Result<()> {
     let address_bytes = parse_hex_address(address)?;
 
     println!("Account query not yet implemented for address: 0x{}", hex_encode(&address_bytes));
     println!("Use --index to query by raw database index");
     println!();
     println!("To find the index for an address, you would need the account mapping from setup.");
+    // TODO: Load account mapping and call query_by_index with resolved index
 
     Ok(())
 }
 
-async fn query_storage(_server: &str, _sk_path: &PathBuf, address: &str, slot: &str) -> Result<()> {
+async fn query_storage(address: &str, slot: &str) -> Result<()> {
     let address_bytes = parse_hex_address(address)?;
     let slot_bytes = parse_hex_slot(slot)?;
 
@@ -251,6 +252,7 @@ async fn query_storage(_server: &str, _sk_path: &PathBuf, address: &str, slot: &
     println!("Use --index to query by raw database index");
     println!();
     println!("To find the index for a storage slot, you would need the storage mapping from setup.");
+    // TODO: Load storage mapping and call query_by_index with resolved index
 
     Ok(())
 }

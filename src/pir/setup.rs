@@ -148,6 +148,7 @@ pub fn setup(
 /// Alias for setup() - kept for backward compatibility
 ///
 /// Both `setup` and `setup_with_secret_key` now return the secret key separately.
+#[deprecated(since = "0.2.0", note = "Use setup() directly - both now return the secret key")]
 #[allow(dead_code)]
 pub fn setup_with_secret_key(
     params: &InspireParams,

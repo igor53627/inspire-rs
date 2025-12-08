@@ -126,17 +126,7 @@ fn rlwe_to_lwe_key(rlwe_sk: &RlweSecretKey) -> LweSecretKey {
     LweSecretKey::from_coeffs(coeffs, q)
 }
 
-/// Alias for query() - kept for backward compatibility
-#[allow(dead_code)]
-pub fn query_with_key(
-    crs: &ServerCrs,
-    global_index: u64,
-    shard_config: &ShardConfig,
-    rlwe_sk: &RlweSecretKey,
-    sampler: &mut GaussianSampler,
-) -> Result<(ClientState, ClientQuery)> {
-    query(crs, global_index, shard_config, rlwe_sk, sampler)
-}
+
 
 #[cfg(test)]
 mod tests {
