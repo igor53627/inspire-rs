@@ -9,7 +9,7 @@ use super::sampler::GaussianSampler;
 use rand::Rng;
 
 /// Polynomial in R_q = Z_q[X]/(X^d + 1)
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Poly {
     /// Coefficients in coefficient or NTT domain
     coeffs: Vec<u64>,

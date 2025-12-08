@@ -17,7 +17,7 @@ use tracing_subscriber::FmtSubscriber;
 use inspire_pir::ethereum_db::EthereumStateDb;
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{setup, EncodedDatabase, InspireCrs};
+use inspire_pir::pir::{setup, EncodedDatabase, ServerCrs};
 
 #[derive(Parser)]
 #[command(name = "inspire-setup")]
@@ -131,7 +131,7 @@ fn main() -> Result<()> {
     pb.set_message("Running PIR setup...");
     pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
-    let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler)
+    let (crs, encoded_db, secret_key) = setup(&params, &database, entry_size, &mut sampler)
         .with_context(|| "Failed to run PIR setup")?;
 
     pb.finish_with_message("Setup complete");
@@ -155,6 +155,18 @@ fn main() -> Result<()> {
 
     let crs_size = fs::metadata(&crs_path)?.len();
     info!("CRS saved: {:.2} MB", crs_size as f64 / (1024.0 * 1024.0));
+
+    info!("Saving secret key (keep this secure!)...");
+    let sk_path = args.output_dir.join("secret_key.json");
+    let sk_file = File::create(&sk_path)
+        .with_context(|| format!("Failed to create secret key file: {}", sk_path.display()))?;
+    let mut writer = BufWriter::new(sk_file);
+    serde_json::to_writer(&mut writer, &secret_key)
+        .with_context(|| "Failed to serialize secret key")?;
+    writer.flush()?;
+
+    let sk_size = fs::metadata(&sk_path)?.len();
+    info!("Secret key saved: {:.2} KB", sk_size as f64 / 1024.0);
 
     info!("Saving encoded database...");
     let db_path = args.output_dir.join("encoded_db.json");
@@ -197,7 +209,7 @@ fn main() -> Result<()> {
 fn save_metadata(
     output_dir: &PathBuf,
     params: &InspireParams,
-    _crs: &InspireCrs,
+    _crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
     entry_count: u64,
 ) -> Result<()> {

@@ -33,11 +33,11 @@ fn test_e2e_single_entry() {
     }
 
     let mut sampler = GaussianSampler::new(params.sigma);
-    let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     for target_idx in 0..num_entries {
         let (state, client_query) =
-            query(&crs, target_idx as u64, &encoded_db.config, &mut sampler).unwrap();
+            query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
         let result = extract(&crs, &state, &response, entry_size).unwrap();
 
@@ -59,13 +59,13 @@ fn test_e2e_random_entries() {
     rng.fill(&mut database[..]);
 
     let mut sampler = GaussianSampler::new(params.sigma);
-    let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     for _ in 0..10 {
         let target_idx = rng.gen_range(0..num_entries);
 
         let (state, client_query) =
-            query(&crs, target_idx as u64, &encoded_db.config, &mut sampler).unwrap();
+            query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
         let result = extract(&crs, &state, &response, entry_size).unwrap();
 
@@ -91,13 +91,13 @@ fn test_e2e_multi_shard() {
     }
 
     let mut sampler = GaussianSampler::new(params.sigma);
-    let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     for shard_id in 0..num_shards {
         let target_idx = shard_id * entries_per_shard + entries_per_shard / 2;
 
         let (state, client_query) =
-            query(&crs, target_idx as u64, &encoded_db.config, &mut sampler).unwrap();
+            query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
         assert_eq!(client_query.shard_id, shard_id as u32);
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
@@ -120,11 +120,11 @@ fn test_e2e_privacy_basic() {
     }
 
     let mut sampler = GaussianSampler::new(params.sigma);
-    let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     let target_idx = 5;
     let (state, client_query) =
-        query(&crs, target_idx as u64, &encoded_db.config, &mut sampler).unwrap();
+        query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
     let response = respond(&crs, &encoded_db, &client_query).unwrap();
     let result = extract(&crs, &state, &response, entry_size).unwrap();
 
@@ -156,13 +156,13 @@ fn test_e2e_boundary_indices() {
     }
 
     let mut sampler = GaussianSampler::new(params.sigma);
-    let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     let test_indices = [0, 1, num_entries / 2, num_entries - 2, num_entries - 1];
 
     for &target_idx in &test_indices {
         let (state, client_query) =
-            query(&crs, target_idx as u64, &encoded_db.config, &mut sampler).unwrap();
+            query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
         let result = extract(&crs, &state, &response, entry_size).unwrap();
 
@@ -189,11 +189,11 @@ fn test_e2e_different_entry_sizes() {
         }
 
         let mut sampler = GaussianSampler::new(params.sigma);
-        let (crs, encoded_db) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_idx = 10;
         let (state, client_query) =
-            query(&crs, target_idx as u64, &encoded_db.config, &mut sampler).unwrap();
+            query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
         let result = extract(&crs, &state, &response, entry_size).unwrap();
 

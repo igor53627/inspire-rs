@@ -15,8 +15,6 @@
 //! - X^(-k) = -X^(d-k) for k > 0
 //! - X^(-0) = X^0 = 1
 
-use crate::inspiring::precompute_packing;
-use crate::ks::KeySwitchingMatrix;
 use crate::math::Poly;
 use crate::params::{InspireParams, ShardConfig};
 
@@ -102,9 +100,6 @@ pub fn inverse_monomial(k: usize, d: usize, q: u64) -> Poly {
 /// * `entry_size` - Size of each entry in bytes
 /// * `params` - System parameters
 /// * `shard_config` - Configuration for database sharding
-/// * `crs_a_vectors` - CRS random vectors for precomputation
-/// * `k_g` - Key-switching matrix for packing
-/// * `k_h` - Key-switching matrix for packing
 ///
 /// # Returns
 /// Vector of ShardData, each containing encoded polynomials
@@ -113,9 +108,6 @@ pub fn encode_database(
     entry_size: usize,
     params: &InspireParams,
     shard_config: &ShardConfig,
-    crs_a_vectors: &[Vec<u64>],
-    k_g: &KeySwitchingMatrix,
-    k_h: &KeySwitchingMatrix,
 ) -> Vec<ShardData> {
     if database.is_empty() || entry_size == 0 {
         return vec![];
@@ -159,12 +151,9 @@ pub fn encode_database(
             polynomials.push(poly);
         }
 
-        let precomputation = precompute_packing(crs_a_vectors, k_g, k_h, params);
-
         shards.push(ShardData {
             id: shard_id,
             polynomials,
-            precomputation,
         });
 
         entry_offset += actual_entries;

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// LWE secret key: vector in Z_q^d sampled from error distribution
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LweSecretKey {
     /// Secret key coefficients
     pub coeffs: Vec<u64>,
