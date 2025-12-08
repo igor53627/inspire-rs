@@ -12,6 +12,7 @@
 //! This rotation brings y_k to coefficient 0 of the result polynomial.
 
 use eyre::{eyre, Result};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::math::NttContext;
@@ -54,8 +55,6 @@ pub fn respond(
     encoded_db: &EncodedDatabase,
     query: &ClientQuery,
 ) -> Result<ServerResponse> {
-    use rayon::prelude::*;
-
     let d = crs.ring_dim();
     let q = crs.modulus();
     let delta = crs.params.delta();
@@ -101,7 +100,8 @@ pub fn respond(
 
 /// Sequential respond using homomorphic rotation
 ///
-/// Same as `respond` but processes columns sequentially. Kept for comparison.
+/// Same as `respond` but processes columns sequentially.
+/// Kept as a correctness baseline for testing and benchmarking the parallel implementation.
 #[allow(dead_code)]
 pub fn respond_sequential(
     crs: &ServerCrs,

@@ -38,9 +38,7 @@ impl AccountMapping {
 
         ensure!(
             file_size % ACCOUNT_ENTRY_SIZE == 0,
-            "Account mapping file size {} is not a multiple of entry size {}",
-            file_size,
-            ACCOUNT_ENTRY_SIZE
+            "Account mapping file size {file_size} is not a multiple of entry size {ACCOUNT_ENTRY_SIZE}"
         );
 
         let count = file_size / ACCOUNT_ENTRY_SIZE;
@@ -137,9 +135,7 @@ impl StorageMapping {
 
         ensure!(
             file_size % STORAGE_ENTRY_SIZE == 0,
-            "Storage mapping file size {} is not a multiple of entry size {}",
-            file_size,
-            STORAGE_ENTRY_SIZE
+            "Storage mapping file size {file_size} is not a multiple of entry size {STORAGE_ENTRY_SIZE}"
         );
 
         let count = file_size / STORAGE_ENTRY_SIZE;

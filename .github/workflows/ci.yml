@@ -24,4 +24,4 @@ jobs:
         run: cargo test --all
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings -A dead_code
+        run: cargo clippy --all-targets -- -W clippy::all

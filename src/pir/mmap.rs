@@ -51,6 +51,8 @@ pub fn save_shards_binary(shards: &[ShardData], dir: &Path) -> Result<()> {
 /// Load a single shard from binary file
 pub fn load_shard_binary(path: &Path) -> Result<ShardData> {
     let file = File::open(path)?;
+    // SAFETY: File is opened read-only and not modified during the mmap lifetime.
+    // The mmap is used only within this function scope for reading.
     let mmap = unsafe { Mmap::map(&file)? };
     let mut cursor = std::io::Cursor::new(&mmap[..]);
     
@@ -127,7 +129,7 @@ mod tests {
             polynomials: vec![poly1, poly2],
         };
         
-        save_shards_binary(&[shard.clone()], dir.path()).unwrap();
+        save_shards_binary(std::slice::from_ref(&shard), dir.path()).unwrap();
         
         let loaded = load_shard_binary(&dir.path().join("shard-0000.bin")).unwrap();
         
