@@ -1,4 +1,5 @@
 ![CI](https://github.com/igor53627/inspire-rs/actions/workflows/ci.yml/badge.svg)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/igor53627/inspire-rs)
 
 # inspire-rs
 
