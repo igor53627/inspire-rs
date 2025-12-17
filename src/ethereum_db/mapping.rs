@@ -6,11 +6,13 @@ use std::path::Path;
 use eyre::{ensure, Context, Result};
 use memmap2::Mmap;
 
-/// Entry size for account mapping: Address(20) + Index(8) = 28 bytes
-const ACCOUNT_ENTRY_SIZE: usize = 28;
+/// Entry size for account mapping: Address(20) + Index(4) = 24 bytes
+/// (Matches plinko-extractor output format)
+const ACCOUNT_ENTRY_SIZE: usize = 24;
 
-/// Entry size for storage mapping: Address(20) + SlotKey(32) + Index(8) = 60 bytes
-const STORAGE_ENTRY_SIZE: usize = 60;
+/// Entry size for storage mapping: Address(20) + SlotKey(32) + Index(4) = 56 bytes
+/// (Matches plinko-extractor output format)
+const STORAGE_ENTRY_SIZE: usize = 56;
 
 /// Address type alias
 pub type Address = [u8; 20];
@@ -97,12 +99,12 @@ impl AccountMapping {
         self.mmap[offset..offset + 20].try_into().unwrap()
     }
 
-    /// Get database index at entry position
+    /// Get database index at entry position (4-byte LE index from plinko format)
     #[inline]
     fn get_index(&self, idx: usize) -> u64 {
         let offset = idx * ACCOUNT_ENTRY_SIZE + 20;
-        let bytes: [u8; 8] = self.mmap[offset..offset + 8].try_into().unwrap();
-        u64::from_le_bytes(bytes)
+        let bytes: [u8; 4] = self.mmap[offset..offset + 4].try_into().unwrap();
+        u32::from_le_bytes(bytes) as u64
     }
 
     /// Iterate over all entries (address, index)
@@ -196,12 +198,12 @@ impl StorageMapping {
         (addr, slot)
     }
 
-    /// Get database index at entry position
+    /// Get database index at entry position (4-byte LE index from plinko format)
     #[inline]
     fn get_index(&self, idx: usize) -> u64 {
         let offset = idx * STORAGE_ENTRY_SIZE + 52;
-        let bytes: [u8; 8] = self.mmap[offset..offset + 8].try_into().unwrap();
-        u64::from_le_bytes(bytes)
+        let bytes: [u8; 4] = self.mmap[offset..offset + 4].try_into().unwrap();
+        u32::from_le_bytes(bytes) as u64
     }
 
     /// Iterate over all entries ((address, slot_key), index)
@@ -254,7 +256,8 @@ mod tests {
         let mut file = NamedTempFile::new().unwrap();
         for (addr, idx) in entries {
             file.write_all(addr).unwrap();
-            file.write_all(&idx.to_le_bytes()).unwrap();
+            // Use 4-byte LE index to match plinko-extractor format
+            file.write_all(&(*idx as u32).to_le_bytes()).unwrap();
         }
         file.flush().unwrap();
         file
@@ -265,7 +268,8 @@ mod tests {
         for (addr, slot, idx) in entries {
             file.write_all(addr).unwrap();
             file.write_all(slot).unwrap();
-            file.write_all(&idx.to_le_bytes()).unwrap();
+            // Use 4-byte LE index to match plinko-extractor format
+            file.write_all(&(*idx as u32).to_le_bytes()).unwrap();
         }
         file.flush().unwrap();
         file

@@ -24,6 +24,7 @@ This document compares various Private Information Retrieval (PIR) schemes relev
 | FrodoPIR | ~1 KB | ~100 MB | Good | |
 | Piano | ~1 KB | Stream DB | Good | Streams entire DB |
 | Plinko | ~1 KB | ~200 MB | Good | iPRF-based, updatable |
+| **Dummy Subsets** | 34-47 KB | ~30 MB | Very fast | 2-server or 1-server variants |
 
 **Drawback**: Client must download/store large hints; hints need updating with DB changes.
 
@@ -110,6 +111,44 @@ General-purpose PIR with polylogarithmic communication:
 
 **Trade-off**: Requires two non-colluding servers.
 
+### Dummy Subsets (CCS 2024)
+
+Stateful PIR using dummy subsets to eliminate leakage. Available in 2-server and 1-server variants.
+
+**Key idea**: Client stores partition-based hints; queries include dummy indices to hide the real target.
+
+| Database | Variant | Client Storage | Offline Comm | Online Comm | Online Compute |
+|----------|---------|----------------|--------------|-------------|----------------|
+| 32 MB (2^20 × 32B) | 2-server | 3.8 MB | 3.8 MB | 2.3 KB | 0.12 ms |
+| 512 MB (2^24 × 32B) | 2-server | 15 MB | 15 MB | 8.6 KB | 0.54 ms |
+| 8 GB (2^28 × 32B) | 2-server | 60 MB | 60 MB | 34 KB | 2.7 ms |
+| 8 GB (2^28 × 32B) | 1-server | 60 MB | Stream DB | 47 KB (amort.) | 4.5 ms |
+
+**Comparison with other stateful schemes (8 GB database)**:
+
+| Scheme | Online Comm | Online Compute | Client Storage | Servers |
+|--------|-------------|----------------|----------------|---------|
+| **Dummy Subsets** | 34 KB | 2.7 ms | 60 MB | 2 |
+| **Dummy Subsets** | 47 KB | 4.5 ms | 60 MB | 1 |
+| TreePIR | 263 KB | 20 ms | 12 MB | 2 |
+| Checklist | 0.6 KB | 1.9 ms | 1.1 GB | 2 |
+| Spiral (stateless) | 30 KB | 30,000+ ms | Per-client | 1 |
+| SimplePIR | ~1 KB | ~750 ms | ~1 GB hint | 1 |
+| Piano | 50 KB | 14 ms | 60 MB | 1 |
+
+**Advantages**:
+- 7.7× less communication than TreePIR
+- 18× faster computation than TreePIR
+- 18× less client storage than Checklist
+- 100-1000× faster than Spiral for large databases
+- 9-14× less communication than SimplePIR online
+- Standard PIR correctness (unlike Piano's probabilistic guarantee)
+
+**Drawbacks**:
+- Single-server variant requires streaming entire DB in offline phase
+- Higher online communication than schemes with larger hints (Checklist, SimplePIR)
+- O(√N) communication complexity (not polylog)
+
 ## Compression and Optimization Techniques
 
 ### Query Compression
@@ -144,9 +183,11 @@ Cryptographic ciphertexts are pseudorandom by design:
 |----------|-------------|---------------|-------|
 | Single query, cold start | InsPIRe / VIA | 300-700 KB | No setup needed |
 | Many queries, same client | Plinko | ~1 KB/query | After 200 MB hint download |
+| Many queries, fast compute | Dummy Subsets | 34-47 KB/query | After ~60 MB hint, 2.7-4.5 ms/query |
 | Merkle proof retrieval | TreePIR (Merkle) | O(log N) | Optimized for tree structure |
 | Maximum privacy | TreePIR (DDH) | O(polylog N) | Requires 2 servers |
 | Highest throughput | SimplePIR | ~1 KB | Requires ~1 GB hint |
+| 2-server trusted setup | Dummy Subsets | 34 KB/query | Lowest computation if 2 servers OK |
 
 ## Wallet Open Scenario
 
@@ -158,6 +199,7 @@ User opens wallet with 10 tokens, 3 NFTs, ETH balance (14 queries, 512 bytes act
 | InsPIRe (batched) | 2-4 MB | 140-280 KB | Full |
 | VIA (batched) | 1-2 MB | 70-140 KB | Full |
 | Plinko (after hint) | 14 KB | 1 KB | Full |
+| Dummy Subsets (after hint) | 480-660 KB | 34-47 KB | Full |
 
 ## Summary Table
 
@@ -171,6 +213,7 @@ User opens wallet with 10 tokens, 3 NFTs, ETH balance (14 queries, 512 bytes act
 | **VIA** | 1 | None | 690 KB (32GB) | 3.1 GB/s | LWE/RLWE |
 | TreePIR (DDH) | 2 | Sublinear | O(polylog N) | Sublinear | DDH |
 | Spiral | 1 | Per-client keys | Small | Good | RLWE |
+| **Dummy Subsets** | 1-2 | ~30-60 MB hint | 34-47 KB | Very fast | DPF/PRF |
 
 ## References
 
@@ -180,3 +223,4 @@ User opens wallet with 10 tokens, 3 NFTs, ETH balance (14 queries, 512 bytes act
 - TreePIR (DDH): [CRYPTO 2023](https://eprint.iacr.org/2023/204)
 - YPIR: [USENIX Security 2024](https://www.usenix.org/conference/usenixsecurity24/presentation/menon)
 - Plinko: [ePrint 2024/318](https://eprint.iacr.org/2024/318)
+- Dummy Subsets: [ePrint 2023/1072](https://eprint.iacr.org/2023/1072) (CCS 2024)
