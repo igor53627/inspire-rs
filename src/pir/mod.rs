@@ -54,5 +54,5 @@ pub use encode_db::{encode_column, encode_database, encode_direct, inverse_monom
 pub use extract::extract;
 pub use mmap::{save_shards_binary, load_shard_binary, MmapDatabase};
 pub use query::{query, ClientQuery, ClientState};
-pub use respond::{respond, respond_sequential, ServerResponse};
+pub use respond::{respond, respond_mmap, respond_sequential, ServerResponse};
 pub use setup::{setup, EncodedDatabase, InspireCrs, ServerCrs, ShardData};

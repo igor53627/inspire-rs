@@ -148,6 +148,31 @@ Run benchmarks with: `cargo bench --bench respond`
 
 The parallel implementation is the default. A sequential version (`respond_sequential`) is available for comparison and debugging.
 
+### Memory-Mapped Database Mode
+
+For large databases (73GB Ethereum state), use memory-mapped mode to avoid loading everything into RAM:
+
+**Setup (generate binary shards):**
+```bash
+cargo run --release --bin inspire-setup -- \
+  --data-dir ./plinko-data \
+  --output-dir ./inspire_data \
+  --binary-output
+```
+
+**Server (use mmap mode):**
+```bash
+cargo run --release --bin inspire-server -- \
+  --data-dir ./inspire_data \
+  --mmap
+```
+
+Benefits:
+- Shards loaded on-demand from disk
+- Minimal startup memory footprint
+- OS page cache handles hot shard caching
+- Suitable for databases larger than available RAM
+
 ## Ethereum Database Integration
 
 ### Data Format (from plinko-extractor)
