@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{query, respond, setup};
+use inspire_pir::pir::{query, respond, respond_sequential, setup};
 
 fn test_params() -> InspireParams {
     InspireParams {
@@ -40,6 +40,14 @@ fn respond_benchmark(c: &mut Criterion) {
             &num_columns,
             |b, _| {
                 b.iter(|| respond(&crs, &encoded_db, &client_query).unwrap());
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("sequential", format!("{}_columns", num_columns)),
+            &num_columns,
+            |b, _| {
+                b.iter(|| respond_sequential(&crs, &encoded_db, &client_query).unwrap());
             },
         );
     }

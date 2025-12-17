@@ -101,8 +101,7 @@ pub fn respond(
 /// Sequential respond using homomorphic rotation
 ///
 /// Same as `respond` but processes columns sequentially.
-/// Kept as a correctness baseline for testing and benchmarking the parallel implementation.
-#[allow(dead_code)]
+/// Useful for benchmarking parallel vs sequential performance.
 pub fn respond_sequential(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,

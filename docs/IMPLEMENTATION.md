@@ -133,6 +133,21 @@ Based on paper benchmarks for 1 GB database:
 | Server time | 120-650 ms | 140-600 ms |
 | Throughput | 1.5-8.7 GB/s | 1.7-7.4 GB/s |
 
+### Parallel Response Performance
+
+The `respond()` function uses `rayon` for parallel column processing. Benchmarks on Apple M-series (ring_dim=256):
+
+| Columns | Sequential | Parallel | Speedup |
+|---------|-----------|----------|---------|
+| 1 | 917 µs | 939 µs | ~1x |
+| 2 | 1.83 ms | 365 µs | **5.0x** |
+| 4 | 3.63 ms | 626 µs | **5.8x** |
+| 8 | 7.31 ms | 1.02 ms | **7.2x** |
+
+Run benchmarks with: `cargo bench --bench respond`
+
+The parallel implementation is the default. A sequential version (`respond_sequential`) is available for comparison and debugging.
+
 ## Ethereum Database Integration
 
 ### Data Format (from plinko-extractor)
