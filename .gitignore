@@ -20,3 +20,4 @@ Thumbs.db
 # Test data (generated, not tracked)
 /testdata/
 /inspire_data/
+sepolia-test/
