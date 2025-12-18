@@ -1547,6 +1547,23 @@
                 .attr("fill", COLORS.textSecondary).attr("font-size", "12px")
                 .text("...×16");
 
+            // Timing info - positioned after ellipsis, ensuring no overlap
+            const timingBoxWidth = 120;
+            const timingX = afterOpsX + 60;
+            svg.append("rect")
+                .attr("x", timingX).attr("y", opY)
+                .attr("width", timingBoxWidth).attr("height", opHeight)
+                .attr("rx", 4)
+                .attr("fill", COLORS.bgTertiary).attr("stroke", COLORS.border);
+            svg.append("text")
+                .attr("x", timingX + timingBoxWidth / 2).attr("y", opY + 18)
+                .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
+                .text("Processing time:");
+            svg.append("text")
+                .attr("x", timingX + timingBoxWidth / 2).attr("y", opY + 36)
+                .attr("text-anchor", "middle").attr("fill", COLORS.green).attr("font-size", "14px").attr("font-weight", "bold")
+                .text("~3 ms");
+
             // Output ciphertexts
             const outY = 190;
             const outWidth = 45;
@@ -1584,21 +1601,6 @@
                 .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                 .attr("font-family", "monospace")
                 .text("Each ct_i = RLWE(h_i(X) · X^{-k}) where coefficient 0 contains y_k's column i");
-
-            // Timing info - aligned with external product row
-            svg.append("rect")
-                .attr("x", width - 150).attr("y", opY)
-                .attr("width", 140).attr("height", opHeight)
-                .attr("rx", 4)
-                .attr("fill", COLORS.bgTertiary).attr("stroke", COLORS.border);
-            svg.append("text")
-                .attr("x", width - 80).attr("y", opY + 18)
-                .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
-                .text("Processing time:");
-            svg.append("text")
-                .attr("x", width - 80).attr("y", opY + 36)
-                .attr("text-anchor", "middle").attr("fill", COLORS.green).attr("font-size", "14px").attr("font-weight", "bold")
-                .text("~3 ms");
         }
 
         // Step 3: Output Assembly

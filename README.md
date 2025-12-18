@@ -1,5 +1,6 @@
 ![CI](https://github.com/igor53627/inspire-rs/actions/workflows/ci.yml/badge.svg)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/igor53627/inspire-rs)
+[![Interactive Visualization](https://img.shields.io/badge/Demo-Protocol%20Visualization-blue)](https://igor53627.github.io/inspire-rs/protocol-visualization.html)
 
 # inspire-rs
 
@@ -105,11 +106,63 @@ cargo run --release --bin inspire-setup -- \
   --output-dir testdata/pir
 ```
 
+## Communication Costs
+
+InsPIRe communication is **O(d)** where d is the ring dimension, **not** O(√N):
+
+| Component | JSON | Seeded JSON | Binary |
+|-----------|------|-------------|--------|
+| CRS (one-time) | ~100 KB | ~100 KB | ~100 KB |
+| Query (client→server) | 458 KB | **230 KB** | 230 KB |
+| Response (server→client) | 1,296 KB | 1,296 KB | **544 KB** |
+| **Total per-query** | 1,754 KB | 1,526 KB | **774 KB** |
+
+These costs are **independent of database size**—the same whether querying 1 MB or 73 GB.
+
+> **Why constant sizes?** This is a privacy requirement. If sizes varied with target index or database, traffic analysis could reveal what's being queried. See [docs/COMMUNICATION_COSTS.md](docs/COMMUNICATION_COSTS.md#why-pir-sizes-are-constant) for the formulas.
+
+### Seed Expansion
+
+Use `query_seeded()` instead of `query()` for ~50% smaller queries:
+
+```rust
+// Client: generate compact query
+let (state, seeded_query) = query_seeded(&crs, index, &config, &sk, &mut sampler)?;
+send_to_server(&seeded_query); // 230 KB instead of 458 KB
+
+// Server: expand and process
+let expanded = seeded_query.expand();
+let response = respond(&crs, &db, &expanded)?;
+```
+
+## Performance
+
+Benchmarked on AMD/Intel x64 server with d=2048, 128-bit security:
+
+### Server Response Time
+
+| Database Size | Shards | Respond Time |
+|---------------|--------|--------------|
+| 256K entries (8 MB) | 128 | 3.8 ms |
+| 512K entries (16 MB) | 256 | 3.1 ms |
+| 1M entries (32 MB) | 512 | 3.3 ms |
+
+### End-to-End Latency
+
+| Phase | Time |
+|-------|------|
+| Client: Query generation (seeded) | ~4 ms |
+| Server: Expand + Respond | ~3-4 ms |
+| Client: Extract result | ~5 ms |
+| **Total round-trip** | **~12 ms** |
+
+Run benchmarks: `cargo run --release --example benchmark_seed_expansion`
+
 ## Documentation
 
 - [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) - Architecture details
 - [docs/COMMUNICATION_COSTS.md](docs/COMMUNICATION_COSTS.md) - Bandwidth analysis
-- [docs/PIR_COMPARISON.md](docs/PIR_COMPARISON.md) - Scheme comparison
+- [docs/protocol-visualization.html](docs/protocol-visualization.html) - Interactive D3 visualization of protocol and costs
 
 ## License
 
