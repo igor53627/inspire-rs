@@ -1,0 +1,2132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InsPIRe Protocol Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-purple: #a371f7;
+            --accent-orange: #d29922;
+            --border-color: #30363d;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 0.5rem;
+            color: var(--accent-blue);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .section h2 {
+            color: var(--accent-purple);
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+        }
+
+        .key-insight {
+            background: var(--bg-tertiary);
+            border-left: 4px solid var(--accent-green);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .key-insight strong {
+            color: var(--accent-green);
+        }
+
+        /* Protocol Flow */
+        #protocol-flow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #flow-svg {
+            width: 100%;
+            max-width: 900px;
+        }
+
+        .flow-controls {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .flow-controls button {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.5rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+        }
+
+        .flow-controls button:hover {
+            opacity: 0.85;
+        }
+
+        .flow-controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Size Breakdown */
+        #size-breakdown {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .chart-container {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .format-toggle {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .format-toggle button {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            padding: 0.4rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .format-toggle button.active {
+            background: var(--accent-purple);
+            color: white;
+            border-color: var(--accent-purple);
+        }
+
+        .format-toggle button:hover:not(.active) {
+            border-color: var(--text-secondary);
+        }
+
+        .tooltip {
+            position: absolute;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.75rem;
+            font-size: 0.85rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+            z-index: 100;
+            max-width: 280px;
+        }
+
+        .tooltip.visible {
+            opacity: 1;
+        }
+
+        .tooltip .label {
+            color: var(--accent-blue);
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .tooltip .value {
+            color: var(--text-primary);
+        }
+
+        .tooltip .formula {
+            color: var(--text-secondary);
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .crypto-tooltip {
+            position: fixed;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--accent-purple);
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+            z-index: 200;
+            max-width: 320px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .crypto-tooltip.visible {
+            opacity: 1;
+        }
+
+        .crypto-tooltip .ct-title {
+            color: var(--accent-purple);
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+            font-size: 0.9rem;
+        }
+
+        .crypto-tooltip .ct-desc {
+            color: var(--text-primary);
+            line-height: 1.4;
+            margin-bottom: 0.4rem;
+        }
+
+        .crypto-tooltip .ct-detail {
+            color: var(--text-secondary);
+            font-family: monospace;
+            font-size: 0.75rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 0.4rem;
+            margin-top: 0.3rem;
+        }
+
+        /* Parameter Controls */
+        .sliders {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .slider-group {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 6px;
+        }
+
+        .slider-group label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .slider-group label span {
+            color: var(--accent-orange);
+            font-weight: 600;
+        }
+
+        .slider-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            background: var(--border-color);
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .slider-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--accent-orange);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .size-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .size-card {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .size-card .size-label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .size-card .size-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .size-card.query .size-value {
+            color: var(--accent-blue);
+        }
+
+        .size-card.response .size-value {
+            color: var(--accent-green);
+        }
+
+        .size-card.total .size-value {
+            color: var(--accent-purple);
+        }
+
+        .size-card .size-formula {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+            margin-top: 0.25rem;
+        }
+
+        /* Comparison Table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 0.75rem 1rem;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .comparison-table th {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .comparison-table tr:hover td {
+            background: var(--bg-tertiary);
+        }
+
+        .comparison-table .same {
+            color: var(--accent-green);
+        }
+
+        .comparison-table .varies {
+            color: var(--accent-orange);
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .footer a {
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>InsPIRe Protocol Visualization</h1>
+        <p class="subtitle">Interactive visualization of PIR communication costs</p>
+
+        <!-- Key Insight -->
+        <div class="section">
+            <div class="key-insight">
+                <strong>Key Privacy Property:</strong> Query and response sizes are constant regardless of database size.
+                If sizes varied with the target index or database, traffic analysis could reveal what's being queried.
+            </div>
+        </div>
+
+        <!-- Protocol Flow -->
+        <div class="section">
+            <h2>1. Protocol Flow</h2>
+            <div id="protocol-flow">
+                <svg id="flow-svg" viewBox="0 0 900 320"></svg>
+                <div class="flow-controls">
+                    <button id="play-btn">Play Animation</button>
+                    <button id="reset-btn">Reset</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Size Breakdown -->
+        <div class="section">
+            <h2>2. Size Breakdown</h2>
+            <div class="format-toggle">
+                <button class="active" data-format="seeded-binary">Seeded + Binary (~608 KB)</button>
+                <button data-format="seeded-json">Seeded JSON (~1,450 KB)</button>
+                <button data-format="json">Full JSON (~1,678 KB)</button>
+            </div>
+            <div id="size-breakdown">
+                <div class="chart-container">
+                    <svg id="query-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet"></svg>
+                </div>
+                <div class="chart-container">
+                    <svg id="response-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet"></svg>
+                </div>
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #58a6ff;"></div>
+                    <span>RGSW Rows (Query)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #3fb950;"></div>
+                    <span>RLWE Ciphertexts (Response)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8b949e;"></div>
+                    <span>Metadata/Overhead</span>
+                </div>
+            </div>
+            <div class="tooltip" id="tooltip"></div>
+            <div class="crypto-tooltip" id="crypto-tooltip">
+                <div class="ct-title"></div>
+                <div class="ct-desc"></div>
+                <div class="ct-detail"></div>
+            </div>
+        </div>
+
+        <!-- Parameter Effects -->
+        <div class="section">
+            <h2>3. Parameter Effects</h2>
+            <div class="sliders">
+                <div class="slider-group">
+                    <label>Ring Dimension (d): <span id="d-value">2048</span></label>
+                    <input type="range" id="d-slider" min="0" max="2" value="1">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                        <span>1024</span>
+                        <span>2048</span>
+                        <span>4096</span>
+                    </div>
+                </div>
+                <div class="slider-group">
+                    <label>Entry Size: <span id="entry-value">32 bytes</span></label>
+                    <input type="range" id="entry-slider" min="0" max="2" value="0">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                        <span>32 B</span>
+                        <span>64 B</span>
+                        <span>128 B</span>
+                    </div>
+                </div>
+                <div class="slider-group">
+                    <label>Gadget Length (l): <span id="gadget-value">3</span></label>
+                    <input type="range" id="gadget-slider" min="2" max="4" value="3">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                        <span>2</span>
+                        <span>3</span>
+                        <span>4</span>
+                    </div>
+                </div>
+            </div>
+            <div class="size-results">
+                <div class="size-card query">
+                    <div class="size-label">Query Size (seeded)</div>
+                    <div class="size-value" id="calc-query">230 KB</div>
+                    <div class="size-formula" id="query-formula"></div>
+                </div>
+                <div class="size-card response">
+                    <div class="size-label">Response Size (binary)</div>
+                    <div class="size-value" id="calc-response">512 KB</div>
+                    <div class="size-formula" id="response-formula"></div>
+                </div>
+                <div class="size-card total">
+                    <div class="size-label">Total per Query</div>
+                    <div class="size-value" id="calc-total">742 KB</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Server Processing -->
+        <div class="section">
+            <h2>4. Server Processing Visualization</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                Server processes one shard at a time. Each shard contains d entries encoded as polynomials.
+            </p>
+            
+            <!-- Shard Selection -->
+            <div style="margin-bottom: 1.5rem;">
+                <h3 style="color: var(--accent-blue); font-size: 1rem; margin-bottom: 0.5rem;">Step 1: Shard Selection</h3>
+                <svg id="shard-svg" viewBox="0 0 900 180"></svg>
+                <div class="server-controls" style="margin-top: 0.5rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Database size: 
+                        <select id="db-size-select" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.3rem; border-radius: 4px;">
+                            <option value="1024">1K entries (1 shard)</option>
+                            <option value="65536">64K entries (32 shards)</option>
+                            <option value="1048576" selected>1M entries (512 shards)</option>
+                            <option value="100000000">100M entries (48K shards)</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Processing Pipeline -->
+            <div style="margin-bottom: 1.5rem;">
+                <h3 style="color: var(--accent-green); font-size: 1rem; margin-bottom: 0.5rem;">Step 2: External Product (Parallel)</h3>
+                <svg id="pipeline-svg" viewBox="0 0 900 280"></svg>
+                <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                    <button id="animate-pipeline-btn" style="background: var(--accent-green); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                        Animate Processing
+                    </button>
+                </div>
+            </div>
+
+            <!-- Output Assembly -->
+            <div>
+                <h3 style="color: var(--accent-purple); font-size: 1rem; margin-bottom: 0.5rem;">Step 3: Response Assembly</h3>
+                <svg id="output-svg" viewBox="0 0 900 150"></svg>
+            </div>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="section">
+            <h2>5. Database Size Comparison</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                Notice: query and response sizes remain constant. Only server processing time varies.
+            </p>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Database Size</th>
+                        <th>Entries</th>
+                        <th>Shards</th>
+                        <th>Query Size</th>
+                        <th>Response Size</th>
+                        <th>Server Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>32 KB</td>
+                        <td>1,024</td>
+                        <td>1</td>
+                        <td class="same">96 KB</td>
+                        <td class="same">512 KB</td>
+                        <td class="varies">~1 ms</td>
+                    </tr>
+                    <tr>
+                        <td>2 MB</td>
+                        <td>65,536</td>
+                        <td>32</td>
+                        <td class="same">96 KB</td>
+                        <td class="same">512 KB</td>
+                        <td class="varies">~1.5 ms</td>
+                    </tr>
+                    <tr>
+                        <td>32 MB</td>
+                        <td>1,048,576</td>
+                        <td>512</td>
+                        <td class="same">96 KB</td>
+                        <td class="same">512 KB</td>
+                        <td class="varies">~3 ms</td>
+                    </tr>
+                    <tr>
+                        <td>3.2 GB</td>
+                        <td>100,000,000</td>
+                        <td>48,829</td>
+                        <td class="same">96 KB</td>
+                        <td class="same">512 KB</td>
+                        <td class="varies">~3 ms</td>
+                    </tr>
+                    <tr>
+                        <td style="color: var(--accent-purple);">73 GB (Ethereum)</td>
+                        <td>2,400,000,000</td>
+                        <td>1,171,875</td>
+                        <td class="same">96 KB</td>
+                        <td class="same">512 KB</td>
+                        <td class="varies">~3 ms</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Appendix: Lattice Cryptography -->
+        <div class="section" style="margin-top: 3rem;">
+            <h2 style="color: var(--accent-orange);">Appendix: Lattice Cryptography Foundations</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                InsPIRe's security is based on the hardness of lattice problems. These visualizations explain the core concepts.
+            </p>
+
+            <!-- A.1 2D Lattice Basics -->
+            <div style="margin-bottom: 2rem;">
+                <h3 style="color: var(--accent-blue); font-size: 1rem; margin-bottom: 0.5rem;">A.1 Lattice Basics & Shortest Vector Problem</h3>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
+                    A lattice is a regular grid of points. Security comes from the hardness of finding short vectors.
+                </p>
+                <svg id="lattice-svg" viewBox="0 0 900 350"></svg>
+                <div style="display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
+                    <button id="toggle-basis-btn" style="background: var(--accent-blue); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                        Toggle Good/Bad Basis
+                    </button>
+                    <button id="show-svp-btn" style="background: var(--accent-green); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                        Highlight Shortest Vector
+                    </button>
+                </div>
+            </div>
+
+            <!-- A.2 RLWE Error Distribution -->
+            <div style="margin-bottom: 2rem;">
+                <h3 style="color: var(--accent-green); font-size: 1rem; margin-bottom: 0.5rem;">A.2 RLWE Error Distribution</h3>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
+                    Gaussian noise hides the secret. Without noise, the problem would be easy linear algebra.
+                </p>
+                <svg id="error-svg" viewBox="0 0 900 280"></svg>
+                <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem;">
+                        Noise σ: <span id="sigma-value">3.2</span>
+                    </label>
+                    <input type="range" id="sigma-slider" min="1" max="10" step="0.5" value="3.2" 
+                           style="width: 150px;">
+                    <button id="sample-error-btn" style="background: var(--accent-green); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                        Sample New Errors
+                    </button>
+                </div>
+            </div>
+
+            <!-- A.3 Ring Structure -->
+            <div>
+                <h3 style="color: var(--accent-purple); font-size: 1rem; margin-bottom: 0.5rem;">A.3 Polynomial Ring Structure</h3>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
+                    R_q = Z_q[X]/(X^d + 1): Polynomials with cyclic structure. Multiplication by X rotates coefficients.
+                </p>
+                <svg id="ring-svg" viewBox="0 0 900 320"></svg>
+                <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                    <button id="rotate-ring-btn" style="background: var(--accent-purple); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                        Multiply by X (Rotate)
+                    </button>
+                    <button id="reset-ring-btn" style="background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                        Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>
+                InsPIRe: Communication-Efficient PIR with Server-side Preprocessing |
+                <a href="https://github.com/igor53627/inspire-rs">GitHub</a> |
+                <a href="COMMUNICATION_COSTS.md">Full Analysis</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // Protocol Flow Animation
+        // ============================================================
+        const flowSvg = d3.select("#flow-svg");
+        const flowWidth = 900;
+        const flowHeight = 320;
+
+        // Entities
+        const entities = [
+            { id: "client", label: "Client", x: 120, color: "#58a6ff" },
+            { id: "server", label: "Server", x: 780, color: "#3fb950" }
+        ];
+
+        // Draw entity boxes and labels
+        entities.forEach(e => {
+            flowSvg.append("rect")
+                .attr("x", e.x - 50)
+                .attr("y", 20)
+                .attr("width", 100)
+                .attr("height", 40)
+                .attr("rx", 6)
+                .attr("fill", e.color)
+                .attr("opacity", 0.2)
+                .attr("stroke", e.color)
+                .attr("stroke-width", 2);
+
+            flowSvg.append("text")
+                .attr("x", e.x)
+                .attr("y", 46)
+                .attr("text-anchor", "middle")
+                .attr("fill", e.color)
+                .attr("font-weight", "bold")
+                .attr("font-size", "14px")
+                .text(e.label);
+
+            // Lifeline
+            flowSvg.append("line")
+                .attr("x1", e.x)
+                .attr("y1", 70)
+                .attr("x2", e.x)
+                .attr("y2", 300)
+                .attr("stroke", "#30363d")
+                .attr("stroke-width", 2)
+                .attr("stroke-dasharray", "6,4");
+        });
+
+        // Animation steps
+        const steps = [
+            {
+                id: "step1",
+                fromX: 120, toX: 780, y: 100,
+                label: "Query: RGSW(X^(-k))",
+                sublabel: "~230 KB (seeded)",
+                color: "#58a6ff",
+                arrow: "right"
+            },
+            {
+                id: "step2",
+                fromX: 780, toX: 780, y: 160,
+                label: "Process: h(X) * X^(-k)",
+                sublabel: "External product",
+                color: "#a371f7",
+                arrow: "none",
+                isBox: true
+            },
+            {
+                id: "step3",
+                fromX: 780, toX: 120, y: 220,
+                label: "Response: RLWE(y_k)",
+                sublabel: "~544 KB (binary)",
+                color: "#3fb950",
+                arrow: "left"
+            },
+            {
+                id: "step4",
+                fromX: 120, toX: 120, y: 280,
+                label: "Extract: Decrypt to get y_k",
+                sublabel: "32 bytes result",
+                color: "#d29922",
+                arrow: "none",
+                isBox: true
+            }
+        ];
+
+        // Create step elements (initially hidden)
+        steps.forEach((step, i) => {
+            const g = flowSvg.append("g")
+                .attr("class", "flow-step")
+                .attr("id", step.id)
+                .attr("opacity", 0);
+
+            if (step.isBox) {
+                // Processing box
+                g.append("rect")
+                    .attr("x", step.fromX - 80)
+                    .attr("y", step.y - 18)
+                    .attr("width", 160)
+                    .attr("height", 36)
+                    .attr("rx", 4)
+                    .attr("fill", step.color)
+                    .attr("opacity", 0.15)
+                    .attr("stroke", step.color);
+
+                g.append("text")
+                    .attr("x", step.fromX)
+                    .attr("y", step.y - 2)
+                    .attr("text-anchor", "middle")
+                    .attr("fill", step.color)
+                    .attr("font-size", "12px")
+                    .attr("font-weight", "bold")
+                    .text(step.label);
+
+                g.append("text")
+                    .attr("x", step.fromX)
+                    .attr("y", step.y + 12)
+                    .attr("text-anchor", "middle")
+                    .attr("fill", "#8b949e")
+                    .attr("font-size", "11px")
+                    .text(step.sublabel);
+            } else {
+                // Arrow
+                const midX = (step.fromX + step.toX) / 2;
+                
+                g.append("line")
+                    .attr("class", "arrow-line")
+                    .attr("x1", step.fromX)
+                    .attr("y1", step.y)
+                    .attr("x2", step.fromX)
+                    .attr("y2", step.y)
+                    .attr("stroke", step.color)
+                    .attr("stroke-width", 2)
+                    .attr("marker-end", `url(#arrowhead-${step.id})`);
+
+                // Arrowhead marker
+                flowSvg.append("defs")
+                    .append("marker")
+                    .attr("id", `arrowhead-${step.id}`)
+                    .attr("markerWidth", 10)
+                    .attr("markerHeight", 7)
+                    .attr("refX", 9)
+                    .attr("refY", 3.5)
+                    .attr("orient", "auto")
+                    .append("polygon")
+                    .attr("points", "0 0, 10 3.5, 0 7")
+                    .attr("fill", step.color);
+
+                // Labels
+                g.append("text")
+                    .attr("x", midX)
+                    .attr("y", step.y - 12)
+                    .attr("text-anchor", "middle")
+                    .attr("fill", step.color)
+                    .attr("font-size", "12px")
+                    .attr("font-weight", "bold")
+                    .text(step.label);
+
+                g.append("text")
+                    .attr("x", midX)
+                    .attr("y", step.y + 18)
+                    .attr("text-anchor", "middle")
+                    .attr("fill", "#8b949e")
+                    .attr("font-size", "11px")
+                    .text(step.sublabel);
+            }
+        });
+
+        let animationRunning = false;
+
+        function playAnimation() {
+            if (animationRunning) return;
+            animationRunning = true;
+            document.getElementById("play-btn").disabled = true;
+
+            // Reset all steps
+            flowSvg.selectAll(".flow-step").attr("opacity", 0);
+            flowSvg.selectAll(".arrow-line").attr("x2", function() {
+                return d3.select(this).attr("x1");
+            });
+
+            // Animate each step
+            steps.forEach((step, i) => {
+                const delay = i * 800;
+                
+                setTimeout(() => {
+                    const g = flowSvg.select(`#${step.id}`);
+                    g.transition().duration(300).attr("opacity", 1);
+
+                    if (!step.isBox) {
+                        g.select(".arrow-line")
+                            .transition()
+                            .duration(400)
+                            .attr("x2", step.toX);
+                    }
+                }, delay);
+            });
+
+            setTimeout(() => {
+                animationRunning = false;
+                document.getElementById("play-btn").disabled = false;
+            }, steps.length * 800 + 500);
+        }
+
+        function resetAnimation() {
+            flowSvg.selectAll(".flow-step").attr("opacity", 0);
+            flowSvg.selectAll(".arrow-line").attr("x2", function() {
+                return d3.select(this).attr("x1");
+            });
+            animationRunning = false;
+            document.getElementById("play-btn").disabled = false;
+        }
+
+        document.getElementById("play-btn").addEventListener("click", playAnimation);
+        document.getElementById("reset-btn").addEventListener("click", resetAnimation);
+
+        // Auto-play on load
+        setTimeout(playAnimation, 500);
+
+        // ============================================================
+        // Size Breakdown Charts
+        // ============================================================
+        // Actual formulas from code:
+        // Query (seeded): 2*l rows, each with 32-byte seed + d*8 byte b-polynomial
+        // Response: num_columns = (entry_size*8+15)/16, each column is 2*d*8 bytes
+        // For d=2048, l=3, entry_size=32: query=2*3*(32+2048*8)=98,496 bytes, response=16*2*2048*8=524,288 bytes
+        const formatData = {
+            "seeded-binary": {
+                query: [
+                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
+                    { name: "Seeds (32B each)", size: 0.19, formula: "2l * 32 = 6 * 32 = 192 B" }
+                ],
+                response: [
+                    { name: "RLWE ciphertexts", size: 512, formula: "16 cols * 2 * 2048 * 8 = 524,288 B" }
+                ],
+                totalQuery: 96,
+                totalResponse: 512
+            },
+            "seeded-json": {
+                query: [
+                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8" },
+                    { name: "Seeds", size: 0.19, formula: "2l * 32 bytes" },
+                    { name: "JSON overhead", size: 134, formula: "~140% text encoding (base64 + structure)" }
+                ],
+                response: [
+                    { name: "RLWE ciphertexts (JSON)", size: 1220, formula: "~2.4x binary size" }
+                ],
+                totalQuery: 230,
+                totalResponse: 1220
+            },
+            "json": {
+                query: [
+                    { name: "RGSW a-polynomials", size: 96, formula: "2l * d * 8" },
+                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8" },
+                    { name: "JSON overhead", size: 266, formula: "~140% text encoding" }
+                ],
+                response: [
+                    { name: "RLWE ciphertexts (JSON)", size: 1220, formula: "~2.4x binary size" }
+                ],
+                totalQuery: 458,
+                totalResponse: 1220
+            }
+        };
+
+        let currentFormat = "seeded-binary";
+        const tooltip = d3.select("#tooltip");
+
+        function drawChart(svgId, data, title, color) {
+            const svg = d3.select(svgId);
+            svg.selectAll("*").remove();
+
+            const width = 420;
+            const height = 280;
+            const margin = { top: 50, right: 40, bottom: 40, left: 140 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+
+            const g = svg.append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Title
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", 25)
+                .attr("text-anchor", "middle")
+                .attr("fill", color)
+                .attr("font-weight", "bold")
+                .attr("font-size", "14px")
+                .text(title);
+
+            const total = data.reduce((sum, d) => sum + d.size, 0);
+
+            // Scales
+            const x = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.size) * 1.1])
+                .range([0, chartWidth]);
+
+            const y = d3.scaleBand()
+                .domain(data.map(d => d.name))
+                .range([0, chartHeight])
+                .padding(0.3);
+
+            // Bars
+            g.selectAll(".bar")
+                .data(data)
+                .join("rect")
+                .attr("class", "bar")
+                .attr("x", 0)
+                .attr("y", d => y(d.name))
+                .attr("width", d => x(d.size))
+                .attr("height", y.bandwidth())
+                .attr("fill", color)
+                .attr("opacity", 0.7)
+                .attr("rx", 3)
+                .on("mouseenter", function(event, d) {
+                    d3.select(this).attr("opacity", 1);
+                    tooltip.classed("visible", true)
+                        .html(`
+                            <div class="label">${d.name}</div>
+                            <div class="value">${d.size.toFixed(1)} KB (${((d.size / total) * 100).toFixed(1)}%)</div>
+                            <div class="formula">${d.formula}</div>
+                        `);
+                })
+                .on("mousemove", function(event) {
+                    tooltip
+                        .style("left", (event.pageX + 15) + "px")
+                        .style("top", (event.pageY - 10) + "px");
+                })
+                .on("mouseleave", function() {
+                    d3.select(this).attr("opacity", 0.7);
+                    tooltip.classed("visible", false);
+                });
+
+            // Labels
+            g.selectAll(".label")
+                .data(data)
+                .join("text")
+                .attr("x", d => x(d.size) + 5)
+                .attr("y", d => y(d.name) + y.bandwidth() / 2 + 4)
+                .attr("fill", "#e6edf3")
+                .attr("font-size", "11px")
+                .text(d => d.size >= 1 ? `${d.size.toFixed(0)} KB` : `${(d.size * 1024).toFixed(0)} B`);
+
+            // Y axis
+            g.append("g")
+                .call(d3.axisLeft(y).tickSize(0))
+                .select(".domain").remove();
+
+            g.selectAll(".tick text")
+                .attr("fill", "#8b949e")
+                .attr("font-size", "10px");
+
+            // Total
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", height - 10)
+                .attr("text-anchor", "middle")
+                .attr("fill", "#8b949e")
+                .attr("font-size", "12px")
+                .text(`Total: ${total.toFixed(0)} KB`);
+        }
+
+        function updateCharts() {
+            const data = formatData[currentFormat];
+            drawChart("#query-chart", data.query, "Query Breakdown", "#58a6ff");
+            drawChart("#response-chart", data.response, "Response Breakdown", "#3fb950");
+        }
+
+        // Format toggle
+        document.querySelectorAll(".format-toggle button").forEach(btn => {
+            btn.addEventListener("click", function() {
+                document.querySelectorAll(".format-toggle button").forEach(b => b.classList.remove("active"));
+                this.classList.add("active");
+                currentFormat = this.dataset.format;
+                updateCharts();
+            });
+        });
+
+        updateCharts();
+
+        // ============================================================
+        // Parameter Sliders
+        // ============================================================
+        const dValues = [1024, 2048, 4096];
+        const entryValues = [32, 64, 128];
+        const pModulus = 65536; // 2^16
+
+        function calculateSizes() {
+            const dIndex = parseInt(document.getElementById("d-slider").value);
+            const entryIndex = parseInt(document.getElementById("entry-slider").value);
+            const gadgetLen = parseInt(document.getElementById("gadget-slider").value);
+
+            const d = dValues[dIndex];
+            const entrySize = entryValues[entryIndex];
+
+            // Update displays
+            document.getElementById("d-value").textContent = d;
+            document.getElementById("entry-value").textContent = `${entrySize} bytes`;
+            document.getElementById("gadget-value").textContent = gadgetLen;
+
+            // Query size (seeded): 2l * d * 8 (b-polys) + 2l * 32 (seeds) + metadata
+            // Formula from code: each RGSW row is SeededRlweCiphertext with 32-byte seed + b polynomial
+            const queryBPolys = 2 * gadgetLen * d * 8; // b polynomials
+            const querySeeds = 2 * gadgetLen * 32;     // seeds (32 bytes each)
+            const querySize = (queryBPolys + querySeeds) / 1024; // KB
+
+            // Response size: num_columns * 2 * d * 8
+            // Formula from code: num_columns = (entry_size * 8 + 15) / 16 (integer division)
+            // This is ceil(entry_bits / 16) where 16 = log2(p)
+            const numColumns = Math.floor((entrySize * 8 + 15) / 16);
+            const responseSize = (numColumns * 2 * d * 8) / 1024; // KB
+
+            const totalSize = querySize + responseSize;
+
+            // Update display with formulas
+            document.getElementById("calc-query").textContent = `${querySize.toFixed(0)} KB`;
+            document.getElementById("calc-response").textContent = `${responseSize.toFixed(0)} KB`;
+            document.getElementById("calc-total").textContent = `${totalSize.toFixed(0)} KB`;
+            
+            // Update formula details
+            document.getElementById("query-formula").textContent = 
+                `2l*d*8 + 2l*32 = 2*${gadgetLen}*${d}*8 + ${2*gadgetLen*32} = ${queryBPolys + querySeeds} bytes`;
+            document.getElementById("response-formula").textContent = 
+                `${numColumns} cols * 2 * ${d} * 8 = ${numColumns * 2 * d * 8} bytes`;
+        }
+
+        document.getElementById("d-slider").addEventListener("input", calculateSizes);
+        document.getElementById("entry-slider").addEventListener("input", calculateSizes);
+        document.getElementById("gadget-slider").addEventListener("input", calculateSizes);
+
+        calculateSizes();
+
+        // ============================================================
+        // Crypto Tooltip Functions
+        // ============================================================
+        const cryptoTooltipEl = document.getElementById("crypto-tooltip");
+        
+        const cryptoTooltipData = {
+            "external_product": {
+                title: "External Product (⊡)",
+                desc: "Homomorphic multiplication between RLWE and RGSW ciphertexts. Computes RLWE(m₁ · m₂) from RLWE(m₁) and RGSW(m₂) without decrypting.",
+                detail: "Uses gadget decomposition to keep noise growth small."
+            },
+            "rlwe": {
+                title: "RLWE(h_i) — Database Polynomial",
+                desc: "Ring-LWE encryption of polynomial h_i(X). The polynomial stores database values as coefficients: h_i(X) = y₀ + y₁X + y₂X² + ...",
+                detail: "Ciphertext: (a, b) where b = -a·s + e + Δ·m"
+            },
+            "rgsw": {
+                title: "RGSW(X^{-k}) — Query Selector",
+                desc: "Ring-GSW encryption of the inverse monomial X^{-k}. This is the 'selector' that rotates coefficient k to position 0 when multiplied.",
+                detail: "Structure: 2ℓ RLWE rows encoding m·[1, z, z², ...]"
+            },
+            "result": {
+                title: "Why This Works",
+                desc: "h_i(X) · X^{-k} rotates all coefficients. The value at position k moves to position 0, which can then be extracted.",
+                detail: "In R_q = Z[X]/(X^d+1): X^d = -1, so X^{-k} = -X^{d-k}"
+            }
+        };
+
+        function showCryptoTooltip(event, key) {
+            const data = cryptoTooltipData[key];
+            if (!data) return;
+            
+            cryptoTooltipEl.querySelector(".ct-title").textContent = data.title;
+            cryptoTooltipEl.querySelector(".ct-desc").textContent = data.desc;
+            cryptoTooltipEl.querySelector(".ct-detail").textContent = data.detail;
+            cryptoTooltipEl.classList.add("visible");
+            moveCryptoTooltip(event);
+        }
+
+        function moveCryptoTooltip(event) {
+            const x = event.clientX + 15;
+            const y = event.clientY - 10;
+            cryptoTooltipEl.style.left = x + "px";
+            cryptoTooltipEl.style.top = y + "px";
+        }
+
+        function hideCryptoTooltip() {
+            cryptoTooltipEl.classList.remove("visible");
+        }
+
+        // ============================================================
+        // Server Processing Visualization (Expanded)
+        // ============================================================
+        const RING_DIM = 2048;
+        const NUM_COLUMNS = 16; // for 32-byte entries
+        let currentTargetShard = 0;
+
+        // Step 1: Shard Selection
+        function drawShardSelection(numEntries) {
+            const svg = d3.select("#shard-svg");
+            svg.selectAll("*").remove();
+
+            const numShards = Math.ceil(numEntries / RING_DIM);
+            currentTargetShard = Math.floor(Math.random() * numShards);
+
+            const width = 900;
+            const height = 180;
+
+            // Title
+            svg.append("text")
+                .attr("x", 20)
+                .attr("y", 25)
+                .attr("fill", "#8b949e")
+                .attr("font-size", "12px")
+                .text(`Total: ${numShards.toLocaleString()} shards | Query contains shard_id: ${currentTargetShard}`);
+
+            // Shard grid
+            const gridY = 45;
+            const gridHeight = 80;
+            const maxVisible = Math.min(20, numShards);
+            const startShard = Math.max(0, Math.min(currentTargetShard - Math.floor(maxVisible / 2), numShards - maxVisible));
+            const endShard = Math.min(numShards, startShard + maxVisible);
+            const visibleCount = endShard - startShard;
+            const shardWidth = Math.min(38, (width - 100) / visibleCount);
+            const shardGap = 3;
+            const gridStartX = (width - visibleCount * (shardWidth + shardGap)) / 2;
+
+            const g = svg.append("g").attr("transform", `translate(${gridStartX}, ${gridY})`);
+
+            // Ellipsis
+            if (startShard > 0) {
+                g.append("text").attr("x", -20).attr("y", gridHeight / 2 + 4)
+                    .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "14px").text("...");
+            }
+            if (endShard < numShards) {
+                g.append("text").attr("x", visibleCount * (shardWidth + shardGap) + 15).attr("y", gridHeight / 2 + 4)
+                    .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "14px").text("...");
+            }
+
+            // Draw shards
+            for (let i = 0; i < visibleCount; i++) {
+                const shardId = startShard + i;
+                const isTarget = shardId === currentTargetShard;
+                const x = i * (shardWidth + shardGap);
+
+                g.append("rect")
+                    .attr("x", x).attr("y", 0)
+                    .attr("width", shardWidth).attr("height", gridHeight)
+                    .attr("rx", 3)
+                    .attr("fill", isTarget ? "#58a6ff" : "#21262d")
+                    .attr("stroke", isTarget ? "#58a6ff" : "#30363d")
+                    .attr("stroke-width", isTarget ? 2 : 1)
+                    .attr("opacity", isTarget ? 1 : 0.5);
+
+                if (shardWidth >= 22) {
+                    g.append("text")
+                        .attr("x", x + shardWidth / 2).attr("y", gridHeight / 2 + 4)
+                        .attr("text-anchor", "middle")
+                        .attr("fill", isTarget ? "#fff" : "#6e7681")
+                        .attr("font-size", "9px")
+                        .text(shardId);
+                }
+            }
+
+            // Info text
+            svg.append("text")
+                .attr("x", width / 2).attr("y", gridY + gridHeight + 25)
+                .attr("text-anchor", "middle").attr("fill", "#58a6ff").attr("font-size", "11px")
+                .text(`Selected shard #${currentTargetShard} contains ${RING_DIM} entries encoded as ${NUM_COLUMNS} polynomials`);
+        }
+
+        // Step 2: Processing Pipeline
+        function drawPipeline() {
+            const svg = d3.select("#pipeline-svg");
+            svg.selectAll("*").remove();
+
+            const width = 900;
+            const height = 280;
+
+            // Input section
+            const inputX = 60;
+            const inputY = 30;
+
+            // Query box with tooltip
+            const queryGroup = svg.append("g")
+                .style("cursor", "pointer")
+                .on("mouseenter", function(event) {
+                    showCryptoTooltip(event, "rgsw");
+                    d3.select(this).select("rect").attr("stroke-width", 2);
+                })
+                .on("mousemove", moveCryptoTooltip)
+                .on("mouseleave", function() {
+                    hideCryptoTooltip();
+                    d3.select(this).select("rect").attr("stroke-width", 1);
+                });
+
+            queryGroup.append("rect")
+                .attr("x", inputX).attr("y", inputY)
+                .attr("width", 120).attr("height", 60)
+                .attr("rx", 4)
+                .attr("fill", "#58a6ff").attr("opacity", 0.2)
+                .attr("stroke", "#58a6ff");
+            queryGroup.append("text")
+                .attr("x", inputX + 60).attr("y", inputY + 25)
+                .attr("text-anchor", "middle").attr("fill", "#58a6ff").attr("font-size", "11px").attr("font-weight", "bold")
+                .text("Query");
+            queryGroup.append("text")
+                .attr("x", inputX + 60).attr("y", inputY + 42)
+                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "9px")
+                .text("RGSW(X^{-k})");
+
+            // Shard polynomials
+            const polyStartX = 220;
+            const polyY = 20;
+            const polyWidth = 50;
+            const polyHeight = 35;
+            const polyGap = 8;
+
+            svg.append("text")
+                .attr("x", polyStartX).attr("y", polyY)
+                .attr("fill", "#8b949e").attr("font-size", "10px")
+                .text("Shard polynomials (16 columns):");
+
+            for (let i = 0; i < 8; i++) {
+                const x = polyStartX + i * (polyWidth + polyGap);
+                
+                const polyGroup = svg.append("g")
+                    .style("cursor", "pointer")
+                    .on("mouseenter", function(event) {
+                        showCryptoTooltip(event, "rlwe");
+                        d3.select(this).select("rect").attr("stroke-width", 2);
+                    })
+                    .on("mousemove", moveCryptoTooltip)
+                    .on("mouseleave", function() {
+                        hideCryptoTooltip();
+                        d3.select(this).select("rect").attr("stroke-width", 1);
+                    });
+
+                polyGroup.append("rect")
+                    .attr("class", "poly-box")
+                    .attr("data-col", i)
+                    .attr("x", x).attr("y", polyY + 10)
+                    .attr("width", polyWidth).attr("height", polyHeight)
+                    .attr("rx", 3)
+                    .attr("fill", "#21262d").attr("stroke", "#3fb950");
+                polyGroup.append("text")
+                    .attr("x", x + polyWidth / 2).attr("y", polyY + 32)
+                    .attr("text-anchor", "middle").attr("fill", "#3fb950").attr("font-size", "9px")
+                    .text(`h_${i}(X)`);
+            }
+
+            // Ellipsis for remaining
+            svg.append("text")
+                .attr("x", polyStartX + 8 * (polyWidth + polyGap) + 10).attr("y", polyY + 32)
+                .attr("fill", "#8b949e").attr("font-size", "12px")
+                .text("... +8 more");
+
+            // External product operations (parallel)
+            const opY = 110;
+            const opWidth = 140;
+            const opHeight = 50;
+
+            svg.append("text")
+                .attr("x", 20).attr("y", opY + 10)
+                .attr("fill", "#d29922").attr("font-size", "11px").attr("font-weight", "bold")
+                .text("Parallel:");
+
+            for (let i = 0; i < 4; i++) {
+                const x = 100 + i * (opWidth + 30);
+                
+                const opGroup = svg.append("g")
+                    .attr("class", "op-group")
+                    .style("cursor", "pointer")
+                    .on("mouseenter", function(event) {
+                        showCryptoTooltip(event, "external_product");
+                        d3.select(this).select("rect").attr("stroke-width", 2);
+                    })
+                    .on("mousemove", function(event) {
+                        moveCryptoTooltip(event);
+                    })
+                    .on("mouseleave", function() {
+                        hideCryptoTooltip();
+                        d3.select(this).select("rect").attr("stroke-width", 1);
+                    });
+
+                opGroup.append("rect")
+                    .attr("class", "op-box")
+                    .attr("data-op", i)
+                    .attr("x", x).attr("y", opY)
+                    .attr("width", opWidth).attr("height", opHeight)
+                    .attr("rx", 4)
+                    .attr("fill", "#21262d").attr("stroke", "#d29922");
+
+                opGroup.append("text")
+                    .attr("x", x + opWidth / 2).attr("y", opY + 20)
+                    .attr("text-anchor", "middle").attr("fill", "#d29922").attr("font-size", "10px").attr("font-weight", "bold")
+                    .text("external_product");
+
+                opGroup.append("text")
+                    .attr("x", x + opWidth / 2).attr("y", opY + 36)
+                    .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "9px")
+                    .attr("font-family", "monospace")
+                    .text(`RLWE(h_${i}) ⊡ RGSW`);
+            }
+
+            svg.append("text")
+                .attr("x", 100 + 4 * (opWidth + 30) + 20).attr("y", opY + 30)
+                .attr("fill", "#8b949e").attr("font-size", "12px")
+                .text("... x16");
+
+            // Output ciphertexts
+            const outY = 190;
+            const outWidth = 45;
+            const outHeight = 30;
+
+            svg.append("text")
+                .attr("x", 20).attr("y", outY + 10)
+                .attr("fill", "#a371f7").attr("font-size", "11px").attr("font-weight", "bold")
+                .text("Output:");
+
+            for (let i = 0; i < 10; i++) {
+                const x = 100 + i * (outWidth + 8);
+                svg.append("rect")
+                    .attr("class", "out-box")
+                    .attr("data-out", i)
+                    .attr("x", x).attr("y", outY)
+                    .attr("width", outWidth).attr("height", outHeight)
+                    .attr("rx", 3)
+                    .attr("fill", "#21262d").attr("stroke", "#a371f7");
+
+                svg.append("text")
+                    .attr("x", x + outWidth / 2).attr("y", outY + 19)
+                    .attr("text-anchor", "middle").attr("fill", "#a371f7").attr("font-size", "8px")
+                    .text(`ct_${i}`);
+            }
+
+            svg.append("text")
+                .attr("x", 100 + 10 * (outWidth + 8) + 15).attr("y", outY + 19)
+                .attr("fill", "#8b949e").attr("font-size", "11px")
+                .text("... +6");
+
+            // Formula
+            svg.append("text")
+                .attr("x", width / 2).attr("y", outY + 55)
+                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "10px")
+                .attr("font-family", "monospace")
+                .text("Each ct_i = RLWE(h_i(X) · X^{-k}) where coefficient 0 contains y_k's column i");
+
+            // Timing info - aligned with external product row
+            svg.append("rect")
+                .attr("x", width - 150).attr("y", opY)
+                .attr("width", 140).attr("height", opHeight)
+                .attr("rx", 4)
+                .attr("fill", "#21262d").attr("stroke", "#30363d");
+            svg.append("text")
+                .attr("x", width - 80).attr("y", opY + 18)
+                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "9px")
+                .text("Processing time:");
+            svg.append("text")
+                .attr("x", width - 80).attr("y", opY + 36)
+                .attr("text-anchor", "middle").attr("fill", "#3fb950").attr("font-size", "14px").attr("font-weight", "bold")
+                .text("~3 ms");
+        }
+
+        // Step 3: Output Assembly
+        function drawOutput() {
+            const svg = d3.select("#output-svg");
+            svg.selectAll("*").remove();
+
+            const width = 900;
+            const height = 150;
+
+            // Response structure
+            const respX = 50;
+            const respY = 20;
+
+            svg.append("text")
+                .attr("x", respX).attr("y", respY)
+                .attr("fill", "#8b949e").attr("font-size", "11px")
+                .text("ServerResponse struct:");
+
+            // Main box
+            svg.append("rect")
+                .attr("x", respX).attr("y", respY + 10)
+                .attr("width", 350).attr("height", 100)
+                .attr("rx", 4)
+                .attr("fill", "#21262d").attr("stroke", "#a371f7");
+
+            // Fields
+            svg.append("text")
+                .attr("x", respX + 15).attr("y", respY + 35)
+                .attr("fill", "#a371f7").attr("font-size", "10px").attr("font-family", "monospace")
+                .text("ciphertext: RlweCiphertext");
+            svg.append("text")
+                .attr("x", respX + 200).attr("y", respY + 35)
+                .attr("fill", "#6e7681").attr("font-size", "9px")
+                .text("// combined");
+
+            svg.append("text")
+                .attr("x", respX + 15).attr("y", respY + 55)
+                .attr("fill", "#a371f7").attr("font-size", "10px").attr("font-family", "monospace")
+                .text("column_ciphertexts: Vec<Rlwe>");
+            svg.append("text")
+                .attr("x", respX + 230).attr("y", respY + 55)
+                .attr("fill", "#6e7681").attr("font-size", "9px")
+                .text("// 16 cts");
+
+            // Size breakdown
+            svg.append("text")
+                .attr("x", respX + 15).attr("y", respY + 85)
+                .attr("fill", "#8b949e").attr("font-size", "9px")
+                .text("Size: 16 * 2 * 2048 * 8 = ");
+            svg.append("text")
+                .attr("x", respX + 170).attr("y", respY + 85)
+                .attr("fill", "#3fb950").attr("font-size", "11px").attr("font-weight", "bold")
+                .text("512 KB (binary)");
+
+            // Arrow to network
+            svg.append("path")
+                .attr("d", "M 410 70 L 480 70")
+                .attr("stroke", "#3fb950").attr("stroke-width", 2)
+                .attr("marker-end", "url(#arrow-green)");
+
+            // Arrowhead
+            svg.append("defs").append("marker")
+                .attr("id", "arrow-green")
+                .attr("markerWidth", 10).attr("markerHeight", 7)
+                .attr("refX", 9).attr("refY", 3.5)
+                .attr("orient", "auto")
+                .append("polygon")
+                .attr("points", "0 0, 10 3.5, 0 7")
+                .attr("fill", "#3fb950");
+
+            // Network box
+            svg.append("rect")
+                .attr("x", 490).attr("y", respY + 30)
+                .attr("width", 120).attr("height", 80)
+                .attr("rx", 4)
+                .attr("fill", "#3fb950").attr("opacity", 0.15)
+                .attr("stroke", "#3fb950");
+            svg.append("text")
+                .attr("x", 550).attr("y", respY + 60)
+                .attr("text-anchor", "middle").attr("fill", "#3fb950").attr("font-size", "11px").attr("font-weight", "bold")
+                .text("Send to Client");
+            svg.append("text")
+                .attr("x", 550).attr("y", respY + 80)
+                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "9px")
+                .text("bincode/JSON");
+
+            // Key insight
+            svg.append("rect")
+                .attr("x", 640).attr("y", respY + 10)
+                .attr("width", 240).attr("height", 100)
+                .attr("rx", 4)
+                .attr("fill", "#21262d")
+                .attr("stroke", "#d29922");
+            svg.append("text")
+                .attr("x", 650).attr("y", respY + 32)
+                .attr("fill", "#d29922").attr("font-size", "10px").attr("font-weight", "bold")
+                .text("Privacy Guarantee:");
+            svg.append("text")
+                .attr("x", 650).attr("y", respY + 50)
+                .attr("fill", "#e6edf3").attr("font-size", "9px")
+                .text("Response size is ALWAYS 512 KB");
+            svg.append("text")
+                .attr("x", 650).attr("y", respY + 66)
+                .attr("fill", "#e6edf3").attr("font-size", "9px")
+                .text("regardless of which entry or");
+            svg.append("text")
+                .attr("x", 650).attr("y", respY + 82)
+                .attr("fill", "#e6edf3").attr("font-size", "9px")
+                .text("database size was queried.");
+            svg.append("text")
+                .attr("x", 650).attr("y", respY + 98)
+                .attr("fill", "#6e7681").attr("font-size", "8px")
+                .text("(prevents traffic analysis)");
+        }
+
+        // Animation
+        let pipelineAnimating = false;
+        function animatePipeline() {
+            if (pipelineAnimating) return;
+            pipelineAnimating = true;
+
+            const svg = d3.select("#pipeline-svg");
+
+            // Reset colors
+            svg.selectAll(".poly-box").attr("fill", "#21262d");
+            svg.selectAll(".op-box").attr("fill", "#21262d");
+            svg.selectAll(".out-box").attr("fill", "#21262d");
+
+            // Animate polys
+            svg.selectAll(".poly-box").each(function(d, i) {
+                d3.select(this)
+                    .transition().delay(i * 80).duration(200)
+                    .attr("fill", "#3fb950").attr("opacity", 0.5)
+                    .transition().duration(200)
+                    .attr("fill", "#21262d").attr("opacity", 1);
+            });
+
+            // Animate ops
+            setTimeout(() => {
+                svg.selectAll(".op-box").each(function(d, i) {
+                    d3.select(this)
+                        .transition().delay(i * 100).duration(300)
+                        .attr("fill", "#d29922").attr("opacity", 0.4)
+                        .transition().duration(300)
+                        .attr("fill", "#21262d").attr("opacity", 1);
+                });
+            }, 700);
+
+            // Animate outputs
+            setTimeout(() => {
+                svg.selectAll(".out-box").each(function(d, i) {
+                    d3.select(this)
+                        .transition().delay(i * 60).duration(200)
+                        .attr("fill", "#a371f7").attr("opacity", 0.5)
+                        .transition().duration(200)
+                        .attr("fill", "#21262d").attr("opacity", 1);
+                });
+            }, 1400);
+
+            setTimeout(() => { pipelineAnimating = false; }, 2500);
+        }
+
+        // Initial draw
+        drawShardSelection(1048576);
+        drawPipeline();
+        drawOutput();
+
+        // Event listeners
+        document.getElementById("db-size-select").addEventListener("change", function() {
+            drawShardSelection(parseInt(this.value));
+        });
+
+        document.getElementById("animate-pipeline-btn").addEventListener("click", animatePipeline);
+
+        // ============================================================
+        // A.1 Lattice Basics Visualization
+        // ============================================================
+        let useGoodBasis = true;
+        let showSVP = false;
+
+        function drawLattice() {
+            const svg = d3.select("#lattice-svg");
+            svg.selectAll("*").remove();
+
+            const width = 900;
+            const height = 350;
+            const centerX = 300;
+            const centerY = 175;
+            const scale = 25;
+
+            // Good basis (nearly orthogonal)
+            const goodB1 = [3, 0.5];
+            const goodB2 = [0.5, 3];
+
+            // Bad basis (skewed, but spans same lattice)
+            const badB1 = [3, 0.5];
+            const badB2 = [3.5, 3.5];
+
+            const b1 = useGoodBasis ? goodB1 : badB1;
+            const b2 = useGoodBasis ? goodB2 : badB2;
+
+            // Draw grid lines (faint)
+            svg.append("line")
+                .attr("x1", 0).attr("y1", centerY)
+                .attr("x2", width).attr("y2", centerY)
+                .attr("stroke", "#30363d").attr("stroke-width", 1);
+            svg.append("line")
+                .attr("x1", centerX).attr("y1", 0)
+                .attr("x2", centerX).attr("y2", height)
+                .attr("stroke", "#30363d").attr("stroke-width", 1);
+
+            // Draw lattice points
+            const range = 6;
+            const points = [];
+            for (let i = -range; i <= range; i++) {
+                for (let j = -range; j <= range; j++) {
+                    const x = centerX + (i * goodB1[0] + j * goodB2[0]) * scale;
+                    const y = centerY - (i * goodB1[1] + j * goodB2[1]) * scale;
+                    if (x > 20 && x < 580 && y > 20 && y < height - 20) {
+                        points.push({ x, y, i, j });
+                    }
+                }
+            }
+
+            // Find shortest non-zero vector
+            let shortest = null;
+            let shortestLen = Infinity;
+            points.forEach(p => {
+                if (p.i === 0 && p.j === 0) return;
+                const len = Math.sqrt(Math.pow(p.x - centerX, 2) + Math.pow(p.y - centerY, 2));
+                if (len < shortestLen) {
+                    shortestLen = len;
+                    shortest = p;
+                }
+            });
+
+            // Draw points
+            points.forEach(p => {
+                const isOrigin = p.i === 0 && p.j === 0;
+                const isShortest = showSVP && shortest && p.i === shortest.i && p.j === shortest.j;
+                
+                svg.append("circle")
+                    .attr("cx", p.x).attr("cy", p.y)
+                    .attr("r", isOrigin ? 6 : (isShortest ? 8 : 4))
+                    .attr("fill", isOrigin ? "#d29922" : (isShortest ? "#3fb950" : "#58a6ff"))
+                    .attr("opacity", isShortest ? 1 : 0.7);
+            });
+
+            // Draw basis vectors
+            const arrowDef = svg.append("defs");
+            arrowDef.append("marker")
+                .attr("id", "arrow-b1").attr("markerWidth", 10).attr("markerHeight", 7)
+                .attr("refX", 9).attr("refY", 3.5).attr("orient", "auto")
+                .append("polygon").attr("points", "0 0, 10 3.5, 0 7").attr("fill", "#ff6b6b");
+            arrowDef.append("marker")
+                .attr("id", "arrow-b2").attr("markerWidth", 10).attr("markerHeight", 7)
+                .attr("refX", 9).attr("refY", 3.5).attr("orient", "auto")
+                .append("polygon").attr("points", "0 0, 10 3.5, 0 7").attr("fill", "#ffd93d");
+
+            // b1 vector
+            svg.append("line")
+                .attr("x1", centerX).attr("y1", centerY)
+                .attr("x2", centerX + b1[0] * scale).attr("y2", centerY - b1[1] * scale)
+                .attr("stroke", "#ff6b6b").attr("stroke-width", 3)
+                .attr("marker-end", "url(#arrow-b1)");
+            svg.append("text")
+                .attr("x", centerX + b1[0] * scale + 10).attr("y", centerY - b1[1] * scale)
+                .attr("fill", "#ff6b6b").attr("font-size", "12px").attr("font-weight", "bold")
+                .text("b₁");
+
+            // b2 vector
+            svg.append("line")
+                .attr("x1", centerX).attr("y1", centerY)
+                .attr("x2", centerX + b2[0] * scale).attr("y2", centerY - b2[1] * scale)
+                .attr("stroke", "#ffd93d").attr("stroke-width", 3)
+                .attr("marker-end", "url(#arrow-b2)");
+            svg.append("text")
+                .attr("x", centerX + b2[0] * scale + 10).attr("y", centerY - b2[1] * scale)
+                .attr("fill", "#ffd93d").attr("font-size", "12px").attr("font-weight", "bold")
+                .text("b₂");
+
+            // SVP highlight
+            if (showSVP && shortest) {
+                svg.append("line")
+                    .attr("x1", centerX).attr("y1", centerY)
+                    .attr("x2", shortest.x).attr("y2", shortest.y)
+                    .attr("stroke", "#3fb950").attr("stroke-width", 2)
+                    .attr("stroke-dasharray", "5,3");
+            }
+
+            // Explanation panel
+            const infoX = 620;
+            svg.append("rect")
+                .attr("x", infoX).attr("y", 20)
+                .attr("width", 260).attr("height", 310)
+                .attr("rx", 6).attr("fill", "#21262d").attr("stroke", "#30363d");
+
+            svg.append("text").attr("x", infoX + 15).attr("y", 45)
+                .attr("fill", useGoodBasis ? "#3fb950" : "#ff6b6b").attr("font-size", "13px").attr("font-weight", "bold")
+                .text(useGoodBasis ? "Good Basis (Short Vectors)" : "Bad Basis (Long Vectors)");
+
+            const explanations = useGoodBasis ? [
+                "Basis vectors are nearly orthogonal",
+                "Easy to find short combinations",
+                "Attacker could solve SVP easily",
+                "",
+                "This is what we DON'T want to reveal!"
+            ] : [
+                "Basis vectors are skewed/long",
+                "Hard to see short combinations",
+                "SVP is computationally hard",
+                "",
+                "This is what the attacker sees."
+            ];
+
+            explanations.forEach((line, i) => {
+                svg.append("text").attr("x", infoX + 15).attr("y", 70 + i * 18)
+                    .attr("fill", line ? "#8b949e" : "transparent").attr("font-size", "11px")
+                    .text(line);
+            });
+
+            // SVP explanation
+            svg.append("text").attr("x", infoX + 15).attr("y", 180)
+                .attr("fill", "#3fb950").attr("font-size", "12px").attr("font-weight", "bold")
+                .text("Shortest Vector Problem (SVP):");
+
+            const svpLines = [
+                "Given a lattice basis, find the",
+                "shortest non-zero lattice vector.",
+                "",
+                "Believed to be hard for quantum",
+                "computers (post-quantum secure)."
+            ];
+            svpLines.forEach((line, i) => {
+                svg.append("text").attr("x", infoX + 15).attr("y", 200 + i * 16)
+                    .attr("fill", "#8b949e").attr("font-size", "10px")
+                    .text(line);
+            });
+
+            // Legend
+            svg.append("circle").attr("cx", infoX + 25).attr("cy", 290).attr("r", 5).attr("fill", "#d29922");
+            svg.append("text").attr("x", infoX + 40).attr("y", 294).attr("fill", "#8b949e").attr("font-size", "10px").text("Origin");
+            
+            svg.append("circle").attr("cx", infoX + 120).attr("cy", 290).attr("r", 5).attr("fill", "#58a6ff");
+            svg.append("text").attr("x", infoX + 135).attr("y", 294).attr("fill", "#8b949e").attr("font-size", "10px").text("Lattice points");
+
+            if (showSVP) {
+                svg.append("circle").attr("cx", infoX + 25).attr("cy", 310).attr("r", 6).attr("fill", "#3fb950");
+                svg.append("text").attr("x", infoX + 40).attr("y", 314).attr("fill", "#8b949e").attr("font-size", "10px").text("Shortest vector");
+            }
+        }
+
+        drawLattice();
+
+        document.getElementById("toggle-basis-btn").addEventListener("click", () => {
+            useGoodBasis = !useGoodBasis;
+            drawLattice();
+        });
+
+        document.getElementById("show-svp-btn").addEventListener("click", () => {
+            showSVP = !showSVP;
+            drawLattice();
+        });
+
+        // ============================================================
+        // A.2 RLWE Error Distribution
+        // ============================================================
+        let currentSigma = 3.2;
+        let errorSamples = [];
+
+        function sampleGaussian(sigma) {
+            // Box-Muller transform
+            const u1 = Math.random();
+            const u2 = Math.random();
+            return sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        }
+
+        function generateErrorSamples(sigma, count = 100) {
+            return Array.from({ length: count }, () => Math.round(sampleGaussian(sigma)));
+        }
+
+        function drawErrorDistribution() {
+            const svg = d3.select("#error-svg");
+            svg.selectAll("*").remove();
+
+            const width = 900;
+            const height = 280;
+            const margin = { top: 40, right: 40, bottom: 50, left: 60 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+
+            const g = svg.append("g").attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            // Generate samples if needed
+            if (errorSamples.length === 0) {
+                errorSamples = generateErrorSamples(currentSigma, 200);
+            }
+
+            // Histogram bins
+            const bins = {};
+            const range = Math.ceil(currentSigma * 4);
+            for (let i = -range; i <= range; i++) bins[i] = 0;
+            errorSamples.forEach(s => {
+                const clamped = Math.max(-range, Math.min(range, s));
+                bins[clamped] = (bins[clamped] || 0) + 1;
+            });
+
+            const binData = Object.entries(bins).map(([k, v]) => ({ x: parseInt(k), count: v }));
+            const maxCount = Math.max(...binData.map(d => d.count));
+
+            // Scales
+            const xScale = d3.scaleLinear().domain([-range, range]).range([0, chartWidth]);
+            const yScale = d3.scaleLinear().domain([0, maxCount * 1.1]).range([chartHeight, 0]);
+
+            // Draw Gaussian curve
+            const gaussPoints = [];
+            for (let x = -range; x <= range; x += 0.1) {
+                const y = (1 / (currentSigma * Math.sqrt(2 * Math.PI))) * 
+                          Math.exp(-0.5 * Math.pow(x / currentSigma, 2));
+                gaussPoints.push({ x, y: y * errorSamples.length * 0.8 });
+            }
+
+            const line = d3.line()
+                .x(d => xScale(d.x))
+                .y(d => yScale(d.y))
+                .curve(d3.curveBasis);
+
+            g.append("path")
+                .datum(gaussPoints)
+                .attr("d", line)
+                .attr("fill", "none")
+                .attr("stroke", "#3fb950")
+                .attr("stroke-width", 2)
+                .attr("opacity", 0.8);
+
+            // Draw histogram bars
+            const barWidth = chartWidth / (2 * range + 1) * 0.8;
+            g.selectAll(".bar")
+                .data(binData)
+                .join("rect")
+                .attr("class", "bar")
+                .attr("x", d => xScale(d.x) - barWidth / 2)
+                .attr("y", d => yScale(d.count))
+                .attr("width", barWidth)
+                .attr("height", d => chartHeight - yScale(d.count))
+                .attr("fill", "#58a6ff")
+                .attr("opacity", 0.7)
+                .attr("rx", 2);
+
+            // Axes
+            g.append("g")
+                .attr("transform", `translate(0, ${chartHeight})`)
+                .call(d3.axisBottom(xScale).ticks(range * 2))
+                .selectAll("text").attr("fill", "#8b949e");
+            g.selectAll(".domain, .tick line").attr("stroke", "#30363d");
+
+            g.append("g")
+                .call(d3.axisLeft(yScale).ticks(5))
+                .selectAll("text").attr("fill", "#8b949e");
+
+            // Labels
+            svg.append("text")
+                .attr("x", margin.left + chartWidth / 2).attr("y", height - 10)
+                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "11px")
+                .text("Error value (discrete Gaussian)");
+
+            svg.append("text")
+                .attr("x", 15).attr("y", margin.top + chartHeight / 2)
+                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "11px")
+                .attr("transform", `rotate(-90, 15, ${margin.top + chartHeight / 2})`)
+                .text("Count");
+
+            // Title
+            svg.append("text")
+                .attr("x", margin.left).attr("y", 25)
+                .attr("fill", "#3fb950").attr("font-size", "12px").attr("font-weight", "bold")
+                .text(`Discrete Gaussian Distribution (σ = ${currentSigma})`);
+
+            // Explanation - positioned with gap from chart area
+            const infoX = 720;
+            svg.append("rect")
+                .attr("x", infoX).attr("y", 45)
+                .attr("width", 170).attr("height", 125)
+                .attr("rx", 4).attr("fill", "#21262d").attr("stroke", "#30363d");
+
+            const infoLines = [
+                "RLWE adds small errors:",
+                "b = a·s + e + Δ·m",
+                "",
+                "Small σ → less noise → easier",
+                "Large σ → more noise → secure",
+                "",
+                `σ = ${currentSigma} provides`,
+                "128-bit security"
+            ];
+            infoLines.forEach((line, i) => {
+                svg.append("text")
+                    .attr("x", infoX + 10).attr("y", 58 + i * 14)
+                    .attr("fill", i === 0 ? "#3fb950" : "#8b949e")
+                    .attr("font-size", "10px")
+                    .attr("font-weight", i === 0 ? "bold" : "normal")
+                    .text(line);
+            });
+        }
+
+        drawErrorDistribution();
+
+        document.getElementById("sigma-slider").addEventListener("input", function() {
+            currentSigma = parseFloat(this.value);
+            document.getElementById("sigma-value").textContent = currentSigma;
+            errorSamples = generateErrorSamples(currentSigma, 200);
+            drawErrorDistribution();
+        });
+
+        document.getElementById("sample-error-btn").addEventListener("click", () => {
+            errorSamples = generateErrorSamples(currentSigma, 200);
+            drawErrorDistribution();
+        });
+
+        // ============================================================
+        // A.3 Ring Structure Visualization
+        // ============================================================
+        const RING_SIZE = 8; // Simplified d=8 for visualization
+        let ringCoeffs = [3, 1, 4, 1, 5, 9, 2, 6]; // Initial polynomial
+        let rotationCount = 0;
+
+        function drawRingStructure() {
+            const svg = d3.select("#ring-svg");
+            svg.selectAll("*").remove();
+
+            const width = 900;
+            const height = 320;
+            const centerX = 200;
+            const centerY = 160;
+            const radius = 120;
+
+            // Draw circular arrangement
+            const angleStep = (2 * Math.PI) / RING_SIZE;
+            const coeffPositions = [];
+
+            for (let i = 0; i < RING_SIZE; i++) {
+                const angle = -Math.PI / 2 + i * angleStep;
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                coeffPositions.push({ x, y, angle, index: i });
+            }
+
+            // Draw circle outline
+            svg.append("circle")
+                .attr("cx", centerX).attr("cy", centerY)
+                .attr("r", radius)
+                .attr("fill", "none")
+                .attr("stroke", "#30363d")
+                .attr("stroke-width", 2);
+
+            // Draw coefficient nodes
+            coeffPositions.forEach((pos, i) => {
+                // Node circle
+                svg.append("circle")
+                    .attr("cx", pos.x).attr("cy", pos.y)
+                    .attr("r", 24)
+                    .attr("fill", i === 0 ? "#a371f7" : "#21262d")
+                    .attr("stroke", i === 0 ? "#a371f7" : "#58a6ff")
+                    .attr("stroke-width", 2);
+
+                // Coefficient value
+                svg.append("text")
+                    .attr("x", pos.x).attr("y", pos.y + 5)
+                    .attr("text-anchor", "middle")
+                    .attr("fill", i === 0 ? "#fff" : "#58a6ff")
+                    .attr("font-size", "13px")
+                    .attr("font-weight", "bold")
+                    .text(ringCoeffs[i]);
+            });
+
+            // Index labels (drawn separately, further out)
+            coeffPositions.forEach((pos, i) => {
+                const labelRadius = radius + 40;
+                const labelX = centerX + labelRadius * Math.cos(pos.angle);
+                const labelY = centerY + labelRadius * Math.sin(pos.angle);
+                svg.append("text")
+                    .attr("x", labelX).attr("y", labelY + 4)
+                    .attr("text-anchor", "middle")
+                    .attr("fill", "#6e7681")
+                    .attr("font-size", "10px")
+                    .text(`X^${i}`);
+            });
+
+            // Arrow showing rotation direction (small arc near top-right)
+            svg.append("defs").append("marker")
+                .attr("id", "arrow-rotate")
+                .attr("markerWidth", 8).attr("markerHeight", 6)
+                .attr("refX", 7).attr("refY", 3).attr("orient", "auto")
+                .append("polygon").attr("points", "0 0, 8 3, 0 6").attr("fill", "#d29922");
+
+            // Draw curved arrow between X^0 and X^1 positions (clockwise direction indicator)
+            const arrowArcRadius = radius - 45;
+            svg.append("path")
+                .attr("d", `M ${centerX + 35} ${centerY - 35} A ${arrowArcRadius} ${arrowArcRadius} 0 0 1 ${centerX + 50} ${centerY + 5}`)
+                .attr("fill", "none")
+                .attr("stroke", "#d29922")
+                .attr("stroke-width", 2)
+                .attr("marker-end", "url(#arrow-rotate)");
+
+            svg.append("text")
+                .attr("x", centerX + 60).attr("y", centerY - 20)
+                .attr("fill", "#d29922").attr("font-size", "11px").attr("font-weight", "bold")
+                .text("×X");
+
+            // Polynomial representation
+            const polyX = 450;
+            const polyY = 40;
+
+            svg.append("text")
+                .attr("x", polyX).attr("y", polyY)
+                .attr("fill", "#a371f7").attr("font-size", "13px").attr("font-weight", "bold")
+                .text("Current polynomial:");
+
+            const polyStr = ringCoeffs.map((c, i) => {
+                if (i === 0) return c.toString();
+                return `${c >= 0 ? '+' : ''}${c}X^${i}`;
+            }).join(' ');
+
+            svg.append("text")
+                .attr("x", polyX).attr("y", polyY + 25)
+                .attr("fill", "#e6edf3").attr("font-size", "12px")
+                .attr("font-family", "monospace")
+                .text(`f(X) = ${polyStr.substring(0, 50)}${polyStr.length > 50 ? '...' : ''}`);
+
+            svg.append("text")
+                .attr("x", polyX).attr("y", polyY + 50)
+                .attr("fill", "#8b949e").attr("font-size", "11px")
+                .text(`Rotations applied: ${rotationCount}`);
+
+            // Explanation
+            svg.append("rect")
+                .attr("x", polyX).attr("y", 90)
+                .attr("width", 420).attr("height", 200)
+                .attr("rx", 6).attr("fill", "#21262d").attr("stroke", "#30363d");
+
+            const explainLines = [
+                { text: "Ring: R_q = Z_q[X]/(X^d + 1)", color: "#a371f7", bold: true },
+                { text: "", color: "transparent" },
+                { text: "Key property: X^d = -1", color: "#3fb950", bold: true },
+                { text: "So X^d ≡ -1 (mod X^d + 1)", color: "#8b949e" },
+                { text: "", color: "transparent" },
+                { text: "Multiplying by X:", color: "#d29922", bold: true },
+                { text: "• Shifts all coefficients right by 1", color: "#8b949e" },
+                { text: "• Top coefficient wraps to position 0", color: "#8b949e" },
+                { text: "• Gets negated (because X^d = -1)", color: "#8b949e" },
+                { text: "", color: "transparent" },
+                { text: "This cyclic structure enables efficient PIR!", color: "#58a6ff" }
+            ];
+
+            explainLines.forEach((line, i) => {
+                svg.append("text")
+                    .attr("x", polyX + 15).attr("y", 115 + i * 17)
+                    .attr("fill", line.color)
+                    .attr("font-size", "11px")
+                    .attr("font-weight", line.bold ? "bold" : "normal")
+                    .text(line.text);
+            });
+
+            // Highlight coefficient 0
+            svg.append("text")
+                .attr("x", centerX).attr("y", centerY + radius + 60)
+                .attr("text-anchor", "middle")
+                .attr("fill", "#a371f7").attr("font-size", "11px")
+                .text("Coefficient 0 (extracted after rotation)");
+        }
+
+        function rotateRing() {
+            // Multiply by X: shift right, negate wrap-around
+            const last = ringCoeffs[RING_SIZE - 1];
+            for (let i = RING_SIZE - 1; i > 0; i--) {
+                ringCoeffs[i] = ringCoeffs[i - 1];
+            }
+            ringCoeffs[0] = -last; // X^d = -1
+            rotationCount++;
+            drawRingStructure();
+        }
+
+        function resetRing() {
+            ringCoeffs = [3, 1, 4, 1, 5, 9, 2, 6];
+            rotationCount = 0;
+            drawRingStructure();
+        }
+
+        drawRingStructure();
+
+        document.getElementById("rotate-ring-btn").addEventListener("click", rotateRing);
+        document.getElementById("reset-ring-btn").addEventListener("click", resetRing);
+    </script>
+</body>
+</html>
