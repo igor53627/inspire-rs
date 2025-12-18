@@ -1139,6 +1139,19 @@
                 .attr("fill", COLORS.textSecondary)
                 .attr("font-size", "12px")
                 .text(`Total: ${total.toFixed(0)} KB`);
+            
+            // Inline formula label
+            const formulaText = title.includes("Query") 
+                ? "Formula: 2l × d × 8 bytes"
+                : "Formula: cols × 2 × d × 8 bytes";
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", 42)
+                .attr("text-anchor", "middle")
+                .attr("fill", COLORS.textSecondary)
+                .attr("font-size", "10px")
+                .attr("font-family", "monospace")
+                .text(formulaText);
         }
 
         function updateCharts() {
