@@ -1492,17 +1492,18 @@
 
             // External product operations (parallel)
             const opY = 110;
-            const opWidth = 155;
+            const opWidth = 145;
             const opHeight = 50;
-            const opGap = 20;
+            const opGap = 12;
+            const numVisibleOps = 3;
 
             svg.append("text")
                 .attr("x", 20).attr("y", opY + 10)
                 .attr("fill", COLORS.orange).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("Parallel:");
 
-            for (let i = 0; i < 4; i++) {
-                const x = 100 + i * (opWidth + opGap);
+            for (let i = 0; i < numVisibleOps; i++) {
+                const x = 90 + i * (opWidth + opGap);
                 
                 const opGroup = svg.append("g")
                     .attr("class", "op-group")
@@ -1530,19 +1531,21 @@
                 opGroup.append("text")
                     .attr("x", x + opWidth / 2).attr("y", opY + 20)
                     .attr("text-anchor", "middle").attr("fill", COLORS.orange).attr("font-size", "11px").attr("font-weight", "bold")
-                    .text("ext_product ⊡");
+                    .text("ext_product");
 
                 opGroup.append("text")
                     .attr("x", x + opWidth / 2).attr("y", opY + 36)
                     .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "10px")
                     .attr("font-family", "monospace")
-                    .text(`RLWE(h_${i}) × RGSW`);
+                    .text(`h_${i}(X) ⊡ query`);
             }
 
+            // "... x16" label after the visible boxes
+            const afterOpsX = 90 + numVisibleOps * (opWidth + opGap);
             svg.append("text")
-                .attr("x", 100 + 4 * (opWidth + opGap) + 10).attr("y", opY + 30)
+                .attr("x", afterOpsX + 5).attr("y", opY + 30)
                 .attr("fill", COLORS.textSecondary).attr("font-size", "12px")
-                .text("...x16");
+                .text("...×16");
 
             // Output ciphertexts
             const outY = 190;
