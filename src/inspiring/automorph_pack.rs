@@ -660,7 +660,6 @@ mod tests {
 
         // Generate keys
         let rlwe_sk = RlweSecretKey::generate(&params, &mut sampler);
-        let lwe_sk = LweSecretKey::from_rlwe(&rlwe_sk);
         let automorph_keys = generate_automorph_keys(&rlwe_sk, &params, &mut sampler);
 
         // Create 2 messages

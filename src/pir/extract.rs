@@ -83,7 +83,7 @@ pub fn extract_with_variant(
     match variant {
         InspireVariant::NoPacking => extract(crs, state, response, entry_size),
         InspireVariant::OnePacking => extract_packed(crs, state, response, entry_size),
-        InspireVariant::TwoPacking => extract(crs, state, response, entry_size),
+        InspireVariant::TwoPacking => extract_packed(crs, state, response, entry_size),
     }
 }
 

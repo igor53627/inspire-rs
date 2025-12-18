@@ -137,6 +137,7 @@ fn key_switch_component(
 ///
 /// Returns l polynomials where the i-th polynomial contains the i-th digit
 /// of each coefficient.
+#[allow(dead_code)]
 pub fn gadget_decompose(poly: &Poly, params: &InspireParams) -> Vec<Poly> {
     let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
     rgsw_gadget_decompose(poly, &gadget)

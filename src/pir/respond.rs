@@ -556,7 +556,6 @@ mod tests {
 
         let params = test_params();
         let d = params.ring_dim;
-        let p = params.p;
         let mut sampler = GaussianSampler::new(params.sigma);
 
         // Use 2-byte entries with values < 256/d = 1 per byte
