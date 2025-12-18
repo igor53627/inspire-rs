@@ -53,6 +53,6 @@ mod setup;
 pub use encode_db::{encode_column, encode_database, encode_direct, inverse_monomial};
 pub use extract::extract;
 pub use mmap::{save_shards_binary, load_shard_binary, MmapDatabase};
-pub use query::{query, ClientQuery, ClientState};
+pub use query::{query, query_seeded, query_switched, ClientQuery, ClientState, SeededClientQuery, SwitchedClientQuery};
 pub use respond::{respond, respond_mmap, respond_sequential, ServerResponse};
 pub use setup::{setup, EncodedDatabase, InspireCrs, ServerCrs, ShardData};

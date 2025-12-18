@@ -17,11 +17,12 @@ pub mod ks;
 pub mod inspiring;
 pub mod pir;
 pub mod ethereum_db;
+pub mod modulus_switch;
 
 pub use pir::{
-    setup, query, respond, respond_mmap, extract,
+    setup, query, query_seeded, query_switched, respond, respond_mmap, extract,
     ServerCrs, InspireCrs, EncodedDatabase, ShardData,
-    ClientQuery, ClientState, ServerResponse,
+    ClientQuery, ClientState, SeededClientQuery, SwitchedClientQuery, ServerResponse,
     encode_column, encode_database, encode_direct, inverse_monomial,
     save_shards_binary, load_shard_binary, MmapDatabase,
 };

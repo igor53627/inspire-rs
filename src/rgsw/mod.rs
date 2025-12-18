@@ -30,5 +30,5 @@
 mod types;
 mod external_product;
 
-pub use types::{GadgetVector, RgswCiphertext};
+pub use types::{GadgetVector, RgswCiphertext, SeededRgswCiphertext};
 pub use external_product::{external_product, gadget_decompose, gadget_reconstruct};

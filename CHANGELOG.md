@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Modulus switching module for ciphertext compression
+  - `modulus_switch` module with `SwitchedPoly`, `SwitchedSeededRlweCiphertext`, `SwitchedSeededRgswCiphertext`
+  - `SwitchedClientQuery` type for maximum compression
+  - `query_switched()` function combining seeding + modulus switching
+  - **Note**: With default parameters, modulus switching on RGSW queries exceeds noise budget
+    due to error amplification in external product. Use `query_seeded()` for production.
+- Seed expansion for ~50% query size reduction
+  - `SeededRlweCiphertext`, `SeededRgswCiphertext` types
+  - `SeededClientQuery` for network transmission
+  - `query_seeded()` function for generating compact queries
+  - `Poly::from_seed()` for deterministic polynomial generation
+  - Query size reduced from 192 KB to 98 KB (50% reduction)
+- Benchmark example: `cargo run --example benchmark_seed_expansion`
+- Implementation comparison report: docs/IMPLEMENTATION_COMPARISON.md
+
+### Changed
+
+- Updated COMMUNICATION_COSTS.md to clarify O(d) communication (not O(sqrt(N)))
+- Updated protocol-visualization.html with new query sizes and "Switched + Seeded" format
+- Removed PIR_COMPARISON.md (focus on InsPIRe only)
+
 ## [0.1.0] - 2024-12-08
 
 ### Added

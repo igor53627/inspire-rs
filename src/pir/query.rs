@@ -13,8 +13,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::lwe::LweSecretKey;
 use crate::math::{GaussianSampler, NttContext};
+use crate::modulus_switch::{SwitchedSeededRgswCiphertext, DEFAULT_SWITCHED_Q};
 use crate::params::ShardConfig;
-use crate::rgsw::RgswCiphertext;
+use crate::rgsw::{RgswCiphertext, SeededRgswCiphertext};
 use crate::rlwe::RlweSecretKey;
 
 use super::encode_db::inverse_monomial;
@@ -58,6 +59,66 @@ pub struct ClientQuery {
     pub shard_id: u32,
     /// RGSW ciphertext of evaluation point for polynomial evaluation
     pub rgsw_ciphertext: RgswCiphertext,
+}
+
+/// Seeded client query for network transmission
+///
+/// Uses seed expansion to reduce query size by ~50%.
+/// Server expands seeds before processing.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SeededClientQuery {
+    /// Target shard ID
+    pub shard_id: u32,
+    /// Seeded RGSW ciphertext (stores seeds instead of full `a` polynomials)
+    pub rgsw_ciphertext: SeededRgswCiphertext,
+}
+
+impl SeededClientQuery {
+    /// Expand to full ClientQuery by regenerating `a` polynomials from seeds
+    pub fn expand(&self) -> ClientQuery {
+        ClientQuery {
+            shard_id: self.shard_id,
+            rgsw_ciphertext: self.rgsw_ciphertext.expand(),
+        }
+    }
+}
+
+/// Switched seeded client query for maximum bandwidth efficiency
+///
+/// Combines seed expansion (~50% reduction) with modulus switching (~50% reduction)
+/// for approximately 75% total query size reduction.
+///
+/// For d=2048, ℓ=3:
+/// - Full query: ~196 KB
+/// - Seeded: ~98 KB
+/// - Seeded + Switched: ~50 KB
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SwitchedClientQuery {
+    /// Target shard ID
+    pub shard_id: u32,
+    /// Switched seeded RGSW ciphertext
+    pub rgsw_ciphertext: SwitchedSeededRgswCiphertext,
+}
+
+impl SwitchedClientQuery {
+    /// Expand to full ClientQuery
+    ///
+    /// First expands modulus (q' → q), then expands seeds (seed → polynomial).
+    pub fn expand(&self) -> ClientQuery {
+        let seeded = self.rgsw_ciphertext.expand();
+        ClientQuery {
+            shard_id: self.shard_id,
+            rgsw_ciphertext: seeded.expand(),
+        }
+    }
+    
+    /// Expand to SeededClientQuery (intermediate step)
+    pub fn expand_to_seeded(&self) -> SeededClientQuery {
+        SeededClientQuery {
+            shard_id: self.shard_id,
+            rgsw_ciphertext: self.rgsw_ciphertext.expand(),
+        }
+    }
 }
 
 /// PIR.Query(crs, idx, sk) → (state, query)
@@ -114,6 +175,121 @@ pub fn query(
         rgsw_ciphertext,
     };
 
+    Ok((state, query))
+}
+
+/// PIR.Query with seed expansion for reduced bandwidth
+///
+/// Same as `query()` but returns a SeededClientQuery that's ~50% smaller.
+/// Server must call `expand()` before processing.
+///
+/// # Arguments
+/// * `crs` - Common reference string (public parameters)
+/// * `global_index` - Index of the entry to retrieve
+/// * `shard_config` - Database shard configuration
+/// * `rlwe_sk` - RLWE secret key (kept separate from public CRS)
+/// * `sampler` - Gaussian sampler for encryption
+///
+/// # Returns
+/// * `ClientState` - Client-side state for response extraction
+/// * `SeededClientQuery` - Compact query to send to server
+pub fn query_seeded(
+    crs: &ServerCrs,
+    global_index: u64,
+    shard_config: &ShardConfig,
+    rlwe_sk: &RlweSecretKey,
+    sampler: &mut GaussianSampler,
+) -> Result<(ClientState, SeededClientQuery)> {
+    let d = crs.ring_dim();
+    let q = crs.modulus();
+    let ctx = NttContext::new(d, q);
+
+    let (shard_id, local_index) = shard_config.index_to_shard(global_index);
+
+    let lwe_sk = rlwe_to_lwe_key(rlwe_sk);
+
+    let inv_mono = inverse_monomial(local_index as usize, d, q);
+    let rgsw_ciphertext = SeededRgswCiphertext::encrypt(
+        rlwe_sk,
+        &inv_mono,
+        &crs.rgsw_gadget,
+        sampler,
+        &ctx,
+    );
+
+    let state = ClientState {
+        secret_key: lwe_sk,
+        rlwe_secret_key: rlwe_sk.clone(),
+        index: global_index,
+        shard_id,
+        local_index,
+    };
+
+    let query = SeededClientQuery {
+        shard_id,
+        rgsw_ciphertext,
+    };
+
+    Ok((state, query))
+}
+
+/// PIR.Query with seed expansion AND modulus switching for maximum compression
+///
+/// Combines two compression techniques:
+/// - Seed expansion: stores 32-byte seed instead of full `a` polynomial (~50% reduction)
+/// - Modulus switching: reduces coefficient size from 8 to 4 bytes (~50% reduction)
+///
+/// Total reduction: ~75% compared to full query
+///
+/// # Size Comparison (d=2048, ℓ=3)
+/// - Full query: ~196 KB
+/// - Seeded query: ~98 KB  
+/// - Switched query: ~50 KB
+///
+/// # Warning: Noise Amplification
+///
+/// **This function may produce incorrect results with default parameters.**
+///
+/// Modulus switching on RGSW ciphertexts introduces rounding errors that are
+/// amplified by the external product during server response. With typical
+/// parameters (q ≈ 2^60, q' = 2^30, B = 2^20, ℓ = 3), the amplified error
+/// exceeds the decryption threshold.
+///
+/// **Recommended**: Use `query_seeded()` for reliable operation.
+/// Use this function only with adjusted parameters (smaller gadget base,
+/// higher switched modulus, or both).
+///
+/// # Arguments
+/// * `crs` - Common reference string (public parameters)
+/// * `global_index` - Index of the entry to retrieve
+/// * `shard_config` - Database shard configuration
+/// * `rlwe_sk` - RLWE secret key (kept separate from public CRS)
+/// * `sampler` - Gaussian sampler for encryption
+///
+/// # Returns
+/// * `ClientState` - Client-side state for response extraction
+/// * `SwitchedClientQuery` - Maximum-compression query to send to server
+pub fn query_switched(
+    crs: &ServerCrs,
+    global_index: u64,
+    shard_config: &ShardConfig,
+    rlwe_sk: &RlweSecretKey,
+    sampler: &mut GaussianSampler,
+) -> Result<(ClientState, SwitchedClientQuery)> {
+    // First create the seeded query
+    let (state, seeded_query) = query_seeded(crs, global_index, shard_config, rlwe_sk, sampler)?;
+    
+    // Apply modulus switching for additional compression
+    let switched_rgsw = SwitchedSeededRgswCiphertext::from_seeded(
+        &seeded_query.rgsw_ciphertext,
+        DEFAULT_SWITCHED_Q,
+    );
+    
+    let query = SwitchedClientQuery {
+        shard_id: seeded_query.shard_id,
+        rgsw_ciphertext: switched_rgsw,
+    };
+    
     Ok((state, query))
 }
 
@@ -197,5 +373,47 @@ mod tests {
         assert_eq!(lwe_sk.dim, params.ring_dim);
         assert_eq!(lwe_sk.q, params.q);
         assert_eq!(lwe_sk.coeffs.len(), params.ring_dim);
+    }
+
+    #[test]
+    fn test_query_size_comparison() {
+        use crate::params::InspireParams;
+        
+        // Use production parameters for realistic size comparison
+        let params = InspireParams::secure_128_d2048();
+        let mut sampler = GaussianSampler::new(params.sigma);
+
+        let entry_size = 32;
+        let num_entries = params.ring_dim;
+        let database: Vec<u8> = (0..(num_entries * entry_size))
+            .map(|i| (i % 256) as u8)
+            .collect();
+
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+        let target_index = 42u64;
+        
+        // Generate all three query types
+        let (_, full_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (_, seeded_query) = query_seeded(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (_, switched_query) = query_switched(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        
+        // Serialize and compare sizes
+        let full_size = bincode::serialize(&full_query).unwrap().len();
+        let seeded_size = bincode::serialize(&seeded_query).unwrap().len();
+        let switched_size = bincode::serialize(&switched_query).unwrap().len();
+        
+        println!("\n=== Query Size Comparison (d=2048, l=3) ===");
+        println!("Full query:     {:>8} bytes ({:.1} KB)", full_size, full_size as f64 / 1024.0);
+        println!("Seeded query:   {:>8} bytes ({:.1} KB)", seeded_size, seeded_size as f64 / 1024.0);
+        println!("Switched query: {:>8} bytes ({:.1} KB)", switched_size, switched_size as f64 / 1024.0);
+        println!("\nReductions:");
+        println!("  Seeded vs Full:   {:.1}%", 100.0 * (1.0 - seeded_size as f64 / full_size as f64));
+        println!("  Switched vs Full: {:.1}%", 100.0 * (1.0 - switched_size as f64 / full_size as f64));
+        
+        // Assertions
+        assert!(seeded_size < full_size, "Seeded should be smaller than full");
+        assert!(switched_size < seeded_size, "Switched should be smaller than seeded");
+        assert!(switched_size < full_size / 2, "Switched should be less than half of full");
     }
 }

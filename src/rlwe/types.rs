@@ -53,3 +53,39 @@ impl RlweCiphertext {
         self.a.modulus()
     }
 }
+
+/// Seeded RLWE ciphertext: stores 32-byte seed instead of full `a` polynomial
+///
+/// Reduces ciphertext size by ~50%. Server expands seed to recover `a`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SeededRlweCiphertext {
+    /// 32-byte seed for deterministic generation of `a`
+    pub seed: [u8; 32],
+    /// The `b` polynomial (encrypted value)
+    pub b: Poly,
+}
+
+impl SeededRlweCiphertext {
+    /// Create from seed and b polynomial
+    pub fn new(seed: [u8; 32], b: Poly) -> Self {
+        Self { seed, b }
+    }
+
+    /// Expand to full RlweCiphertext by regenerating `a` from seed
+    pub fn expand(&self) -> RlweCiphertext {
+        let dim = self.b.dimension();
+        let q = self.b.modulus();
+        let a = Poly::from_seed(&self.seed, dim, q);
+        RlweCiphertext::from_parts(a, self.b.clone())
+    }
+
+    /// Get the ring dimension
+    pub fn ring_dim(&self) -> usize {
+        self.b.dimension()
+    }
+
+    /// Get the modulus
+    pub fn modulus(&self) -> u64 {
+        self.b.modulus()
+    }
+}

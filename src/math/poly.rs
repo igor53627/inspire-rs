@@ -7,6 +7,8 @@ use super::mod_q::{ModQ, DEFAULT_Q};
 use super::ntt::NttContext;
 use super::sampler::GaussianSampler;
 use rand::Rng;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 
 /// Polynomial in R_q = Z_q[X]/(X^d + 1)
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -90,6 +92,27 @@ impl Poly {
             q,
             is_ntt: false,
         }
+    }
+
+    /// Generate a deterministic random polynomial from a 32-byte seed
+    ///
+    /// Uses ChaCha20 for expansion. The same seed always produces the same polynomial.
+    pub fn from_seed(seed: &[u8; 32], dim: usize, q: u64) -> Self {
+        let mut rng = ChaCha20Rng::from_seed(*seed);
+        Self::random_with_rng(dim, q, &mut rng)
+    }
+
+    /// Generate a deterministic random polynomial from seed and index
+    ///
+    /// Derives a unique seed by XORing the base seed with the index.
+    /// Useful for generating multiple independent polynomials from one seed.
+    pub fn from_seed_indexed(seed: &[u8; 32], index: usize, dim: usize, q: u64) -> Self {
+        let mut derived_seed = *seed;
+        let idx_bytes = (index as u64).to_le_bytes();
+        for i in 0..8 {
+            derived_seed[i] ^= idx_bytes[i];
+        }
+        Self::from_seed(&derived_seed, dim, q)
     }
 
     /// Get polynomial dimension

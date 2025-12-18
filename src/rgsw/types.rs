@@ -1,7 +1,8 @@
 //! RGSW ciphertext and gadget types
 
 use crate::math::{GaussianSampler, ModQ, NttContext, Poly};
-use crate::rlwe::{RlweCiphertext, RlweSecretKey};
+use crate::rlwe::{RlweCiphertext, RlweSecretKey, SeededRlweCiphertext};
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
 /// Sample a polynomial with coefficients from discrete Gaussian
@@ -184,6 +185,125 @@ impl RgswCiphertext {
     ) -> Self {
         let msg_poly = Poly::constant(message, sk.ring_dim(), sk.modulus());
         Self::encrypt(sk, &msg_poly, gadget, sampler, ctx)
+    }
+
+    /// Get the ring dimension
+    pub fn ring_dim(&self) -> usize {
+        self.rows[0].ring_dim()
+    }
+
+    /// Get the modulus
+    pub fn modulus(&self) -> u64 {
+        self.rows[0].modulus()
+    }
+
+    /// Get the gadget length ℓ
+    pub fn gadget_len(&self) -> usize {
+        self.gadget.len
+    }
+}
+
+/// Seeded RGSW ciphertext: stores seeds instead of full `a` polynomials
+///
+/// RGSW has 2ℓ rows, each an RLWE ciphertext. By storing seeds instead of
+/// full `a` polynomials, we reduce size by ~50%.
+///
+/// For d=2048, q=60-bit:
+/// - Full RGSW: 2×3 rows × 2 polys × 2048 coeffs × 8 bytes ≈ 196 KB
+/// - Seeded RGSW: 2×3 rows × (32 bytes + 1 poly) ≈ 98 KB
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SeededRgswCiphertext {
+    /// 2ℓ seeded RLWE ciphertexts
+    pub rows: Vec<SeededRlweCiphertext>,
+    /// Gadget parameters
+    pub gadget: GadgetVector,
+}
+
+impl SeededRgswCiphertext {
+    /// Encrypt a message polynomial, storing seeds instead of full `a` polynomials
+    pub fn encrypt(
+        sk: &RlweSecretKey,
+        message: &Poly,
+        gadget: &GadgetVector,
+        sampler: &mut GaussianSampler,
+        ctx: &NttContext,
+    ) -> Self {
+        let d = sk.ring_dim();
+        let q = sk.modulus();
+        let ell = gadget.len;
+
+        let mut rows = Vec::with_capacity(2 * ell);
+        let powers = gadget.powers();
+        let mut rng = rand::thread_rng();
+
+        // First ℓ rows: RLWE(0) + (m·z^i, 0)
+        // Original: (a_rand + m·z^i, b) where b = -a_rand·s + e
+        // Decrypts to: (a_rand + m·z^i)·s + b = m·z^i·s + e
+        //
+        // Seeded: we store (seed, b_adjusted), expand gives (a_rand, b_adjusted)
+        // For equivalent decrypt: a_rand·s + b_adjusted = m·z^i·s + e
+        // Therefore: b_adjusted = b + m·z^i·s
+        for i in 0..ell {
+            let mut seed = [0u8; 32];
+            rng.fill_bytes(&mut seed);
+            
+            let a_rand = Poly::from_seed(&seed, d, q);
+            let error = sample_error_poly(d, q, sampler);
+
+            // b = -a·s + e (encrypts 0)
+            let a_s = a_rand.mul_ntt(&sk.poly, ctx);
+            let b = &(-a_s) + &error;
+
+            // Adjust b to compensate for missing m·z^i in a component
+            // b_adjusted = b + (m·z^i)·s so that decrypt gives m·z^i·s + e
+            let scaled_msg = message.scalar_mul(powers[i]);
+            let msg_s = scaled_msg.mul_ntt(&sk.poly, ctx);
+            let b_adjusted = &b + &msg_s;
+
+            rows.push(SeededRlweCiphertext::new(seed, b_adjusted));
+        }
+
+        // Next ℓ rows: RLWE(0) + (0, m·z^i)
+        for i in 0..ell {
+            let mut seed = [0u8; 32];
+            rng.fill_bytes(&mut seed);
+            
+            let a = Poly::from_seed(&seed, d, q);
+            let error = sample_error_poly(d, q, sampler);
+
+            // b_base = -a·s + e (encrypts 0)
+            let a_s = a.mul_ntt(&sk.poly, ctx);
+            let b_base = &(-a_s) + &error;
+
+            // Add m·z^i to the 'b' component
+            let scaled_msg = message.scalar_mul(powers[i]);
+            let b = &b_base + &scaled_msg;
+
+            rows.push(SeededRlweCiphertext::new(seed, b));
+        }
+
+        Self {
+            rows,
+            gadget: gadget.clone(),
+        }
+    }
+
+    /// Encrypt a scalar message
+    pub fn encrypt_scalar(
+        sk: &RlweSecretKey,
+        message: u64,
+        gadget: &GadgetVector,
+        sampler: &mut GaussianSampler,
+        ctx: &NttContext,
+    ) -> Self {
+        let msg_poly = Poly::constant(message, sk.ring_dim(), sk.modulus());
+        Self::encrypt(sk, &msg_poly, gadget, sampler, ctx)
+    }
+
+    /// Expand to full RgswCiphertext by regenerating all `a` polynomials
+    pub fn expand(&self) -> RgswCiphertext {
+        let rows: Vec<RlweCiphertext> = self.rows.iter().map(|r| r.expand()).collect();
+        RgswCiphertext::from_rows(rows, self.gadget.clone())
     }
 
     /// Get the ring dimension
