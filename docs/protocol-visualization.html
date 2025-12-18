@@ -576,15 +576,25 @@
 
         <!-- Tree Packing (OnePacking) -->
         <div class="section">
-            <h2>4.5. Automorphism Tree Packing (InsPIRe^1/^2)</h2>
+            <h2>4.5. LWE-to-RLWE Packing (InsPIRe^1/^2)</h2>
             <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
-                <strong style="color: var(--accent-purple);">Key:</strong> Pack d LWE ciphertexts into 1 RLWE using Galois automorphisms. Each level combines pairs using τ(X) = X^(2^k+1).
+                <strong style="color: var(--accent-purple);">Key:</strong> Pack d LWE ciphertexts into 1 RLWE using Galois automorphisms. Two approaches available.
             </p>
             
             <div class="key-insight" style="margin-bottom: 1rem;">
-                <strong>Why tree packing?</strong> After external product, each column's value is in coefficient 0 of its RLWE. 
+                <strong>Why packing?</strong> After external product, each column's value is in coefficient 0 of its RLWE. 
                 Simple "shift and add" fails because noise spreads to ALL coefficients. 
                 Automorphisms permute coefficients in a controlled way that preserves encryption structure.
+            </div>
+
+            <!-- Algorithm Comparison Toggle -->
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                <button id="show-tree-algo" class="algo-toggle active" style="background: var(--accent-purple); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                    Tree Packing (log d matrices)
+                </button>
+                <button id="show-inspiring-algo" class="algo-toggle" style="background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                    InspiRING (2 matrices) - 226x faster
+                </button>
             </div>
 
             <svg id="tree-pack-svg" viewBox="0 0 900 420" role="img" aria-labelledby="tree-pack-title">
@@ -600,7 +610,8 @@
                 </button>
             </div>
             
-            <div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+            <!-- Tree Packing Details -->
+            <div id="tree-pack-details" style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
                 <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px;">
                     <h4 style="color: var(--accent-blue); font-size: 0.9rem; margin-bottom: 0.5rem;">Algorithm Steps</h4>
                     <ol style="color: var(--text-secondary); font-size: 0.85rem; padding-left: 1.2rem; margin: 0;">
@@ -626,8 +637,84 @@
                     <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
                         <strong>Keys:</strong> log(d) automorphism key-switching matrices<br>
                         <strong>Operations:</strong> O(n·log(d)) key-switches for n columns<br>
-                        <strong>For d=2048:</strong> 11 KS matrices, ~12ms server overhead
+                        <strong>For d=2048:</strong> 11 KS matrices, ~948ms server time
                     </p>
+                </div>
+            </div>
+
+            <!-- InspiRING 2-Matrix Details (hidden by default) -->
+            <div id="inspiring-details" style="margin-top: 1rem; display: none;">
+                <div class="key-insight" style="border-left-color: var(--accent-green); margin-bottom: 1rem;">
+                    <strong style="color: var(--accent-green);">InspiRING Innovation:</strong> Instead of log(d) key-switching matrices, 
+                    use only 2 matrices (K_g, K_h) by pre-rotating a single matrix offline using generator powers.
+                    This is based on <a href="https://github.com/google/private-membership/tree/main/research/InsPIRe" style="color: var(--accent-blue);">Google's reference implementation</a>.
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px;">
+                        <h4 style="color: var(--accent-blue); font-size: 0.9rem; margin-bottom: 0.5rem;">Algorithm Steps</h4>
+                        <ol style="color: var(--text-secondary); font-size: 0.85rem; padding-left: 1.2rem; margin: 0;">
+                            <li><strong>Offline:</strong> Compute generator powers g^i mod 2d</li>
+                            <li><strong>Offline:</strong> Pre-rotate K_g by τ_{g^i} for all i</li>
+                            <li><strong>Offline:</strong> Backward recursion for gadget inversions</li>
+                            <li><strong>Online:</strong> Single matrix-vector multiply</li>
+                            <li><strong>Online:</strong> Add b-values at positions</li>
+                        </ol>
+                    </div>
+                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px;">
+                        <h4 style="color: var(--accent-green); font-size: 0.9rem; margin-bottom: 0.5rem;">Key Insight</h4>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+                            Generator g=3 has order d/2 in Z*_{2d}. Pre-rotating ONE matrix by g^i 
+                            replaces storing log(d) separate matrices.
+                            <br><br>
+                            <span style="font-family: monospace; color: var(--accent-orange);">
+                                τ_{g^i}(K_g) for i ∈ [0, n)
+                            </span>
+                        </p>
+                    </div>
+                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px;">
+                        <h4 style="color: var(--accent-orange); font-size: 0.9rem; margin-bottom: 0.5rem;">Performance (d=2048)</h4>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+                            <strong>Keys:</strong> 2 matrices (K_g, K_h) vs 11<br>
+                            <strong>Key size:</strong> 5.5x smaller<br>
+                            <strong>Online time:</strong> <span style="color: var(--accent-green);">4.2ms</span> vs 948ms<br>
+                            <strong>Speedup:</strong> <span style="color: var(--accent-green); font-weight: bold;">226x faster</span>
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Comparison Table -->
+                <div style="margin-top: 1rem; overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                        <thead>
+                            <tr style="background: var(--bg-tertiary);">
+                                <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color);">Metric</th>
+                                <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">Tree Packing</th>
+                                <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">InspiRING</th>
+                                <th style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">Improvement</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">KS Matrices</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">11</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">2</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">5.5x</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Key Material</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">67,584 coeffs</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">12,288 coeffs</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">5.5x</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Online Time (16 LWEs)</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">948 ms</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">4.2 ms</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); font-weight: bold; color: var(--accent-green);">226x</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -2114,6 +2201,35 @@
             treeTimers = [];
             treeAnimating = false;
             drawTreePacking();
+        });
+
+        // Algorithm toggle buttons (Tree Packing vs InspiRING)
+        document.getElementById("show-tree-algo").addEventListener("click", () => {
+            document.getElementById("show-tree-algo").style.background = "var(--accent-purple)";
+            document.getElementById("show-tree-algo").style.color = "white";
+            document.getElementById("show-tree-algo").style.border = "none";
+            document.getElementById("show-inspiring-algo").style.background = "var(--bg-tertiary)";
+            document.getElementById("show-inspiring-algo").style.color = "var(--text-secondary)";
+            document.getElementById("show-inspiring-algo").style.border = "1px solid var(--border-color)";
+            document.getElementById("tree-pack-details").style.display = "grid";
+            document.getElementById("inspiring-details").style.display = "none";
+            document.getElementById("tree-pack-svg").style.display = "block";
+            document.getElementById("animate-tree-btn").style.display = "inline-block";
+            document.getElementById("reset-tree-btn").style.display = "inline-block";
+        });
+
+        document.getElementById("show-inspiring-algo").addEventListener("click", () => {
+            document.getElementById("show-inspiring-algo").style.background = "var(--accent-green)";
+            document.getElementById("show-inspiring-algo").style.color = "white";
+            document.getElementById("show-inspiring-algo").style.border = "none";
+            document.getElementById("show-tree-algo").style.background = "var(--bg-tertiary)";
+            document.getElementById("show-tree-algo").style.color = "var(--text-secondary)";
+            document.getElementById("show-tree-algo").style.border = "1px solid var(--border-color)";
+            document.getElementById("tree-pack-details").style.display = "none";
+            document.getElementById("inspiring-details").style.display = "block";
+            document.getElementById("tree-pack-svg").style.display = "none";
+            document.getElementById("animate-tree-btn").style.display = "none";
+            document.getElementById("reset-tree-btn").style.display = "none";
         });
 
         // ============================================================

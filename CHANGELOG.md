@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **InspiRING 2-Matrix Packing Algorithm**: Alternative to tree packing with dramatically better performance
+  - `inspiring2` module implementing Google's reference algorithm
+  - Uses only 2 key-switching matrices (K_g, K_h) instead of log(d)=11 matrices
+  - `GeneratorPowers` - precomputed g^i mod 2d table for generator-based indexing
+  - `RotatedKsMatrix` - pre-rotated K_g by automorphisms τ_{g^i}
+  - `precompute_inspiring()` - offline phase: inner products + backward recursion
+  - `pack_inspiring()` - online phase: single matrix multiply
+  - `pack_inspiring_full()` - full d-slot packing using both K_g and K_h
+  - Performance: **226x faster** online packing (4.2ms vs 948ms for d=2048, 16 LWEs)
+  - Key material: **5.5x smaller** (12,288 vs 67,584 coefficients)
+  - Updated docs/protocol-visualization.html with algorithm comparison toggle
+
 - **InsPIRe^1 (OnePacking) implementation**: Automorphism-based tree packing for response compression
   - `pack_lwes()` packs multiple LWE ciphertexts into single RLWE using Galois automorphisms
   - `respond_one_packing()` for packed server responses (17x response size reduction)

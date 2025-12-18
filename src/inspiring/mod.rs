@@ -38,6 +38,7 @@
 pub mod automorph_pack;
 mod collapse;
 mod collapse_one;
+pub mod inspiring2;
 mod pack;
 mod simple_pack;
 mod transform;
@@ -49,6 +50,10 @@ pub use automorph_pack::{
 };
 pub use collapse::{collapse, collapse_half, collapse_partial};
 pub use collapse_one::collapse_one;
+pub use inspiring2::{
+    GeneratorPowers, InspiringPrecomputation, RotatedKsMatrix,
+    pack_inspiring, pack_inspiring_full, pack_inspiring_partial, precompute_inspiring,
+};
 pub use pack::{pack, pack_online, partial_pack, precompute_packing, PackingPrecomputation};
 pub use simple_pack::{pack_lwe_to_rlwe, pack_rlwe_coeffs};
 pub use transform::{aggregate, transform, transform_at_slot, transform_partial};
