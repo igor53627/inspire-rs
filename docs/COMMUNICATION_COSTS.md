@@ -10,15 +10,17 @@ This document analyzes the communication costs of InsPIRe PIR for Ethereum state
 
 Benchmarked with 128-bit security parameters:
 
-| Component | JSON | Seeded JSON | Seeded + Binary |
-|-----------|------|-------------|-----------------|
-| Query (client→server) | 458 KB | **230 KB** | **230 KB** |
-| Response (server→client) | 1,296 KB | 1,296 KB | **544 KB** |
-| **Total per-query** | **1,754 KB** | **1,526 KB** | **774 KB** |
+| Component | Full (Binary) | Seeded (Binary) | Seeded (JSON) |
+|-----------|---------------|-----------------|---------------|
+| Query (client→server) | 192 KB | **96 KB** | 230 KB |
+| Response (server→client) | 544 KB | 544 KB | 1,296 KB |
+| **Total per-query** | **736 KB** | **640 KB** | **1,526 KB** |
 
 Optimizations:
 - **Seed expansion**: 50% query reduction (seeds replace `a` polynomials)
-- **Binary (bincode)**: 58% response reduction (no JSON text overhead)
+- **Binary (bincode)**: ~60% reduction vs JSON (no text overhead)
+
+Note: Modulus switching would reduce query to 48 KB, but exceeds noise budget with current parameters. See [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs).
 
 ## CRS (Common Reference String) Overhead
 
@@ -162,7 +164,61 @@ Benchmarked on AMD/Intel x64 server:
 | Client: Extract result | ~5 ms |
 | **Total round-trip** | **~12 ms** |
 
-## Why Compression Won't Help
+## Modulus Switching Tradeoffs
+
+Modulus switching reduces coefficient size from 8 bytes to 4 bytes by rescaling from q to q':
+
+```
+c' = round(c × q' / q)
+```
+
+### The Problem: Noise Amplification in External Product
+
+For RGSW queries used in external product, the rounding error is amplified:
+
+```
+added_error ≈ ℓ × B × (q / q')
+
+Where:
+  ℓ = gadget digits (3)
+  B = gadget base (2^20)
+  q / q' = modulus ratio (2^30 for q=2^60, q'=2^30)
+
+Current: 3 × 2^20 × 2^30 = 3×2^50 ≈ 3.4×10^15
+Allowed: q / (2p) = 2^60 / 2^17 = 2^43 ≈ 8.8×10^12
+
+Result: Error exceeds threshold by ~128×, causing decryption failures.
+```
+
+### Can We Fix It?
+
+To make q'=2^30 work, we need: `ℓ × B < 2^13 ≈ 8192`
+
+| Gadget Base (B) | Digits (ℓ) | B^ℓ ≥ q? | ℓ × B | Works? |
+|-----------------|------------|----------|-------|--------|
+| 2^20 (current)  | 3          | ✓        | 3×2^20 | ✗ |
+| 2^10            | 6          | ✓        | 6144   | ✓ |
+| 2^8             | 8          | ✓        | 2048   | ✓ |
+
+### The Tradeoff: It's a Wash
+
+RGSW ciphertext has **2ℓ rows**. Changing parameters:
+
+| Config | Rows | Seeded Size | + Modulus Switch | Net Size |
+|--------|------|-------------|------------------|----------|
+| ℓ=3, B=2^20 (current) | 6 | 98 KB | ✗ (broken) | 98 KB |
+| ℓ=6, B=2^10 | 12 | 196 KB | ✓ (50% off) | 98 KB |
+| ℓ=8, B=2^8 | 16 | 261 KB | ✓ (50% off) | 130 KB |
+
+**Conclusion**: Doubling ℓ to enable modulus switching results in the same or worse final size. Seeded-only compression (98 KB) is the practical optimum for current security parameters.
+
+### When Modulus Switching Does Help
+
+- **RLWE responses** (no external product amplification)
+- **Different parameter regimes** (smaller gadget base already chosen for other reasons)
+- **Lower security levels** (smaller q allows smaller q' ratio)
+
+## Why Generic Compression Won't Help
 
 LWE/RLWE ciphertexts are cryptographically pseudorandom (indistinguishable from uniform random by design):
 
@@ -220,16 +276,16 @@ Actual payload needed: 96 + 13×32 = **512 bytes**
 
 ## Summary
 
-| Metric | Value |
-|--------|-------|
-| Query size (seeded) | 230 KB |
-| Response size | 1,296 KB |
-| Per-query total | ~1.5 MB |
-| Server respond time | ~3-4 ms |
-| End-to-end latency | ~12 ms |
-| Wallet open (14 queries) | ~21 MB |
+| Metric | Binary | JSON |
+|--------|--------|------|
+| Query size (seeded) | 96 KB | 230 KB |
+| Response size | 544 KB | 1,296 KB |
+| Per-query total | 640 KB | 1,526 KB |
+| Server respond time | ~3-4 ms | ~3-4 ms |
+| End-to-end latency | ~12 ms | ~12 ms |
+| Wallet open (14 queries) | ~9 MB | ~21 MB |
 
-InsPIRe provides **full query privacy** with ~1.5 MB per query and ~12ms latency. The bandwidth overhead is significant but acceptable for privacy-critical applications on modern networks.
+InsPIRe provides **full query privacy** with ~640 KB per query (binary) and ~12ms latency. The bandwidth overhead is significant but acceptable for privacy-critical applications on modern networks.
 
 ## Interactive Visualization
 

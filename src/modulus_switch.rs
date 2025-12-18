@@ -24,6 +24,26 @@
 //!
 //! The actual bit savings come from packing coefficients more tightly during
 //! serialization.
+//!
+//! # Limitations for RGSW Queries
+//!
+//! **Warning**: Modulus switching on RGSW ciphertexts used in external products
+//! introduces significant noise that may exceed decryption thresholds.
+//!
+//! The rounding error from q → q' → q is amplified by the external product:
+//!
+//! ```text
+//! added_error ≈ ℓ × B × (q / q')
+//! ```
+//!
+//! Where ℓ is gadget length and B is gadget base. With typical parameters
+//! (q ≈ 2^60, q' = 2^30, B = 2^20, ℓ = 3), this error is ~3×2^50, which exceeds
+//! the decryption margin q/(2p) ≈ 2^43.
+//!
+//! **Recommended usage**:
+//! - Use modulus switching for RLWE responses (no external product)
+//! - For query compression, use seed expansion only (SeededRgswCiphertext)
+//! - If RGSW modulus switching is needed, use q' ≳ 2^38 (requires custom serialization)
 
 use serde::{Deserialize, Serialize};
 
@@ -176,16 +196,19 @@ impl SwitchedSeededRgswCiphertext {
     
     /// Get ring dimension
     pub fn ring_dim(&self) -> usize {
+        debug_assert!(!self.rows.is_empty(), "SwitchedSeededRgswCiphertext has no rows");
         self.rows[0].ring_dim()
     }
     
     /// Get original modulus
     pub fn original_modulus(&self) -> u64 {
+        debug_assert!(!self.rows.is_empty(), "SwitchedSeededRgswCiphertext has no rows");
         self.rows[0].original_modulus()
     }
     
     /// Get switched modulus
     pub fn switched_modulus(&self) -> u64 {
+        debug_assert!(!self.rows.is_empty(), "SwitchedSeededRgswCiphertext has no rows");
         self.rows[0].switched_modulus()
     }
     

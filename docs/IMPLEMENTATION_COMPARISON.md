@@ -147,16 +147,20 @@ inspire-rs implements InspiRING more directly as a supporting module for the fin
 
 ## 7. API Comparison
 
+> **Note**: The examples below show simplified signatures for clarity.
+> Actual functions include additional parameters (`shard_config`, `rlwe_sk`, `sampler`, `entry_size`).
+> See the [module documentation](../src/pir/mod.rs) for full signatures.
+
 ### inspire-rs (Production-oriented)
 
 ```rust
 // Setup
-let (crs, encoded_db) = setup(&params, &database);
+let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler);
 
 // Query
-let (query, state) = query(&crs, target_index);
-// or seeded
-let (seeded_query, state) = query_seeded(&crs, target_index);
+let (state, query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler);
+// or seeded (50% smaller)
+let (state, seeded_query) = query_seeded(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler);
 
 // Response
 let response = respond(&crs, &encoded_db, &query);
@@ -164,7 +168,7 @@ let response = respond(&crs, &encoded_db, &query);
 let response = respond_mmap(&crs, &mmap_db, &query);
 
 // Extract
-let result = extract(&state, &response);
+let result = extract(&crs, &state, &response, entry_size);
 ```
 
 ### Google (Evaluation-oriented)
@@ -254,7 +258,8 @@ Based on this comparison, potential future enhancements:
 4. **Parameter auto-tuning** - Scenario-based parameter selection
 5. **SimplePIR variant** - For comparison/simpler use cases
 
-Note: Modulus switching was implemented in December 2024, achieving 75% query size reduction (192 KB -> 48 KB).
+Note: Seed expansion was implemented in December 2024, achieving 50% query size reduction (192 KB -> 98 KB).
+Modulus switching is also available but exceeds noise budget with default parameters due to error amplification in external product.
 
 ---
 

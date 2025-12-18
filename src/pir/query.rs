@@ -246,6 +246,19 @@ pub fn query_seeded(
 /// - Seeded query: ~98 KB  
 /// - Switched query: ~50 KB
 ///
+/// # Warning: Noise Amplification
+///
+/// **This function may produce incorrect results with default parameters.**
+///
+/// Modulus switching on RGSW ciphertexts introduces rounding errors that are
+/// amplified by the external product during server response. With typical
+/// parameters (q ≈ 2^60, q' = 2^30, B = 2^20, ℓ = 3), the amplified error
+/// exceeds the decryption threshold.
+///
+/// **Recommended**: Use `query_seeded()` for reliable operation.
+/// Use this function only with adjusted parameters (smaller gadget base,
+/// higher switched modulus, or both).
+///
 /// # Arguments
 /// * `crs` - Common reference string (public parameters)
 /// * `global_index` - Index of the entry to retrieve

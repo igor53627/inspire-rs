@@ -237,6 +237,12 @@ impl SeededRgswCiphertext {
         let mut rng = rand::thread_rng();
 
         // First ℓ rows: RLWE(0) + (m·z^i, 0)
+        // Original: (a_rand + m·z^i, b) where b = -a_rand·s + e
+        // Decrypts to: (a_rand + m·z^i)·s + b = m·z^i·s + e
+        //
+        // Seeded: we store (seed, b_adjusted), expand gives (a_rand, b_adjusted)
+        // For equivalent decrypt: a_rand·s + b_adjusted = m·z^i·s + e
+        // Therefore: b_adjusted = b + m·z^i·s
         for i in 0..ell {
             let mut seed = [0u8; 32];
             rng.fill_bytes(&mut seed);
@@ -248,12 +254,11 @@ impl SeededRgswCiphertext {
             let a_s = a_rand.mul_ntt(&sk.poly, ctx);
             let b = &(-a_s) + &error;
 
-            // For seeded version, we store the seed and b
-            // But we need to account for the m·z^i added to a
-            // So we adjust b instead: b' = b - (m·z^i)·s
+            // Adjust b to compensate for missing m·z^i in a component
+            // b_adjusted = b + (m·z^i)·s so that decrypt gives m·z^i·s + e
             let scaled_msg = message.scalar_mul(powers[i]);
             let msg_s = scaled_msg.mul_ntt(&sk.poly, ctx);
-            let b_adjusted = &b - &msg_s;
+            let b_adjusted = &b + &msg_s;
 
             rows.push(SeededRlweCiphertext::new(seed, b_adjusted));
         }
