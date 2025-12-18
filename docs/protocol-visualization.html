@@ -683,6 +683,62 @@
 
     <script>
         // ============================================================
+        // Centralized Color Configuration
+        // ============================================================
+        const COLORS = {
+            bgPrimary: '#0d1117',
+            bgSecondary: '#161b22',
+            bgTertiary: '#21262d',
+            textPrimary: '#e6edf3',
+            textSecondary: '#8b949e',
+            textMuted: '#6e7681',
+            blue: '#58a6ff',
+            green: '#3fb950',
+            purple: '#a371f7',
+            orange: '#d29922',
+            red: '#ff6b6b',
+            yellow: '#ffd93d',
+            border: '#30363d'
+        };
+
+        // ============================================================
+        // Shared SVG Definitions (markers, gradients, etc.)
+        // ============================================================
+        function initSharedDefs() {
+            // Create a hidden SVG for shared defs
+            const defsSvg = d3.select("body").append("svg")
+                .attr("width", 0).attr("height", 0)
+                .style("position", "absolute");
+            
+            const defs = defsSvg.append("defs");
+            
+            // Arrowhead markers for each color
+            const markerColors = {
+                'blue': COLORS.blue,
+                'green': COLORS.green,
+                'purple': COLORS.purple,
+                'orange': COLORS.orange,
+                'red': COLORS.red,
+                'yellow': COLORS.yellow
+            };
+            
+            Object.entries(markerColors).forEach(([name, color]) => {
+                defs.append("marker")
+                    .attr("id", `arrow-${name}`)
+                    .attr("markerWidth", 10)
+                    .attr("markerHeight", 7)
+                    .attr("refX", 9)
+                    .attr("refY", 3.5)
+                    .attr("orient", "auto")
+                    .append("polygon")
+                    .attr("points", "0 0, 10 3.5, 0 7")
+                    .attr("fill", color);
+            });
+        }
+        
+        initSharedDefs();
+
+        // ============================================================
         // Protocol Flow Animation
         // ============================================================
         const flowSvg = d3.select("#flow-svg");
@@ -691,8 +747,8 @@
 
         // Entities
         const entities = [
-            { id: "client", label: "Client", x: 120, color: "#58a6ff" },
-            { id: "server", label: "Server", x: 780, color: "#3fb950" }
+            { id: "client", label: "Client", x: 120, color: COLORS.blue },
+            { id: "server", label: "Server", x: 780, color: COLORS.green }
         ];
 
         // Draw entity boxes and labels
@@ -723,7 +779,7 @@
                 .attr("y1", 70)
                 .attr("x2", e.x)
                 .attr("y2", 300)
-                .attr("stroke", "#30363d")
+                .attr("stroke", COLORS.border)
                 .attr("stroke-width", 2)
                 .attr("stroke-dasharray", "6,4");
         });
@@ -735,7 +791,7 @@
                 fromX: 120, toX: 780, y: 100,
                 label: "Query: RGSW(X^(-k))",
                 sublabel: "~230 KB (seeded)",
-                color: "#58a6ff",
+                color: COLORS.blue,
                 arrow: "right"
             },
             {
@@ -743,7 +799,7 @@
                 fromX: 780, toX: 780, y: 160,
                 label: "Process: h(X) * X^(-k)",
                 sublabel: "External product",
-                color: "#a371f7",
+                color: COLORS.purple,
                 arrow: "none",
                 isBox: true
             },
@@ -752,7 +808,7 @@
                 fromX: 780, toX: 120, y: 220,
                 label: "Response: RLWE(y_k)",
                 sublabel: "~544 KB (binary)",
-                color: "#3fb950",
+                color: COLORS.green,
                 arrow: "left"
             },
             {
@@ -760,7 +816,7 @@
                 fromX: 120, toX: 120, y: 280,
                 label: "Extract: Decrypt to get y_k",
                 sublabel: "32 bytes result",
-                color: "#d29922",
+                color: COLORS.orange,
                 arrow: "none",
                 isBox: true
             }
@@ -798,12 +854,15 @@
                     .attr("x", step.fromX)
                     .attr("y", step.y + 12)
                     .attr("text-anchor", "middle")
-                    .attr("fill", "#8b949e")
+                    .attr("fill", COLORS.textSecondary)
                     .attr("font-size", "11px")
                     .text(step.sublabel);
             } else {
                 // Arrow
                 const midX = (step.fromX + step.toX) / 2;
+                // Map step color to shared marker name
+                const markerName = step.color === COLORS.blue ? 'blue' : 
+                                   step.color === COLORS.green ? 'green' : 'purple';
                 
                 g.append("line")
                     .attr("class", "arrow-line")
@@ -813,20 +872,7 @@
                     .attr("y2", step.y)
                     .attr("stroke", step.color)
                     .attr("stroke-width", 2)
-                    .attr("marker-end", `url(#arrowhead-${step.id})`);
-
-                // Arrowhead marker
-                flowSvg.append("defs")
-                    .append("marker")
-                    .attr("id", `arrowhead-${step.id}`)
-                    .attr("markerWidth", 10)
-                    .attr("markerHeight", 7)
-                    .attr("refX", 9)
-                    .attr("refY", 3.5)
-                    .attr("orient", "auto")
-                    .append("polygon")
-                    .attr("points", "0 0, 10 3.5, 0 7")
-                    .attr("fill", step.color);
+                    .attr("marker-end", `url(#arrow-${markerName})`);
 
                 // Labels
                 g.append("text")
@@ -842,7 +888,7 @@
                     .attr("x", midX)
                     .attr("y", step.y + 18)
                     .attr("text-anchor", "middle")
-                    .attr("fill", "#8b949e")
+                    .attr("fill", COLORS.textSecondary)
                     .attr("font-size", "11px")
                     .text(step.sublabel);
             }
@@ -1019,7 +1065,7 @@
                 .join("text")
                 .attr("x", d => x(d.size) + 5)
                 .attr("y", d => y(d.name) + y.bandwidth() / 2 + 4)
-                .attr("fill", "#e6edf3")
+                .attr("fill", COLORS.textPrimary)
                 .attr("font-size", "11px")
                 .text(d => d.size >= 1 ? `${d.size.toFixed(0)} KB` : `${(d.size * 1024).toFixed(0)} B`);
 
@@ -1029,23 +1075,23 @@
                 .select(".domain").remove();
 
             g.selectAll(".tick text")
-                .attr("fill", "#8b949e")
-                .attr("font-size", "10px");
+                .attr("fill", COLORS.textSecondary)
+                .attr("font-size", "11px");
 
             // Total
             svg.append("text")
                 .attr("x", width / 2)
                 .attr("y", height - 10)
                 .attr("text-anchor", "middle")
-                .attr("fill", "#8b949e")
+                .attr("fill", COLORS.textSecondary)
                 .attr("font-size", "12px")
                 .text(`Total: ${total.toFixed(0)} KB`);
         }
 
         function updateCharts() {
             const data = formatData[currentFormat];
-            drawChart("#query-chart", data.query, "Query Breakdown", "#58a6ff");
-            drawChart("#response-chart", data.response, "Response Breakdown", "#3fb950");
+            drawChart("#query-chart", data.query, "Query Breakdown", COLORS.blue);
+            drawChart("#response-chart", data.response, "Response Breakdown", COLORS.green);
         }
 
         // Format toggle
@@ -1184,7 +1230,7 @@
             svg.append("text")
                 .attr("x", 20)
                 .attr("y", 25)
-                .attr("fill", "#8b949e")
+                .attr("fill", COLORS.textSecondary)
                 .attr("font-size", "12px")
                 .text(`Total: ${numShards.toLocaleString()} shards | Query contains shard_id: ${currentTargetShard}`);
 
@@ -1204,11 +1250,11 @@
             // Ellipsis
             if (startShard > 0) {
                 g.append("text").attr("x", -20).attr("y", gridHeight / 2 + 4)
-                    .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "14px").text("...");
+                    .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "14px").text("...");
             }
             if (endShard < numShards) {
                 g.append("text").attr("x", visibleCount * (shardWidth + shardGap) + 15).attr("y", gridHeight / 2 + 4)
-                    .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "14px").text("...");
+                    .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "14px").text("...");
             }
 
             // Draw shards
@@ -1221,8 +1267,8 @@
                     .attr("x", x).attr("y", 0)
                     .attr("width", shardWidth).attr("height", gridHeight)
                     .attr("rx", 3)
-                    .attr("fill", isTarget ? "#58a6ff" : "#21262d")
-                    .attr("stroke", isTarget ? "#58a6ff" : "#30363d")
+                    .attr("fill", isTarget ? COLORS.blue : COLORS.bgTertiary)
+                    .attr("stroke", isTarget ? COLORS.blue : COLORS.border)
                     .attr("stroke-width", isTarget ? 2 : 1)
                     .attr("opacity", isTarget ? 1 : 0.5);
 
@@ -1230,8 +1276,8 @@
                     g.append("text")
                         .attr("x", x + shardWidth / 2).attr("y", gridHeight / 2 + 4)
                         .attr("text-anchor", "middle")
-                        .attr("fill", isTarget ? "#fff" : "#6e7681")
-                        .attr("font-size", "9px")
+                        .attr("fill", isTarget ? "#fff" : COLORS.textMuted)
+                        .attr("font-size", "11px")
                         .text(shardId);
                 }
             }
@@ -1239,7 +1285,7 @@
             // Info text
             svg.append("text")
                 .attr("x", width / 2).attr("y", gridY + gridHeight + 25)
-                .attr("text-anchor", "middle").attr("fill", "#58a6ff").attr("font-size", "11px")
+                .attr("text-anchor", "middle").attr("fill", COLORS.blue).attr("font-size", "12px")
                 .text(`Selected shard #${currentTargetShard} contains ${RING_DIM} entries encoded as ${NUM_COLUMNS} polynomials`);
         }
 
@@ -1272,15 +1318,15 @@
                 .attr("x", inputX).attr("y", inputY)
                 .attr("width", 120).attr("height", 60)
                 .attr("rx", 4)
-                .attr("fill", "#58a6ff").attr("opacity", 0.2)
-                .attr("stroke", "#58a6ff");
+                .attr("fill", COLORS.blue).attr("opacity", 0.2)
+                .attr("stroke", COLORS.blue);
             queryGroup.append("text")
                 .attr("x", inputX + 60).attr("y", inputY + 25)
-                .attr("text-anchor", "middle").attr("fill", "#58a6ff").attr("font-size", "11px").attr("font-weight", "bold")
+                .attr("text-anchor", "middle").attr("fill", COLORS.blue).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("Query");
             queryGroup.append("text")
                 .attr("x", inputX + 60).attr("y", inputY + 42)
-                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "9px")
+                .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                 .text("RGSW(X^{-k})");
 
             // Shard polynomials
@@ -1292,7 +1338,7 @@
 
             svg.append("text")
                 .attr("x", polyStartX).attr("y", polyY)
-                .attr("fill", "#8b949e").attr("font-size", "10px")
+                .attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                 .text("Shard polynomials (16 columns):");
 
             for (let i = 0; i < 8; i++) {
@@ -1316,17 +1362,17 @@
                     .attr("x", x).attr("y", polyY + 10)
                     .attr("width", polyWidth).attr("height", polyHeight)
                     .attr("rx", 3)
-                    .attr("fill", "#21262d").attr("stroke", "#3fb950");
+                    .attr("fill", COLORS.bgTertiary).attr("stroke", COLORS.green);
                 polyGroup.append("text")
                     .attr("x", x + polyWidth / 2).attr("y", polyY + 32)
-                    .attr("text-anchor", "middle").attr("fill", "#3fb950").attr("font-size", "9px")
+                    .attr("text-anchor", "middle").attr("fill", COLORS.green).attr("font-size", "11px")
                     .text(`h_${i}(X)`);
             }
 
             // Ellipsis for remaining
             svg.append("text")
                 .attr("x", polyStartX + 8 * (polyWidth + polyGap) + 10).attr("y", polyY + 32)
-                .attr("fill", "#8b949e").attr("font-size", "12px")
+                .attr("fill", COLORS.textSecondary).attr("font-size", "12px")
                 .text("... +8 more");
 
             // External product operations (parallel)
@@ -1336,7 +1382,7 @@
 
             svg.append("text")
                 .attr("x", 20).attr("y", opY + 10)
-                .attr("fill", "#d29922").attr("font-size", "11px").attr("font-weight", "bold")
+                .attr("fill", COLORS.orange).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("Parallel:");
 
             for (let i = 0; i < 4; i++) {
@@ -1363,23 +1409,23 @@
                     .attr("x", x).attr("y", opY)
                     .attr("width", opWidth).attr("height", opHeight)
                     .attr("rx", 4)
-                    .attr("fill", "#21262d").attr("stroke", "#d29922");
+                    .attr("fill", COLORS.bgTertiary).attr("stroke", COLORS.orange);
 
                 opGroup.append("text")
                     .attr("x", x + opWidth / 2).attr("y", opY + 20)
-                    .attr("text-anchor", "middle").attr("fill", "#d29922").attr("font-size", "10px").attr("font-weight", "bold")
+                    .attr("text-anchor", "middle").attr("fill", COLORS.orange).attr("font-size", "11px").attr("font-weight", "bold")
                     .text("external_product");
 
                 opGroup.append("text")
                     .attr("x", x + opWidth / 2).attr("y", opY + 36)
-                    .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "9px")
+                    .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                     .attr("font-family", "monospace")
                     .text(`RLWE(h_${i}) ⊡ RGSW`);
             }
 
             svg.append("text")
                 .attr("x", 100 + 4 * (opWidth + 30) + 20).attr("y", opY + 30)
-                .attr("fill", "#8b949e").attr("font-size", "12px")
+                .attr("fill", COLORS.textSecondary).attr("font-size", "12px")
                 .text("... x16");
 
             // Output ciphertexts
@@ -1389,7 +1435,7 @@
 
             svg.append("text")
                 .attr("x", 20).attr("y", outY + 10)
-                .attr("fill", "#a371f7").attr("font-size", "11px").attr("font-weight", "bold")
+                .attr("fill", COLORS.purple).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("Output:");
 
             for (let i = 0; i < 10; i++) {
@@ -1400,23 +1446,23 @@
                     .attr("x", x).attr("y", outY)
                     .attr("width", outWidth).attr("height", outHeight)
                     .attr("rx", 3)
-                    .attr("fill", "#21262d").attr("stroke", "#a371f7");
+                    .attr("fill", COLORS.bgTertiary).attr("stroke", COLORS.purple);
 
                 svg.append("text")
                     .attr("x", x + outWidth / 2).attr("y", outY + 19)
-                    .attr("text-anchor", "middle").attr("fill", "#a371f7").attr("font-size", "8px")
+                    .attr("text-anchor", "middle").attr("fill", COLORS.purple).attr("font-size", "11px")
                     .text(`ct_${i}`);
             }
 
             svg.append("text")
                 .attr("x", 100 + 10 * (outWidth + 8) + 15).attr("y", outY + 19)
-                .attr("fill", "#8b949e").attr("font-size", "11px")
+                .attr("fill", COLORS.textSecondary).attr("font-size", "12px")
                 .text("... +6");
 
             // Formula
             svg.append("text")
                 .attr("x", width / 2).attr("y", outY + 55)
-                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "10px")
+                .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                 .attr("font-family", "monospace")
                 .text("Each ct_i = RLWE(h_i(X) · X^{-k}) where coefficient 0 contains y_k's column i");
 
@@ -1425,14 +1471,14 @@
                 .attr("x", width - 150).attr("y", opY)
                 .attr("width", 140).attr("height", opHeight)
                 .attr("rx", 4)
-                .attr("fill", "#21262d").attr("stroke", "#30363d");
+                .attr("fill", COLORS.bgTertiary).attr("stroke", COLORS.border);
             svg.append("text")
                 .attr("x", width - 80).attr("y", opY + 18)
-                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "9px")
+                .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                 .text("Processing time:");
             svg.append("text")
                 .attr("x", width - 80).attr("y", opY + 36)
-                .attr("text-anchor", "middle").attr("fill", "#3fb950").attr("font-size", "14px").attr("font-weight", "bold")
+                .attr("text-anchor", "middle").attr("fill", COLORS.green).attr("font-size", "14px").attr("font-weight", "bold")
                 .text("~3 ms");
         }
 
@@ -1450,7 +1496,7 @@
 
             svg.append("text")
                 .attr("x", respX).attr("y", respY)
-                .attr("fill", "#8b949e").attr("font-size", "11px")
+                .attr("fill", COLORS.textSecondary).attr("font-size", "12px")
                 .text("ServerResponse struct:");
 
             // Main box
@@ -1458,67 +1504,57 @@
                 .attr("x", respX).attr("y", respY + 10)
                 .attr("width", 350).attr("height", 100)
                 .attr("rx", 4)
-                .attr("fill", "#21262d").attr("stroke", "#a371f7");
+                .attr("fill", COLORS.bgTertiary).attr("stroke", COLORS.purple);
 
             // Fields
             svg.append("text")
                 .attr("x", respX + 15).attr("y", respY + 35)
-                .attr("fill", "#a371f7").attr("font-size", "10px").attr("font-family", "monospace")
+                .attr("fill", COLORS.purple).attr("font-size", "11px").attr("font-family", "monospace")
                 .text("ciphertext: RlweCiphertext");
             svg.append("text")
                 .attr("x", respX + 200).attr("y", respY + 35)
-                .attr("fill", "#6e7681").attr("font-size", "9px")
+                .attr("fill", COLORS.textMuted).attr("font-size", "11px")
                 .text("// combined");
 
             svg.append("text")
                 .attr("x", respX + 15).attr("y", respY + 55)
-                .attr("fill", "#a371f7").attr("font-size", "10px").attr("font-family", "monospace")
+                .attr("fill", COLORS.purple).attr("font-size", "11px").attr("font-family", "monospace")
                 .text("column_ciphertexts: Vec<Rlwe>");
             svg.append("text")
                 .attr("x", respX + 230).attr("y", respY + 55)
-                .attr("fill", "#6e7681").attr("font-size", "9px")
+                .attr("fill", COLORS.textMuted).attr("font-size", "11px")
                 .text("// 16 cts");
 
             // Size breakdown
             svg.append("text")
                 .attr("x", respX + 15).attr("y", respY + 85)
-                .attr("fill", "#8b949e").attr("font-size", "9px")
+                .attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                 .text("Size: 16 * 2 * 2048 * 8 = ");
             svg.append("text")
                 .attr("x", respX + 170).attr("y", respY + 85)
-                .attr("fill", "#3fb950").attr("font-size", "11px").attr("font-weight", "bold")
+                .attr("fill", COLORS.green).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("512 KB (binary)");
 
-            // Arrow to network
+            // Arrow to network (uses shared marker from initSharedDefs)
             svg.append("path")
                 .attr("d", "M 410 70 L 480 70")
-                .attr("stroke", "#3fb950").attr("stroke-width", 2)
+                .attr("stroke", COLORS.green).attr("stroke-width", 2)
                 .attr("marker-end", "url(#arrow-green)");
-
-            // Arrowhead
-            svg.append("defs").append("marker")
-                .attr("id", "arrow-green")
-                .attr("markerWidth", 10).attr("markerHeight", 7)
-                .attr("refX", 9).attr("refY", 3.5)
-                .attr("orient", "auto")
-                .append("polygon")
-                .attr("points", "0 0, 10 3.5, 0 7")
-                .attr("fill", "#3fb950");
 
             // Network box
             svg.append("rect")
                 .attr("x", 490).attr("y", respY + 30)
                 .attr("width", 120).attr("height", 80)
                 .attr("rx", 4)
-                .attr("fill", "#3fb950").attr("opacity", 0.15)
-                .attr("stroke", "#3fb950");
+                .attr("fill", COLORS.green).attr("opacity", 0.15)
+                .attr("stroke", COLORS.green);
             svg.append("text")
                 .attr("x", 550).attr("y", respY + 60)
-                .attr("text-anchor", "middle").attr("fill", "#3fb950").attr("font-size", "11px").attr("font-weight", "bold")
+                .attr("text-anchor", "middle").attr("fill", COLORS.green).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("Send to Client");
             svg.append("text")
                 .attr("x", 550).attr("y", respY + 80)
-                .attr("text-anchor", "middle").attr("fill", "#8b949e").attr("font-size", "9px")
+                .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                 .text("bincode/JSON");
 
             // Key insight
@@ -1526,27 +1562,27 @@
                 .attr("x", 640).attr("y", respY + 10)
                 .attr("width", 240).attr("height", 100)
                 .attr("rx", 4)
-                .attr("fill", "#21262d")
-                .attr("stroke", "#d29922");
+                .attr("fill", COLORS.bgTertiary)
+                .attr("stroke", COLORS.orange);
             svg.append("text")
                 .attr("x", 650).attr("y", respY + 32)
-                .attr("fill", "#d29922").attr("font-size", "10px").attr("font-weight", "bold")
+                .attr("fill", COLORS.orange).attr("font-size", "11px").attr("font-weight", "bold")
                 .text("Privacy Guarantee:");
             svg.append("text")
                 .attr("x", 650).attr("y", respY + 50)
-                .attr("fill", "#e6edf3").attr("font-size", "9px")
+                .attr("fill", COLORS.textPrimary).attr("font-size", "11px")
                 .text("Response size is ALWAYS 512 KB");
             svg.append("text")
                 .attr("x", 650).attr("y", respY + 66)
-                .attr("fill", "#e6edf3").attr("font-size", "9px")
+                .attr("fill", COLORS.textPrimary).attr("font-size", "11px")
                 .text("regardless of which entry or");
             svg.append("text")
                 .attr("x", 650).attr("y", respY + 82)
-                .attr("fill", "#e6edf3").attr("font-size", "9px")
+                .attr("fill", COLORS.textPrimary).attr("font-size", "11px")
                 .text("database size was queried.");
             svg.append("text")
                 .attr("x", 650).attr("y", respY + 98)
-                .attr("fill", "#6e7681").attr("font-size", "8px")
+                .attr("fill", COLORS.textMuted).attr("font-size", "11px")
                 .text("(prevents traffic analysis)");
         }
 
@@ -1559,17 +1595,17 @@
             const svg = d3.select("#pipeline-svg");
 
             // Reset colors
-            svg.selectAll(".poly-box").attr("fill", "#21262d");
-            svg.selectAll(".op-box").attr("fill", "#21262d");
-            svg.selectAll(".out-box").attr("fill", "#21262d");
+            svg.selectAll(".poly-box").attr("fill", COLORS.bgTertiary);
+            svg.selectAll(".op-box").attr("fill", COLORS.bgTertiary);
+            svg.selectAll(".out-box").attr("fill", COLORS.bgTertiary);
 
             // Animate polys
             svg.selectAll(".poly-box").each(function(d, i) {
                 d3.select(this)
                     .transition().delay(i * 80).duration(200)
-                    .attr("fill", "#3fb950").attr("opacity", 0.5)
+                    .attr("fill", COLORS.green).attr("opacity", 0.5)
                     .transition().duration(200)
-                    .attr("fill", "#21262d").attr("opacity", 1);
+                    .attr("fill", COLORS.bgTertiary).attr("opacity", 1);
             });
 
             // Animate ops
@@ -1577,9 +1613,9 @@
                 svg.selectAll(".op-box").each(function(d, i) {
                     d3.select(this)
                         .transition().delay(i * 100).duration(300)
-                        .attr("fill", "#d29922").attr("opacity", 0.4)
+                        .attr("fill", COLORS.orange).attr("opacity", 0.4)
                         .transition().duration(300)
-                        .attr("fill", "#21262d").attr("opacity", 1);
+                        .attr("fill", COLORS.bgTertiary).attr("opacity", 1);
                 });
             }, 700);
 
@@ -1588,9 +1624,9 @@
                 svg.selectAll(".out-box").each(function(d, i) {
                     d3.select(this)
                         .transition().delay(i * 60).duration(200)
-                        .attr("fill", "#a371f7").attr("opacity", 0.5)
+                        .attr("fill", COLORS.purple).attr("opacity", 0.5)
                         .transition().duration(200)
-                        .attr("fill", "#21262d").attr("opacity", 1);
+                        .attr("fill", COLORS.bgTertiary).attr("opacity", 1);
                 });
             }, 1400);
 
@@ -1679,41 +1715,31 @@
                 svg.append("circle")
                     .attr("cx", p.x).attr("cy", p.y)
                     .attr("r", isOrigin ? 6 : (isShortest ? 8 : 4))
-                    .attr("fill", isOrigin ? "#d29922" : (isShortest ? "#3fb950" : "#58a6ff"))
+                    .attr("fill", isOrigin ? COLORS.orange : (isShortest ? COLORS.green : COLORS.blue))
                     .attr("opacity", isShortest ? 1 : 0.7);
             });
 
-            // Draw basis vectors
-            const arrowDef = svg.append("defs");
-            arrowDef.append("marker")
-                .attr("id", "arrow-b1").attr("markerWidth", 10).attr("markerHeight", 7)
-                .attr("refX", 9).attr("refY", 3.5).attr("orient", "auto")
-                .append("polygon").attr("points", "0 0, 10 3.5, 0 7").attr("fill", "#ff6b6b");
-            arrowDef.append("marker")
-                .attr("id", "arrow-b2").attr("markerWidth", 10).attr("markerHeight", 7)
-                .attr("refX", 9).attr("refY", 3.5).attr("orient", "auto")
-                .append("polygon").attr("points", "0 0, 10 3.5, 0 7").attr("fill", "#ffd93d");
-
+            // Draw basis vectors (use shared markers)
             // b1 vector
             svg.append("line")
                 .attr("x1", centerX).attr("y1", centerY)
                 .attr("x2", centerX + b1[0] * scale).attr("y2", centerY - b1[1] * scale)
-                .attr("stroke", "#ff6b6b").attr("stroke-width", 3)
-                .attr("marker-end", "url(#arrow-b1)");
+                .attr("stroke", COLORS.red).attr("stroke-width", 3)
+                .attr("marker-end", "url(#arrow-red)");
             svg.append("text")
                 .attr("x", centerX + b1[0] * scale + 10).attr("y", centerY - b1[1] * scale)
-                .attr("fill", "#ff6b6b").attr("font-size", "12px").attr("font-weight", "bold")
+                .attr("fill", COLORS.red).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("b₁");
 
             // b2 vector
             svg.append("line")
                 .attr("x1", centerX).attr("y1", centerY)
                 .attr("x2", centerX + b2[0] * scale).attr("y2", centerY - b2[1] * scale)
-                .attr("stroke", "#ffd93d").attr("stroke-width", 3)
-                .attr("marker-end", "url(#arrow-b2)");
+                .attr("stroke", COLORS.yellow).attr("stroke-width", 3)
+                .attr("marker-end", "url(#arrow-yellow)");
             svg.append("text")
                 .attr("x", centerX + b2[0] * scale + 10).attr("y", centerY - b2[1] * scale)
-                .attr("fill", "#ffd93d").attr("font-size", "12px").attr("font-weight", "bold")
+                .attr("fill", COLORS.yellow).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("b₂");
 
             // SVP highlight
@@ -1721,7 +1747,7 @@
                 svg.append("line")
                     .attr("x1", centerX).attr("y1", centerY)
                     .attr("x2", shortest.x).attr("y2", shortest.y)
-                    .attr("stroke", "#3fb950").attr("stroke-width", 2)
+                    .attr("stroke", COLORS.green).attr("stroke-width", 2)
                     .attr("stroke-dasharray", "5,3");
             }
 
@@ -1730,10 +1756,10 @@
             svg.append("rect")
                 .attr("x", infoX).attr("y", 20)
                 .attr("width", 260).attr("height", 310)
-                .attr("rx", 6).attr("fill", "#21262d").attr("stroke", "#30363d");
+                .attr("rx", 6).attr("fill", COLORS.bgTertiary).attr("stroke", COLORS.border);
 
             svg.append("text").attr("x", infoX + 15).attr("y", 45)
-                .attr("fill", useGoodBasis ? "#3fb950" : "#ff6b6b").attr("font-size", "13px").attr("font-weight", "bold")
+                .attr("fill", useGoodBasis ? COLORS.green : COLORS.red).attr("font-size", "13px").attr("font-weight", "bold")
                 .text(useGoodBasis ? "Good Basis (Short Vectors)" : "Bad Basis (Long Vectors)");
 
             const explanations = useGoodBasis ? [
@@ -1752,13 +1778,13 @@
 
             explanations.forEach((line, i) => {
                 svg.append("text").attr("x", infoX + 15).attr("y", 70 + i * 18)
-                    .attr("fill", line ? "#8b949e" : "transparent").attr("font-size", "11px")
+                    .attr("fill", line ? COLORS.textSecondary : "transparent").attr("font-size", "11px")
                     .text(line);
             });
 
             // SVP explanation
             svg.append("text").attr("x", infoX + 15).attr("y", 180)
-                .attr("fill", "#3fb950").attr("font-size", "12px").attr("font-weight", "bold")
+                .attr("fill", COLORS.green).attr("font-size", "12px").attr("font-weight", "bold")
                 .text("Shortest Vector Problem (SVP):");
 
             const svpLines = [
@@ -1770,20 +1796,20 @@
             ];
             svpLines.forEach((line, i) => {
                 svg.append("text").attr("x", infoX + 15).attr("y", 200 + i * 16)
-                    .attr("fill", "#8b949e").attr("font-size", "10px")
+                    .attr("fill", COLORS.textSecondary).attr("font-size", "11px")
                     .text(line);
             });
 
             // Legend
-            svg.append("circle").attr("cx", infoX + 25).attr("cy", 290).attr("r", 5).attr("fill", "#d29922");
-            svg.append("text").attr("x", infoX + 40).attr("y", 294).attr("fill", "#8b949e").attr("font-size", "10px").text("Origin");
+            svg.append("circle").attr("cx", infoX + 25).attr("cy", 290).attr("r", 5).attr("fill", COLORS.orange);
+            svg.append("text").attr("x", infoX + 40).attr("y", 294).attr("fill", COLORS.textSecondary).attr("font-size", "11px").text("Origin");
             
-            svg.append("circle").attr("cx", infoX + 120).attr("cy", 290).attr("r", 5).attr("fill", "#58a6ff");
-            svg.append("text").attr("x", infoX + 135).attr("y", 294).attr("fill", "#8b949e").attr("font-size", "10px").text("Lattice points");
+            svg.append("circle").attr("cx", infoX + 120).attr("cy", 290).attr("r", 5).attr("fill", COLORS.blue);
+            svg.append("text").attr("x", infoX + 135).attr("y", 294).attr("fill", COLORS.textSecondary).attr("font-size", "11px").text("Lattice points");
 
             if (showSVP) {
-                svg.append("circle").attr("cx", infoX + 25).attr("cy", 310).attr("r", 6).attr("fill", "#3fb950");
-                svg.append("text").attr("x", infoX + 40).attr("y", 314).attr("fill", "#8b949e").attr("font-size", "10px").text("Shortest vector");
+                svg.append("circle").attr("cx", infoX + 25).attr("cy", 310).attr("r", 6).attr("fill", COLORS.green);
+                svg.append("text").attr("x", infoX + 40).attr("y", 314).attr("fill", COLORS.textSecondary).attr("font-size", "11px").text("Shortest vector");
             }
         }
 
