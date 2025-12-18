@@ -26,7 +26,7 @@ lib.rs
 ├── pir             # setup/query/respond/extract API
 │   ├── encode_db
 │   ├── mmap
-│   ├── sqrt_n
+│   ├── modulus_switch
 │   └── ...
 └── ethereum_db     # Ethereum integration
 ```
@@ -195,11 +195,10 @@ run_ypir_batched(&params, protocol_type, &mut measurement);
 |---------|-------------|
 | **Service binaries** | inspire-server, inspire-client, inspire-setup with Axum/Tokio |
 | **Seeded compression** | SeededRlweCiphertext, SeededRgswCiphertext (~50% reduction) |
-| **Modulus switching** | SwitchedSeededRgsw for additional ~50% (75% total) |
+| **Modulus switching** | SwitchedSeededRgsw (experimental, exceeds noise budget with default params) |
 | **Mmap support** | Memory-mapped database for large datasets |
 | **Sharding** | Native multi-shard database support |
 | **Ethereum DB** | Built-in Ethereum state integration |
-| **Sqrt-N API** | Explicit square-root layout variant |
 
 ### Google Only
 

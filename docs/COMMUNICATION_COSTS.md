@@ -103,12 +103,12 @@ With JSON overhead: ~1,296 KB
 
 ### Database Size Effect
 
-| Database Size | Shards | Query Size | Response Size | Server Time |
-|---------------|--------|------------|---------------|-------------|
-| 1K entries | 1 | 230 KB | 544 KB | ~1 ms |
-| 64K entries | 32 | 230 KB | 544 KB | ~1.5 ms |
-| 1M entries | 512 | 230 KB | 544 KB | ~3 ms |
-| 100M entries | 50K | 230 KB | 544 KB | ~3 ms |
+| Database Size | Shards | Query Size (seeded) | Response Size | Server Time |
+|---------------|--------|---------------------|---------------|-------------|
+| 1K entries | 1 | 96 KB | 544 KB | ~1 ms |
+| 64K entries | 32 | 96 KB | 544 KB | ~1.5 ms |
+| 1M entries | 512 | 96 KB | 544 KB | ~3 ms |
+| 100M entries | 50K | 96 KB | 544 KB | ~3 ms |
 
 **The only thing that changes is server computation time** (selecting and processing the correct shard).
 
