@@ -206,11 +206,11 @@ RGSW ciphertext has **2ℓ rows**. Changing parameters:
 
 | Config | Rows | Seeded Size | + Modulus Switch | Net Size |
 |--------|------|-------------|------------------|----------|
-| ℓ=3, B=2^20 (current) | 6 | 98 KB | ✗ (broken) | 98 KB |
-| ℓ=6, B=2^10 | 12 | 196 KB | ✓ (50% off) | 98 KB |
+| ℓ=3, B=2^20 (current) | 6 | 96 KB | ✗ (broken) | 96 KB |
+| ℓ=6, B=2^10 | 12 | 192 KB | ✓ (50% off) | 96 KB |
 | ℓ=8, B=2^8 | 16 | 261 KB | ✓ (50% off) | 130 KB |
 
-**Conclusion**: Doubling ℓ to enable modulus switching results in the same or worse final size. Seeded-only compression (98 KB) is the practical optimum for current security parameters.
+**Conclusion**: Doubling ℓ to enable modulus switching results in the same or worse final size. Seeded-only compression (96 KB) is the practical optimum for current security parameters.
 
 ### When Modulus Switching Does Help
 
