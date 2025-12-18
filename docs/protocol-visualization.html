@@ -574,6 +574,64 @@
             </div>
         </div>
 
+        <!-- Tree Packing (OnePacking) -->
+        <div class="section">
+            <h2>4.5. Automorphism Tree Packing (InsPIRe^1/^2)</h2>
+            <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                <strong style="color: var(--accent-purple);">Key:</strong> Pack d LWE ciphertexts into 1 RLWE using Galois automorphisms. Each level combines pairs using τ(X) = X^(2^k+1).
+            </p>
+            
+            <div class="key-insight" style="margin-bottom: 1rem;">
+                <strong>Why tree packing?</strong> After external product, each column's value is in coefficient 0 of its RLWE. 
+                Simple "shift and add" fails because noise spreads to ALL coefficients. 
+                Automorphisms permute coefficients in a controlled way that preserves encryption structure.
+            </div>
+
+            <svg id="tree-pack-svg" viewBox="0 0 900 420" role="img" aria-labelledby="tree-pack-title">
+                <title id="tree-pack-title">Tree Packing Algorithm showing how 8 LWE ciphertexts are combined into 1 RLWE</title>
+            </svg>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
+                <button id="animate-tree-btn" style="background: var(--accent-purple); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                    Animate Tree Packing
+                </button>
+                <button id="reset-tree-btn" style="background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                    Reset
+                </button>
+            </div>
+            
+            <div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px;">
+                    <h4 style="color: var(--accent-blue); font-size: 0.9rem; margin-bottom: 0.5rem;">Algorithm Steps</h4>
+                    <ol style="color: var(--text-secondary); font-size: 0.85rem; padding-left: 1.2rem; margin: 0;">
+                        <li>Extract LWE from each column RLWE (coeff 0)</li>
+                        <li>Convert LWE a-vectors back to RLWE form</li>
+                        <li>Recursively pair: ct_even + y·ct_odd</li>
+                        <li>Apply automorphism τ_t and key-switch</li>
+                        <li>Add scaled b-values to final result</li>
+                    </ol>
+                </div>
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px;">
+                    <h4 style="color: var(--accent-green); font-size: 0.9rem; margin-bottom: 0.5rem;">Result</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+                        Column k's value appears at coefficient k of the packed RLWE, scaled by d.
+                        <br><br>
+                        <span style="font-family: monospace; color: var(--accent-orange);">
+                            coeff[k] = message[k] × d
+                        </span>
+                    </p>
+                </div>
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px;">
+                    <h4 style="color: var(--accent-orange); font-size: 0.9rem; margin-bottom: 0.5rem;">Complexity</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
+                        <strong>Keys:</strong> log(d) automorphism key-switching matrices<br>
+                        <strong>Operations:</strong> O(n·log(d)) key-switches for n columns<br>
+                        <strong>For d=2048:</strong> 11 KS matrices, ~12ms server overhead
+                    </p>
+                </div>
+            </div>
+        </div>
+
         <!-- Comparison Table -->
         <div class="section">
             <h2>5. Database Size Comparison</h2>
@@ -1800,6 +1858,263 @@
         });
 
         document.getElementById("animate-pipeline-btn").addEventListener("click", animatePipeline);
+
+        // ============================================================
+        // Tree Packing Visualization
+        // ============================================================
+        const treePackSvg = d3.select("#tree-pack-svg");
+        let treeAnimating = false;
+        let treeTimers = [];
+
+        function drawTreePacking(highlightLevel = -1) {
+            treePackSvg.selectAll("*").remove();
+            
+            const width = 900;
+            const height = 420;
+            const nodeRadius = 22;
+            const levelHeight = 90;
+            
+            // 8 LWE inputs at bottom (for visualization, we show 8 even though real is 16)
+            const numInputs = 8;
+            const levels = Math.log2(numInputs) + 1; // 4 levels: inputs + 3 merge levels
+            
+            // Build tree structure
+            const nodes = [];
+            const edges = [];
+            
+            // Level 0: Leaf nodes (LWE ciphertexts)
+            const leafY = height - 50;
+            const leafSpacing = width / (numInputs + 1);
+            for (let i = 0; i < numInputs; i++) {
+                nodes.push({
+                    id: `leaf-${i}`,
+                    level: 0,
+                    x: leafSpacing * (i + 1),
+                    y: leafY,
+                    label: `LWE${i}`,
+                    sublabel: `m${i}`,
+                    isLeaf: true
+                });
+            }
+            
+            // Level 1: First merge (4 nodes)
+            const level1Y = leafY - levelHeight;
+            const level1Spacing = width / 5;
+            for (let i = 0; i < 4; i++) {
+                const nodeId = `l1-${i}`;
+                nodes.push({
+                    id: nodeId,
+                    level: 1,
+                    x: level1Spacing * (i + 1),
+                    y: level1Y,
+                    label: `RLWE`,
+                    sublabel: `[${i*2},${i*2+1}]`,
+                    operation: `+ y₁·`
+                });
+                // Edges from children
+                edges.push({ from: `leaf-${i*2}`, to: nodeId, level: 1 });
+                edges.push({ from: `leaf-${i*2+1}`, to: nodeId, level: 1, isOdd: true });
+            }
+            
+            // Level 2: Second merge (2 nodes)
+            const level2Y = level1Y - levelHeight;
+            const level2Spacing = width / 3;
+            for (let i = 0; i < 2; i++) {
+                const nodeId = `l2-${i}`;
+                nodes.push({
+                    id: nodeId,
+                    level: 2,
+                    x: level2Spacing * (i + 1),
+                    y: level2Y,
+                    label: `RLWE`,
+                    sublabel: `[${i*4}..${i*4+3}]`,
+                    operation: `+ y₂·`
+                });
+                edges.push({ from: `l1-${i*2}`, to: nodeId, level: 2 });
+                edges.push({ from: `l1-${i*2+1}`, to: nodeId, level: 2, isOdd: true });
+            }
+            
+            // Level 3: Final merge (1 node)
+            const level3Y = level2Y - levelHeight;
+            nodes.push({
+                id: `root`,
+                level: 3,
+                x: width / 2,
+                y: level3Y,
+                label: `Packed`,
+                sublabel: `[0..7]`,
+                operation: `+ y₃·`,
+                isRoot: true
+            });
+            edges.push({ from: `l2-0`, to: `root`, level: 3 });
+            edges.push({ from: `l2-1`, to: `root`, level: 3, isOdd: true });
+            
+            // Draw edges
+            const nodeMap = {};
+            nodes.forEach(n => nodeMap[n.id] = n);
+            
+            edges.forEach(e => {
+                const from = nodeMap[e.from];
+                const to = nodeMap[e.to];
+                const isHighlighted = highlightLevel === e.level;
+                const isPast = highlightLevel > e.level;
+                
+                treePackSvg.append("line")
+                    .attr("x1", from.x)
+                    .attr("y1", from.y - nodeRadius)
+                    .attr("x2", to.x)
+                    .attr("y2", to.y + nodeRadius)
+                    .attr("stroke", e.isOdd ? COLORS.orange : COLORS.blue)
+                    .attr("stroke-width", isHighlighted ? 3 : 2)
+                    .attr("opacity", highlightLevel === -1 ? 0.6 : (isHighlighted ? 1 : (isPast ? 0.8 : 0.2)))
+                    .attr("stroke-dasharray", e.isOdd ? "5,3" : "none");
+            });
+            
+            // Draw operation labels on edges (y multiplication)
+            if (highlightLevel >= 1) {
+                const yLabels = [
+                    { level: 1, y: (leafY + level1Y) / 2, text: "×X^(d/2)" },
+                    { level: 2, y: (level1Y + level2Y) / 2, text: "×X^(d/4)" },
+                    { level: 3, y: (level2Y + level3Y) / 2, text: "×X^(d/8)" }
+                ];
+                yLabels.forEach(yl => {
+                    if (highlightLevel >= yl.level) {
+                        treePackSvg.append("text")
+                            .attr("x", width - 80)
+                            .attr("y", yl.y)
+                            .attr("fill", COLORS.orange)
+                            .attr("font-size", "11px")
+                            .attr("font-family", "monospace")
+                            .attr("opacity", highlightLevel === yl.level ? 1 : 0.5)
+                            .text(yl.text);
+                    }
+                });
+            }
+            
+            // Draw nodes
+            nodes.forEach(n => {
+                const isHighlighted = highlightLevel === n.level || (n.isRoot && highlightLevel >= 3);
+                const isPast = highlightLevel > n.level;
+                
+                let fillColor = n.isLeaf ? COLORS.blue : (n.isRoot ? COLORS.green : COLORS.purple);
+                let opacity = highlightLevel === -1 ? 0.8 : (isHighlighted ? 1 : (isPast ? 0.7 : 0.3));
+                
+                // Node circle
+                treePackSvg.append("circle")
+                    .attr("cx", n.x)
+                    .attr("cy", n.y)
+                    .attr("r", n.isRoot ? nodeRadius + 4 : nodeRadius)
+                    .attr("fill", fillColor)
+                    .attr("opacity", opacity)
+                    .attr("stroke", isHighlighted ? COLORS.textPrimary : "none")
+                    .attr("stroke-width", 2);
+                
+                // Label
+                treePackSvg.append("text")
+                    .attr("x", n.x)
+                    .attr("y", n.y - 3)
+                    .attr("text-anchor", "middle")
+                    .attr("fill", COLORS.textPrimary)
+                    .attr("font-size", n.isLeaf ? "9px" : "10px")
+                    .attr("font-weight", "bold")
+                    .attr("opacity", opacity)
+                    .text(n.label);
+                
+                // Sublabel
+                treePackSvg.append("text")
+                    .attr("x", n.x)
+                    .attr("y", n.y + 10)
+                    .attr("text-anchor", "middle")
+                    .attr("fill", COLORS.textSecondary)
+                    .attr("font-size", "8px")
+                    .attr("opacity", opacity)
+                    .text(n.sublabel);
+            });
+            
+            // Level labels on left
+            const levelLabels = [
+                { y: leafY, text: "Input LWEs", color: COLORS.blue },
+                { y: level1Y, text: "Level 1: τ₃", color: COLORS.purple },
+                { y: level2Y, text: "Level 2: τ₅", color: COLORS.purple },
+                { y: level3Y, text: "Level 3: τ₉", color: COLORS.green }
+            ];
+            levelLabels.forEach((ll, i) => {
+                const isHighlighted = highlightLevel === i;
+                treePackSvg.append("text")
+                    .attr("x", 15)
+                    .attr("y", ll.y + 5)
+                    .attr("fill", ll.color)
+                    .attr("font-size", "11px")
+                    .attr("font-weight", isHighlighted ? "bold" : "normal")
+                    .attr("opacity", highlightLevel === -1 ? 0.8 : (isHighlighted ? 1 : 0.4))
+                    .text(ll.text);
+            });
+            
+            // Legend
+            const legendY = 25;
+            treePackSvg.append("line")
+                .attr("x1", width - 200).attr("y1", legendY)
+                .attr("x2", width - 170).attr("y2", legendY)
+                .attr("stroke", COLORS.blue).attr("stroke-width", 2);
+            treePackSvg.append("text")
+                .attr("x", width - 165).attr("y", legendY + 4)
+                .attr("fill", COLORS.textSecondary).attr("font-size", "10px")
+                .text("even child");
+                
+            treePackSvg.append("line")
+                .attr("x1", width - 100).attr("y1", legendY)
+                .attr("x2", width - 70).attr("y2", legendY)
+                .attr("stroke", COLORS.orange).attr("stroke-width", 2)
+                .attr("stroke-dasharray", "5,3");
+            treePackSvg.append("text")
+                .attr("x", width - 65).attr("y", legendY + 4)
+                .attr("fill", COLORS.textSecondary).attr("font-size", "10px")
+                .text("odd (×y)");
+            
+            // Title
+            treePackSvg.append("text")
+                .attr("x", width / 2)
+                .attr("y", 20)
+                .attr("text-anchor", "middle")
+                .attr("fill", COLORS.purple)
+                .attr("font-size", "14px")
+                .attr("font-weight", "bold")
+                .text("Automorphism Tree Packing: 8 LWEs → 1 RLWE");
+        }
+        
+        function animateTreePacking() {
+            if (treeAnimating) return;
+            treeAnimating = true;
+            
+            // Clear previous timers
+            treeTimers.forEach(t => clearTimeout(t));
+            treeTimers = [];
+            
+            let level = 0;
+            function step() {
+                drawTreePacking(level);
+                level++;
+                if (level <= 4) {
+                    const timer = setTimeout(step, 1200);
+                    treeTimers.push(timer);
+                } else {
+                    treeAnimating = false;
+                }
+            }
+            step();
+        }
+        
+        // Initial draw
+        drawTreePacking();
+        
+        // Event listeners
+        document.getElementById("animate-tree-btn").addEventListener("click", animateTreePacking);
+        document.getElementById("reset-tree-btn").addEventListener("click", () => {
+            treeTimers.forEach(t => clearTimeout(t));
+            treeTimers = [];
+            treeAnimating = false;
+            drawTreePacking();
+        });
 
         // ============================================================
         // A.1 Lattice Basics Visualization
