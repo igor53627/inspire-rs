@@ -410,7 +410,10 @@
         <div class="section">
             <h2>1. Protocol Flow</h2>
             <div id="protocol-flow">
-                <svg id="flow-svg" viewBox="0 0 900 320"></svg>
+                <svg id="flow-svg" viewBox="0 0 900 320" role="img" aria-labelledby="flow-title flow-desc">
+                    <title id="flow-title">PIR Protocol Flow Diagram</title>
+                    <desc id="flow-desc">Animated sequence diagram showing client-server communication: Query (RGSW ciphertext), Server Processing (external product), Response (RLWE ciphertext), and Client Extraction.</desc>
+                </svg>
                 <div class="flow-controls">
                     <button id="play-btn">Play Animation</button>
                     <button id="reset-btn">Reset</button>
@@ -428,10 +431,14 @@
             </div>
             <div id="size-breakdown">
                 <div class="chart-container">
-                    <svg id="query-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet"></svg>
+                    <svg id="query-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="query-chart-title">
+                        <title id="query-chart-title">Query Size Breakdown Chart</title>
+                    </svg>
                 </div>
                 <div class="chart-container">
-                    <svg id="response-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet"></svg>
+                    <svg id="response-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="response-chart-title">
+                        <title id="response-chart-title">Response Size Breakdown Chart</title>
+                    </svg>
                 </div>
             </div>
             <div class="legend">
@@ -516,7 +523,9 @@
             <!-- Shard Selection -->
             <div style="margin-bottom: 1.5rem;">
                 <h3 style="color: var(--accent-blue); font-size: 1rem; margin-bottom: 0.5rem;">Step 1: Shard Selection</h3>
-                <svg id="shard-svg" viewBox="0 0 900 180"></svg>
+                <svg id="shard-svg" viewBox="0 0 900 180" role="img" aria-labelledby="shard-title">
+                    <title id="shard-title">Shard Selection visualization showing database partitioning</title>
+                </svg>
                 <div class="server-controls" style="margin-top: 0.5rem;">
                     <label style="color: var(--text-secondary); font-size: 0.9rem;">
                         Database size: 
@@ -533,7 +542,9 @@
             <!-- Processing Pipeline -->
             <div style="margin-bottom: 1.5rem;">
                 <h3 style="color: var(--accent-green); font-size: 1rem; margin-bottom: 0.5rem;">Step 2: External Product (Parallel)</h3>
-                <svg id="pipeline-svg" viewBox="0 0 900 280"></svg>
+                <svg id="pipeline-svg" viewBox="0 0 900 280" role="img" aria-labelledby="pipeline-title">
+                    <title id="pipeline-title">Server Processing Pipeline showing parallel external product operations</title>
+                </svg>
                 <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
                     <button id="animate-pipeline-btn" style="background: var(--accent-green); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         Animate Processing
@@ -544,7 +555,9 @@
             <!-- Output Assembly -->
             <div>
                 <h3 style="color: var(--accent-purple); font-size: 1rem; margin-bottom: 0.5rem;">Step 3: Response Assembly</h3>
-                <svg id="output-svg" viewBox="0 0 900 150"></svg>
+                <svg id="output-svg" viewBox="0 0 900 150" role="img" aria-labelledby="output-title">
+                    <title id="output-title">Response Assembly showing ServerResponse structure and network transmission</title>
+                </svg>
             </div>
         </div>
 
@@ -623,7 +636,9 @@
                 <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
                     A lattice is a regular grid of points. Security comes from the hardness of finding short vectors.
                 </p>
-                <svg id="lattice-svg" viewBox="0 0 900 350"></svg>
+                <svg id="lattice-svg" viewBox="0 0 900 350" role="img" aria-labelledby="lattice-title">
+                    <title id="lattice-title">2D Lattice visualization showing basis vectors and the Shortest Vector Problem</title>
+                </svg>
                 <div style="display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
                     <button id="toggle-basis-btn" style="background: var(--accent-blue); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         Toggle Good/Bad Basis
@@ -640,7 +655,9 @@
                 <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
                     Gaussian noise hides the secret. Without noise, the problem would be easy linear algebra.
                 </p>
-                <svg id="error-svg" viewBox="0 0 900 280"></svg>
+                <svg id="error-svg" viewBox="0 0 900 280" role="img" aria-labelledby="error-title">
+                    <title id="error-title">Discrete Gaussian Error Distribution histogram with adjustable sigma parameter</title>
+                </svg>
                 <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem;">
                     <label style="color: var(--text-secondary); font-size: 0.85rem;">
                         Noise σ: <span id="sigma-value">3.2</span>
@@ -659,7 +676,9 @@
                 <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
                     R_q = Z_q[X]/(X^d + 1): Polynomials with cyclic structure. Multiplication by X rotates coefficients.
                 </p>
-                <svg id="ring-svg" viewBox="0 0 900 320"></svg>
+                <svg id="ring-svg" viewBox="0 0 900 320" role="img" aria-labelledby="ring-title">
+                    <title id="ring-title">Polynomial Ring Structure showing cyclic coefficient rotation when multiplying by X</title>
+                </svg>
                 <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
                     <button id="rotate-ring-btn" style="background: var(--accent-purple); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         Multiply by X (Rotate)
@@ -1114,13 +1133,44 @@
             drawChart("#response-chart", data.response, "Response Breakdown", COLORS.green);
         }
 
-        // Format toggle
-        document.querySelectorAll(".format-toggle button").forEach(btn => {
+        // Format toggle with keyboard accessibility
+        document.querySelectorAll(".format-toggle button").forEach((btn, index, buttons) => {
+            // Add ARIA attributes
+            btn.setAttribute("role", "tab");
+            btn.setAttribute("aria-selected", btn.classList.contains("active") ? "true" : "false");
+            btn.setAttribute("tabindex", btn.classList.contains("active") ? "0" : "-1");
+            
             btn.addEventListener("click", function() {
-                document.querySelectorAll(".format-toggle button").forEach(b => b.classList.remove("active"));
+                document.querySelectorAll(".format-toggle button").forEach(b => {
+                    b.classList.remove("active");
+                    b.setAttribute("aria-selected", "false");
+                    b.setAttribute("tabindex", "-1");
+                });
                 this.classList.add("active");
+                this.setAttribute("aria-selected", "true");
+                this.setAttribute("tabindex", "0");
                 currentFormat = this.dataset.format;
                 updateCharts();
+            });
+            
+            // Keyboard navigation (arrow keys)
+            btn.addEventListener("keydown", function(e) {
+                let targetIndex = index;
+                if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                    targetIndex = (index + 1) % buttons.length;
+                    e.preventDefault();
+                } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                    targetIndex = (index - 1 + buttons.length) % buttons.length;
+                    e.preventDefault();
+                } else if (e.key === "Enter" || e.key === " ") {
+                    this.click();
+                    e.preventDefault();
+                    return;
+                }
+                if (targetIndex !== index) {
+                    buttons[targetIndex].click();
+                    buttons[targetIndex].focus();
+                }
             });
         });
 
