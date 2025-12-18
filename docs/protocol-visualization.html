@@ -1492,8 +1492,9 @@
 
             // External product operations (parallel)
             const opY = 110;
-            const opWidth = 140;
+            const opWidth = 155;
             const opHeight = 50;
+            const opGap = 20;
 
             svg.append("text")
                 .attr("x", 20).attr("y", opY + 10)
@@ -1501,7 +1502,7 @@
                 .text("Parallel:");
 
             for (let i = 0; i < 4; i++) {
-                const x = 100 + i * (opWidth + 30);
+                const x = 100 + i * (opWidth + opGap);
                 
                 const opGroup = svg.append("g")
                     .attr("class", "op-group")
@@ -1529,19 +1530,19 @@
                 opGroup.append("text")
                     .attr("x", x + opWidth / 2).attr("y", opY + 20)
                     .attr("text-anchor", "middle").attr("fill", COLORS.orange).attr("font-size", "11px").attr("font-weight", "bold")
-                    .text("external_product");
+                    .text("ext_product ⊡");
 
                 opGroup.append("text")
                     .attr("x", x + opWidth / 2).attr("y", opY + 36)
-                    .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "11px")
+                    .attr("text-anchor", "middle").attr("fill", COLORS.textSecondary).attr("font-size", "10px")
                     .attr("font-family", "monospace")
-                    .text(`RLWE(h_${i}) ⊡ RGSW`);
+                    .text(`RLWE(h_${i}) × RGSW`);
             }
 
             svg.append("text")
-                .attr("x", 100 + 4 * (opWidth + 30) + 20).attr("y", opY + 30)
+                .attr("x", 100 + 4 * (opWidth + opGap) + 10).attr("y", opY + 30)
                 .attr("fill", COLORS.textSecondary).attr("font-size", "12px")
-                .text("... x16");
+                .text("...x16");
 
             // Output ciphertexts
             const outY = 190;
