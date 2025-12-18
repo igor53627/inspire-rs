@@ -256,7 +256,7 @@ mod tests {
     use crate::math::GaussianSampler;
     use crate::pir::query::query;
     use crate::pir::respond::respond;
-    use crate::pir::setup::setup_with_secret_key;
+    use crate::pir::setup::setup;
 
     fn test_params() -> crate::params::InspireParams {
         crate::params::InspireParams {
@@ -281,7 +281,7 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
         let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
@@ -306,7 +306,7 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 10u64;
         let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
@@ -328,7 +328,7 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 5u64;
         let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
@@ -370,7 +370,7 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup_with_secret_key(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 15u64;
         let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
