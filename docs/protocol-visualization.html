@@ -428,16 +428,16 @@
         <div class="section">
             <h2>2. Size Breakdown</h2>
             <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
-                <strong style="color: var(--accent-green);">Key:</strong> Communication costs are fixed by crypto parameters, not database size. ~600KB total with binary encoding.
+                <strong style="color: var(--accent-green);">Key:</strong> InsPIRe offers 4 protocol variants trading server computation for bandwidth. ^1 achieves 3.3x reduction, ^2 achieves 5.7x, ^2+ achieves 9.2x.
             </p>
             <div class="format-toggle">
-                <button class="active" data-format="seeded-binary">Seeded + Binary (~640 KB)</button>
-                <button data-format="switched-binary">Switched + Seeded (~560 KB)*</button>
-                <button data-format="seeded-json">Seeded JSON (~1,450 KB)</button>
-                <button data-format="json">Full JSON (~1,678 KB)</button>
+                <button data-format="inspire0">InsPIRe^0 (~737 KB)</button>
+                <button class="active" data-format="inspire1">InsPIRe^1 (~224 KB)</button>
+                <button data-format="inspire2">InsPIRe^2 (~128 KB)</button>
+                <button data-format="inspire2plus">InsPIRe^2+ (~80 KB)*</button>
             </div>
             <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                *Switched format exceeds noise budget with current parameters. See <a href="COMMUNICATION_COSTS.md#modulus-switching-tradeoffs">tradeoffs</a>.
+                *InsPIRe^2+ uses modulus switching which may exceed noise budget with default parameters. See <a href="COMMUNICATION_COSTS.md#modulus-switching-tradeoffs">tradeoffs</a>.
             </p>
             <div id="size-breakdown">
                 <div class="chart-container">
@@ -997,60 +997,70 @@
         // Size Breakdown Charts
         // ============================================================
         // Actual formulas from code:
-        // Query (seeded): 2*l rows, each with 32-byte seed + d*8 byte b-polynomial
-        // Response: num_columns = (entry_size*8+15)/16, each column is 2*d*8 bytes
-        // For d=2048, l=3, entry_size=32: query=2*3*(32+2048*8)=98,496 bytes, response=16*2*2048*8=524,288 bytes
+        // InsPIRe Protocol Variants (d=2048, l=3, entry_size=32, 16 columns)
+        // Measured sizes from test_inspire_sizes_production:
+        // - Full query: 196,848 bytes (192.2 KB)
+        // - Seeded query: 98,634 bytes (96.3 KB)
+        // - Switched query: 49,524 bytes (48.4 KB)
+        // - NoPacking response: 557,642 bytes (544.6 KB)
+        // - OnePacking response: 32,810 bytes (32.0 KB)
         const formatData = {
-            "switched-binary": {
+            "inspire0": {
+                name: "InsPIRe^0 (NoPacking)",
+                description: "Full query + unpacked response (one RLWE per column)",
+                query: [
+                    { name: "RGSW a-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
+                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" }
+                ],
+                response: [
+                    { name: "16 RLWE ciphertexts", size: 545, formula: "16 cols * 2 * 2048 * 8 = 524,288 B + metadata" }
+                ],
+                totalQuery: 192,
+                totalResponse: 545
+            },
+            "inspire1": {
+                name: "InsPIRe^1 (OnePacking)",
+                description: "Full query + tree-packed response (single RLWE via automorphisms)",
+                query: [
+                    { name: "RGSW a-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
+                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" }
+                ],
+                response: [
+                    { name: "1 packed RLWE", size: 32, formula: "2 * 2048 * 8 = 32,768 B (17x smaller!)" }
+                ],
+                totalQuery: 192,
+                totalResponse: 32
+            },
+            "inspire2": {
+                name: "InsPIRe^2 (Seeded + Packed)",
+                description: "Seeded query (50% smaller) + tree-packed response",
+                query: [
+                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
+                    { name: "Seeds (32B each)", size: 0.19, formula: "2l * 32 = 6 * 32 = 192 B" }
+                ],
+                response: [
+                    { name: "1 packed RLWE", size: 32, formula: "2 * 2048 * 8 = 32,768 B" }
+                ],
+                totalQuery: 96,
+                totalResponse: 32
+            },
+            "inspire2plus": {
+                name: "InsPIRe^2+ (Switched + Packed)",
+                description: "Switched+seeded query (75% smaller) + tree-packed response",
                 query: [
                     { name: "RGSW b-polynomials (u32)", size: 48, formula: "2l * d * 4 = 6 * 2048 * 4 = 49,152 B" },
                     { name: "Seeds (32B each)", size: 0.19, formula: "2l * 32 = 6 * 32 = 192 B" },
                     { name: "Modulus metadata", size: 0.1, formula: "original_q + switched_q per poly" }
                 ],
                 response: [
-                    { name: "RLWE ciphertexts", size: 512, formula: "16 cols * 2 * 2048 * 8 = 524,288 B" }
+                    { name: "1 packed RLWE", size: 32, formula: "2 * 2048 * 8 = 32,768 B" }
                 ],
                 totalQuery: 48,
-                totalResponse: 512
-            },
-            "seeded-binary": {
-                query: [
-                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
-                    { name: "Seeds (32B each)", size: 0.19, formula: "2l * 32 = 6 * 32 = 192 B" }
-                ],
-                response: [
-                    { name: "RLWE ciphertexts", size: 512, formula: "16 cols * 2 * 2048 * 8 = 524,288 B" }
-                ],
-                totalQuery: 96,
-                totalResponse: 512
-            },
-            "seeded-json": {
-                query: [
-                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8" },
-                    { name: "Seeds", size: 0.19, formula: "2l * 32 bytes" },
-                    { name: "JSON overhead", size: 134, formula: "~140% text encoding (base64 + structure)" }
-                ],
-                response: [
-                    { name: "RLWE ciphertexts (JSON)", size: 1220, formula: "~2.4x binary size" }
-                ],
-                totalQuery: 230,
-                totalResponse: 1220
-            },
-            "json": {
-                query: [
-                    { name: "RGSW a-polynomials", size: 96, formula: "2l * d * 8" },
-                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8" },
-                    { name: "JSON overhead", size: 266, formula: "~140% text encoding" }
-                ],
-                response: [
-                    { name: "RLWE ciphertexts (JSON)", size: 1220, formula: "~2.4x binary size" }
-                ],
-                totalQuery: 458,
-                totalResponse: 1220
+                totalResponse: 32
             }
         };
 
-        let currentFormat = "seeded-binary";
+        let currentFormat = "inspire1";
         const tooltip = d3.select("#tooltip");
         
         // Throttle chart tooltip with requestAnimationFrame

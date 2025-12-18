@@ -152,6 +152,40 @@ pub fn generate_ks_matrix(
     }
 }
 
+/// Generate a key-switching matrix for LWE-to-RLWE packing
+///
+/// This creates a key-switching matrix that maps from an LWE secret key
+/// (embedded as an RLWE polynomial) to an RLWE secret key.
+///
+/// Used by InspiRING packing to convert LWE ciphertexts extracted via
+/// sample_extract_coeff0() back into valid RLWE ciphertexts.
+///
+/// # Arguments
+/// * `lwe_sk` - LWE secret key (whose coefficients match the negacyclic extraction pattern)
+/// * `rlwe_sk` - Target RLWE secret key
+/// * `gadget` - Gadget vector parameters
+/// * `sampler` - Gaussian sampler for error
+/// * `ctx` - NTT context
+pub fn generate_packing_ks_matrix(
+    lwe_sk: &crate::lwe::LweSecretKey,
+    rlwe_sk: &RlweSecretKey,
+    gadget: &GadgetVector,
+    sampler: &mut GaussianSampler,
+    ctx: &NttContext,
+) -> KeySwitchingMatrix {
+    let d = rlwe_sk.ring_dim();
+    let q = rlwe_sk.modulus();
+
+    debug_assert_eq!(lwe_sk.dim, d, "LWE key dimension must match RLWE ring dimension");
+    debug_assert_eq!(lwe_sk.q, q, "LWE key modulus must match RLWE modulus");
+
+    let lwe_as_rlwe = RlweSecretKey::from_poly(
+        Poly::from_coeffs(lwe_sk.coeffs.clone(), q)
+    );
+
+    generate_ks_matrix(&lwe_as_rlwe, rlwe_sk, gadget, sampler, ctx)
+}
+
 /// Generate a key-switching matrix for automorphism
 ///
 /// For Galois automorphism τ_g, creates a matrix from τ_g(s) to s.

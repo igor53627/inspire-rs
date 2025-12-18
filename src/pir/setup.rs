@@ -10,7 +10,8 @@
 use eyre::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::ks::{generate_automorphism_ks_matrix, KeySwitchingMatrix};
+use crate::ks::{generate_automorphism_ks_matrix, generate_packing_ks_matrix, KeySwitchingMatrix};
+use crate::lwe::LweSecretKey;
 use crate::math::{GaussianSampler, NttContext, Poly};
 use crate::params::{InspireParams, ShardConfig};
 use crate::rgsw::GadgetVector;
@@ -33,6 +34,12 @@ pub struct ServerCrs {
     pub rgsw_gadget: GadgetVector,
     /// Fixed random vectors for CRS mode (one per LWE ciphertext slot)
     pub crs_a_vectors: Vec<Vec<u64>>,
+    /// Key-switching matrix for InspiRING packing (LWE→RLWE, generator g)
+    /// Required for OnePacking/TwoPacking variants
+    pub packing_k_g: Option<KeySwitchingMatrix>,
+    /// Key-switching matrix for InspiRING packing (LWE→RLWE, conjugation h)
+    /// Required for full packing (d ciphertexts)
+    pub packing_k_h: Option<KeySwitchingMatrix>,
 }
 
 impl ServerCrs {
@@ -110,13 +117,15 @@ pub fn setup(
     let k_g = generate_automorphism_ks_matrix(&rlwe_sk, g1, &gadget, sampler, &ctx);
     let k_h = generate_automorphism_ks_matrix(&rlwe_sk, g2, &gadget, sampler, &ctx);
 
-    let mut galois_keys = Vec::new();
-    let mut g_power = g1;
+    // Generate galois keys for tree packing automorphisms
+    // For tree packing we need τ_t where t = d/2^i + 1 for i = 0..log_d
+    // These allow combining ciphertexts in the packing tree
     let log_d = (d as f64).log2() as usize;
-    for _ in 0..log_d {
-        let ks_matrix = generate_automorphism_ks_matrix(&rlwe_sk, g_power, &gadget, sampler, &ctx);
+    let mut galois_keys = Vec::with_capacity(log_d);
+    for i in 0..log_d {
+        let t = (d >> i) + 1; // t = d/2^i + 1
+        let ks_matrix = generate_automorphism_ks_matrix(&rlwe_sk, t, &gadget, sampler, &ctx);
         galois_keys.push(ks_matrix);
-        g_power = (g_power * g_power) % (2 * d);
     }
 
     let crs_a_vectors: Vec<Vec<u64>> = (0..d)
@@ -125,6 +134,10 @@ pub fn setup(
             poly.coeffs().to_vec()
         })
         .collect();
+
+    let lwe_sk = LweSecretKey::from_rlwe(&rlwe_sk);
+    let packing_k_g = generate_packing_ks_matrix(&lwe_sk, &rlwe_sk, &gadget, sampler, &ctx);
+    let packing_k_h = generate_packing_ks_matrix(&lwe_sk, &rlwe_sk, &gadget, sampler, &ctx);
 
     let shard_data = encode_database(database, entry_size, params, &shard_config);
 
@@ -135,6 +148,8 @@ pub fn setup(
         galois_keys,
         rgsw_gadget: gadget,
         crs_a_vectors,
+        packing_k_g: Some(packing_k_g),
+        packing_k_h: Some(packing_k_h),
     };
 
     let encoded_db = EncodedDatabase {
@@ -168,7 +183,7 @@ mod tests {
             ring_dim: 256,
             q: 1152921504606830593,
             p: 65536,
-            sigma: 3.2,
+            sigma: 6.4,
             gadget_base: 1 << 20,
             gadget_len: 3,
             security_level: crate::params::SecurityLevel::Bits128,

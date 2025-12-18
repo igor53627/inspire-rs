@@ -72,7 +72,7 @@ lib.rs
 |-----------|------------|--------|
 | Ring dimension (d) | 2048 (configurable) | 2048 (fixed) |
 | Modulus (q) | Single ~2^60 prime | CRT: [268369921, 249561089] |
-| Noise (sigma) | 3.2 | 6.4 |
+| Noise (sigma) | 6.4 | 6.4 |
 | Gadget base | 2^20 | ~2^19-2^20 |
 | Gadget digits | 3 | 3 (t_gsw), varies for t_exp_* |
 | Plaintext modulus (p) | 65536 | Scenario-dependent (2^14-2^16) |

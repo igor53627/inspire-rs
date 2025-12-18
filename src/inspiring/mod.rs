@@ -35,14 +35,21 @@
 //! // let packed = pack_online(&b_values, &precomp, &k_g, &k_h, &params);
 //! ```
 
+pub mod automorph_pack;
 mod collapse;
 mod collapse_one;
 mod pack;
+mod simple_pack;
 mod transform;
 mod types;
 
+pub use automorph_pack::{
+    homomorphic_automorph, pack_lwes, pack_lwes_inner, pack_rlwes_tree, pack_single_lwe,
+    prep_pack_lwes, YConstants,
+};
 pub use collapse::{collapse, collapse_half, collapse_partial};
 pub use collapse_one::collapse_one;
 pub use pack::{pack, pack_online, partial_pack, precompute_packing, PackingPrecomputation};
+pub use simple_pack::{pack_lwe_to_rlwe, pack_rlwe_coeffs};
 pub use transform::{aggregate, transform, transform_at_slot, transform_partial};
 pub use types::{AggregatedCiphertext, IntermediateCiphertext};

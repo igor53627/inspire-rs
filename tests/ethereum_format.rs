@@ -11,7 +11,7 @@ fn test_params() -> InspireParams {
         ring_dim: 256,
         q: 1152921504606830593,
         p: 65536,
-        sigma: 3.2,
+        sigma: 6.4,
         gadget_base: 1 << 20,
         gadget_len: 3,
         security_level: SecurityLevel::Bits128,

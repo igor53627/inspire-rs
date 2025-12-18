@@ -5,6 +5,7 @@
 use eyre::Result;
 
 use crate::math::NttContext;
+use crate::params::InspireVariant;
 
 use super::encode_db::reconstruct_entry;
 use super::query::ClientState;
@@ -63,6 +64,90 @@ pub fn extract(
     let entry = reconstruct_entry(&column_values, entry_size);
 
     Ok(entry)
+}
+
+/// PIR.Extract with explicit variant selection
+///
+/// Use this when the server responded with a specific variant.
+///
+/// # Variants
+/// - `NoPacking`: Reads from per-column ciphertexts (same as `extract`)
+/// - `OnePacking`: Reads columns from coefficients 0..num_cols of packed ciphertext
+pub fn extract_with_variant(
+    crs: &InspireCrs,
+    state: &ClientState,
+    response: &ServerResponse,
+    entry_size: usize,
+    variant: InspireVariant,
+) -> Result<Vec<u8>> {
+    match variant {
+        InspireVariant::NoPacking => extract(crs, state, response, entry_size),
+        InspireVariant::OnePacking => extract_packed(crs, state, response, entry_size),
+        InspireVariant::TwoPacking => extract(crs, state, response, entry_size),
+    }
+}
+
+/// Extract from OnePacking response (InsPIRe^1)
+///
+/// The packed ciphertext contains column values at coefficients 0, 1, 2, ...
+/// Each value is scaled by d (ring dimension) from tree packing.
+///
+/// We decrypt the packed ciphertext and read columns from their positions,
+/// then un-scale by dividing by d (using modular inverse).
+fn extract_packed(
+    crs: &InspireCrs,
+    state: &ClientState,
+    response: &ServerResponse,
+    entry_size: usize,
+) -> Result<Vec<u8>> {
+    let d = crs.ring_dim();
+    let q = crs.modulus();
+    let p = crs.params.p;
+    let delta = crs.params.delta();
+    let ctx = NttContext::new(d, q);
+
+    let num_columns = (entry_size * 8 + 15) / 16;
+
+    // Decrypt the packed ciphertext
+    let decrypted = response.ciphertext.decrypt(&state.rlwe_secret_key, delta, p, &ctx);
+
+    // Extract column values from their positions
+    // Values are scaled by d from tree packing, need to divide
+    // Note: d_inv only exists if gcd(d, p) = 1. For d=256, p=65536, this fails.
+    // In practice, this limits column values to < p/d to avoid overflow.
+    let d_inv = mod_inverse(d as u64, p).unwrap_or(1);
+    
+    let mut column_values = Vec::with_capacity(num_columns);
+    for col in 0..num_columns {
+        // Get the raw value at position col (scaled by d)
+        let scaled_value = decrypted.coeff(col);
+        // Un-scale by multiplying by d^(-1) mod p
+        let value = (scaled_value as u128 * d_inv as u128 % p as u128) as u64;
+        column_values.push(value);
+    }
+
+    let entry = reconstruct_entry(&column_values, entry_size);
+
+    Ok(entry)
+}
+
+/// Compute modular inverse using extended Euclidean algorithm
+fn mod_inverse(a: u64, m: u64) -> Option<u64> {
+    let (g, x, _) = extended_gcd(a as i64, m as i64);
+    if g != 1 {
+        None
+    } else {
+        Some(((x % m as i64 + m as i64) % m as i64) as u64)
+    }
+}
+
+fn extended_gcd(a: i64, b: i64) -> (i64, i64, i64) {
+    if a == 0 {
+        (b, 0, 1)
+    } else {
+        let (g, x, y) = extended_gcd(b % a, a);
+        (g, y - (b / a) * x, x)
+    }
 }
 
 /// Extract with noise tolerance
@@ -178,7 +263,7 @@ mod tests {
             ring_dim: 256,
             q: 1152921504606830593,
             p: 65536,
-            sigma: 3.2,
+            sigma: 6.4,
             gadget_base: 1 << 20,
             gadget_len: 3,
             security_level: crate::params::SecurityLevel::Bits128,

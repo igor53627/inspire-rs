@@ -3,15 +3,15 @@
 //! Tests the full PIR protocol: Setup → Query → Respond → Extract = Original Entry
 
 use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::{InspireParams, SecurityLevel};
-use inspire_pir::pir::{extract, query, query_seeded, query_switched, respond, setup};
+use inspire_pir::params::{InspireParams, InspireVariant, SecurityLevel};
+use inspire_pir::pir::{extract, extract_with_variant, query, query_seeded, query_switched, respond, respond_with_variant, setup};
 
 fn test_params() -> InspireParams {
     InspireParams {
         ring_dim: 256,
         q: 1152921504606830593,
         p: 65536,
-        sigma: 3.2,
+        sigma: 6.4,
         gadget_base: 1 << 20,
         gadget_len: 3,
         security_level: SecurityLevel::Bits128,
@@ -280,4 +280,102 @@ fn test_e2e_switched_query() {
         let expected = &database[target_idx * entry_size..(target_idx + 1) * entry_size];
         assert_eq!(result, expected, "Switched query: Entry {} mismatch", target_idx);
     }
+}
+
+#[test]
+fn test_e2e_variant_no_packing() {
+    let params = test_params();
+
+    let num_entries = 32;
+    let entry_size = 32;
+    let mut database = vec![0u8; num_entries * entry_size];
+
+    for i in 0..num_entries {
+        for j in 0..entry_size {
+            database[i * entry_size + j] = ((i * 7 + j * 11) % 256) as u8;
+        }
+    }
+
+    let mut sampler = GaussianSampler::new(params.sigma);
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+    for target_idx in [0, 10, 31] {
+        let (state, client_query) =
+            query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+
+        let response = respond_with_variant(&crs, &encoded_db, &client_query, InspireVariant::NoPacking).unwrap();
+        let result = extract(&crs, &state, &response, entry_size).unwrap();
+
+        let expected = &database[target_idx * entry_size..(target_idx + 1) * entry_size];
+        assert_eq!(result, expected, "NoPacking variant: Entry {} mismatch", target_idx);
+    }
+}
+
+/// Test that OnePacking correctly returns an error (not yet implemented)
+///
+/// The InspiRING LWE-to-RLWE packing algorithm is not yet correctly implemented.
+/// This test verifies that OnePacking returns an appropriate error message
+/// Test OnePacking variant which packs multiple column RLWEs into a single RLWE.
+#[test]
+fn test_e2e_variant_one_packing() {
+    let params = test_params();
+
+    let num_entries = params.ring_dim;
+    let entry_size = 64; // Multiple columns to test packing
+    let database: Vec<u8> = (0..(num_entries * entry_size))
+        .map(|i| (i % 256) as u8)
+        .collect();
+
+    let mut sampler = GaussianSampler::new(params.sigma);
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+    // Test multiple indices
+    for target_index in [0u64, 1, 42, (num_entries - 1) as u64] {
+        let (state, client_query) =
+            query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+
+        // Use OnePacking variant
+        let response = respond_with_variant(&crs, &encoded_db, &client_query, InspireVariant::OnePacking)
+            .expect("OnePacking respond should succeed");
+
+        // Verify we got a packed response (single ciphertext)
+        assert_eq!(response.ciphertext.ring_dim(), params.ring_dim);
+
+        // Extract using OnePacking variant
+        let extracted = extract_with_variant(&crs, &state, &response, entry_size, InspireVariant::OnePacking)
+            .expect("Extract should succeed");
+
+        // Verify extracted data matches expected
+        let expected_start = (target_index as usize) * entry_size;
+        let expected_end = expected_start + entry_size;
+        let expected = &database[expected_start..expected_end];
+
+        assert_eq!(
+            extracted.as_slice(),
+            expected,
+            "OnePacking failed for index {}: extracted {:?}, expected {:?}",
+            target_index,
+            &extracted[..8.min(extracted.len())],
+            &expected[..8.min(expected.len())]
+        );
+    }
+}
+
+#[test]
+fn test_variant_two_packing_unimplemented() {
+    let params = test_params();
+
+    let num_entries = 16;
+    let entry_size = 32;
+    let database = vec![0u8; num_entries * entry_size];
+
+    let mut sampler = GaussianSampler::new(params.sigma);
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+    let (_state, client_query) =
+        query(&crs, 0, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+
+    let result = respond_with_variant(&crs, &encoded_db, &client_query, InspireVariant::TwoPacking);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not yet implemented"));
 }

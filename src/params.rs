@@ -13,6 +13,36 @@ pub enum SecurityLevel {
     Bits256,
 }
 
+/// InsPIRe protocol variant
+///
+/// Different variants trade off communication size vs server computation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum InspireVariant {
+    /// InsPIRe^0: No packing
+    ///
+    /// - Response: One RLWE ciphertext per database column
+    /// - Server: Faster (no packing step)
+    /// - Use case: Latency-critical, small entries, debugging
+    #[default]
+    NoPacking,
+
+    /// InsPIRe^1: Single-level InspiRING packing (future)
+    ///
+    /// - Response: Packed ciphertexts using automorphisms
+    /// - Server: Medium (packing overhead)
+    /// - Use case: Balanced communication/computation
+    #[allow(dead_code)]
+    OnePacking,
+
+    /// InsPIRe^2: Two-level InspiRING packing (future)
+    ///
+    /// - Response: Further packed for minimal communication
+    /// - Server: Slower (double packing)
+    /// - Use case: Bandwidth-constrained environments
+    #[allow(dead_code)]
+    TwoPacking,
+}
+
 /// Core cryptographic parameters for InsPIRe
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InspireParams {
@@ -56,7 +86,7 @@ impl InspireParams {
             ring_dim: 2048,
             q,
             p: 1 << 16, // 65536
-            sigma: 3.2,
+            sigma: 6.4,
             gadget_base,
             gadget_len,
             security_level: SecurityLevel::Bits128,
@@ -74,7 +104,7 @@ impl InspireParams {
             ring_dim: 4096,
             q,
             p: 1 << 16,
-            sigma: 3.2,
+            sigma: 6.4,
             gadget_base,
             gadget_len,
             security_level: SecurityLevel::Bits128,

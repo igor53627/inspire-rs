@@ -129,11 +129,15 @@ pub fn collapse_partial(
         RlweCiphertext::from_parts(Poly::zero(d, q), current.b_poly)
     } else {
         // Use key-switching to absorb remaining a components
+        // Must track both a and b components from key-switching
+        let mut final_a = Poly::zero(d, q);
         let mut final_b = current.b_poly.clone();
         for a_poly in &current.a_polys {
-            final_b = key_switch_absorb(a_poly, &final_b, k_g, &ctx, params);
+            let (ks_a, ks_b) = key_switch_absorb(a_poly, &final_b, k_g, &ctx, params);
+            final_a = &final_a + &ks_a;
+            final_b = ks_b;
         }
-        RlweCiphertext::from_parts(Poly::zero(d, q), final_b)
+        RlweCiphertext::from_parts(final_a, final_b)
     }
 }
 
@@ -185,12 +189,14 @@ fn final_collapse(
     if switched.a_polys.is_empty() {
         RlweCiphertext::from_parts(Poly::zero(d, q), switched.b_poly)
     } else {
-        // Absorb any remaining a components
-        let final_a = switched.a_polys[0].clone();
+        // Absorb any remaining a components using proper key-switching
+        let mut final_a = switched.a_polys[0].clone();
         let mut final_b = switched.b_poly.clone();
 
         for a_poly in &switched.a_polys[1..] {
-            final_b = key_switch_absorb(a_poly, &final_b, k_h, ctx, params);
+            let (ks_a, ks_b) = key_switch_absorb(a_poly, &final_b, k_h, ctx, params);
+            final_a = &final_a + &ks_a;
+            final_b = ks_b;
         }
 
         RlweCiphertext::from_parts(final_a, final_b)
@@ -290,27 +296,42 @@ fn key_switch_intermediate(
     IntermediateCiphertext::new(new_a, new_b)
 }
 
-/// Key-switch to absorb an a component into b
+/// Key-switch to absorb an a component
+///
+/// Returns (new_a, new_b) where the key-switching result is properly computed
+/// using BOTH ks_row.a and ks_row.b
 fn key_switch_absorb(
     a_component: &Poly,
     b: &Poly,
     ks_matrix: &KeySwitchingMatrix,
     ctx: &NttContext,
     params: &InspireParams,
-) -> Poly {
-    let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
+) -> (Poly, Poly) {
+    let d = params.ring_dim;
+    let q = params.q;
+    let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, q);
     let decomposed = gadget_decompose(a_component, &gadget);
-    let mut new_b = b.clone();
 
+    // Initialize: (a', b') = (0, b)
+    let mut result_a = Poly::zero(d, q);
+    let mut result_b = b.clone();
+
+    // Accumulate: Σᵢ decomposed_i · K[i]
     for (i, digit_poly) in decomposed.iter().enumerate() {
         if i < ks_matrix.len() {
             let ks_row = ks_matrix.get_row(i);
-            let contribution = digit_poly.mul_ntt(&ks_row.b, ctx);
-            new_b = &new_b + &contribution;
+
+            // digit_poly · K[i].a
+            let term_a = digit_poly.mul_ntt(&ks_row.a, ctx);
+            result_a = &result_a + &term_a;
+
+            // digit_poly · K[i].b
+            let term_b = digit_poly.mul_ntt(&ks_row.b, ctx);
+            result_b = &result_b + &term_b;
         }
     }
 
-    new_b
+    (result_a, result_b)
 }
 
 /// Compute the rotation parameter for a given iteration
