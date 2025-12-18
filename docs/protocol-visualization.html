@@ -409,6 +409,9 @@
         <!-- Protocol Flow -->
         <div class="section">
             <h2>1. Protocol Flow</h2>
+            <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                <strong style="color: var(--accent-green);">Key:</strong> One round-trip: client sends encrypted query, server computes on ciphertexts, returns encrypted result.
+            </p>
             <div id="protocol-flow">
                 <svg id="flow-svg" viewBox="0 0 900 320" role="img" aria-labelledby="flow-title flow-desc">
                     <title id="flow-title">PIR Protocol Flow Diagram</title>
@@ -424,6 +427,9 @@
         <!-- Size Breakdown -->
         <div class="section">
             <h2>2. Size Breakdown</h2>
+            <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                <strong style="color: var(--accent-green);">Key:</strong> Communication costs are fixed by crypto parameters, not database size. ~600KB total with binary encoding.
+            </p>
             <div class="format-toggle">
                 <button class="active" data-format="seeded-binary">Seeded + Binary (~608 KB)</button>
                 <button data-format="seeded-json">Seeded JSON (~1,450 KB)</button>
@@ -466,6 +472,9 @@
         <!-- Parameter Effects -->
         <div class="section">
             <h2>3. Parameter Effects</h2>
+            <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                <strong style="color: var(--accent-green);">Key:</strong> Sizes scale linearly with ring dimension (d) and gadget length (l). Larger entries need more ciphertexts.
+            </p>
             <div class="sliders">
                 <div class="slider-group">
                     <label>Ring Dimension (d): <span id="d-value">2048</span></label>
@@ -516,8 +525,8 @@
         <!-- Server Processing -->
         <div class="section">
             <h2>4. Server Processing Visualization</h2>
-            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                Server processes one shard at a time. Each shard contains d entries encoded as polynomials.
+            <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                <strong style="color: var(--accent-green);">Key:</strong> Server processes one shard using parallel external products. Processing time is ~3ms regardless of total database size.
             </p>
             
             <!-- Shard Selection -->
@@ -564,8 +573,8 @@
         <!-- Comparison Table -->
         <div class="section">
             <h2>5. Database Size Comparison</h2>
-            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                Notice: query and response sizes remain constant. Only server processing time varies.
+            <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                <strong style="color: var(--accent-green);">Key:</strong> Query and response sizes are <strong style="color: var(--accent-blue);">CONSTANT</strong> regardless of database size. This is essential for privacy.
             </p>
             <table class="comparison-table">
                 <thead>
@@ -576,6 +585,11 @@
                         <th>Query Size</th>
                         <th>Response Size</th>
                         <th>Server Time</th>
+                    </tr>
+                    <tr class="annotation-row" style="background: var(--bg-tertiary);">
+                        <td colspan="3" style="text-align: right; color: var(--text-secondary); font-size: 0.8rem; font-style: italic;">Varies with N --></td>
+                        <td colspan="2" style="text-align: center; color: var(--accent-green); font-weight: bold; font-size: 0.85rem;">O(d) - Constant!</td>
+                        <td style="text-align: center; color: var(--accent-orange); font-size: 0.8rem; font-style: italic;">O(log N)</td>
                     </tr>
                 </thead>
                 <tbody>
