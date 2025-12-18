@@ -431,11 +431,14 @@
                 <strong style="color: var(--accent-green);">Key:</strong> Communication costs are fixed by crypto parameters, not database size. ~600KB total with binary encoding.
             </p>
             <div class="format-toggle">
-                <button class="active" data-format="switched-binary">Switched + Seeded (~560 KB)</button>
-                <button data-format="seeded-binary">Seeded + Binary (~608 KB)</button>
+                <button class="active" data-format="seeded-binary">Seeded + Binary (~640 KB)</button>
+                <button data-format="switched-binary">Switched + Seeded (~560 KB)*</button>
                 <button data-format="seeded-json">Seeded JSON (~1,450 KB)</button>
                 <button data-format="json">Full JSON (~1,678 KB)</button>
             </div>
+            <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                *Switched format exceeds noise budget with current parameters. See <a href="COMMUNICATION_COSTS.md#modulus-switching-tradeoffs">tradeoffs</a>.
+            </p>
             <div id="size-breakdown">
                 <div class="chart-container">
                     <svg id="query-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="query-chart-title">
@@ -1047,7 +1050,7 @@
             }
         };
 
-        let currentFormat = "switched-binary";
+        let currentFormat = "seeded-binary";
         const tooltip = d3.select("#tooltip");
         
         // Throttle chart tooltip with requestAnimationFrame
