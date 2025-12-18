@@ -19,7 +19,7 @@ pub mod pir;
 pub mod ethereum_db;
 
 pub use pir::{
-    setup, query, respond, extract,
+    setup, query, respond, respond_mmap, extract,
     ServerCrs, InspireCrs, EncodedDatabase, ShardData,
     ClientQuery, ClientState, ServerResponse,
     encode_column, encode_database, encode_direct, inverse_monomial,

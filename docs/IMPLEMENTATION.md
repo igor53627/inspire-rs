@@ -133,6 +133,46 @@ Based on paper benchmarks for 1 GB database:
 | Server time | 120-650 ms | 140-600 ms |
 | Throughput | 1.5-8.7 GB/s | 1.7-7.4 GB/s |
 
+### Parallel Response Performance
+
+The `respond()` function uses `rayon` for parallel column processing. Benchmarks on Apple M-series (ring_dim=256):
+
+| Columns | Sequential | Parallel | Speedup |
+|---------|-----------|----------|---------|
+| 1 | 917 µs | 939 µs | ~1x |
+| 2 | 1.83 ms | 365 µs | **5.0x** |
+| 4 | 3.63 ms | 626 µs | **5.8x** |
+| 8 | 7.31 ms | 1.02 ms | **7.2x** |
+
+Run benchmarks with: `cargo bench --bench respond`
+
+The parallel implementation is the default. A sequential version (`respond_sequential`) is available for comparison and debugging.
+
+### Memory-Mapped Database Mode
+
+For large databases (73GB Ethereum state), use memory-mapped mode to avoid loading everything into RAM:
+
+**Setup (generate binary shards):**
+```bash
+cargo run --release --bin inspire-setup -- \
+  --data-dir ./plinko-data \
+  --output-dir ./inspire_data \
+  --binary-output
+```
+
+**Server (use mmap mode):**
+```bash
+cargo run --release --bin inspire-server -- \
+  --data-dir ./inspire_data \
+  --mmap
+```
+
+Benefits:
+- Shards loaded on-demand from disk
+- Minimal startup memory footprint
+- OS page cache handles hot shard caching
+- Suitable for databases larger than available RAM
+
 ## Ethereum Database Integration
 
 ### Data Format (from plinko-extractor)

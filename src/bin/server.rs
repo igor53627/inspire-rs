@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use inspire_pir::pir::{respond, ClientQuery, EncodedDatabase, InspireCrs, ServerResponse};
+use inspire_pir::pir::{respond, respond_mmap, ClientQuery, EncodedDatabase, InspireCrs, MmapDatabase, ServerResponse};
 
 #[derive(Parser)]
 #[command(name = "inspire-server")]
@@ -35,11 +35,20 @@ struct Args {
     /// Server bind address
     #[arg(long, default_value = "0.0.0.0:3000")]
     bind: String,
+
+    /// Use memory-mapped shards (for large databases)
+    #[arg(long)]
+    mmap: bool,
+}
+
+enum DatabaseMode {
+    InMemory(EncodedDatabase),
+    Mmap(MmapDatabase),
 }
 
 struct AppState {
     crs: InspireCrs,
-    encoded_db: EncodedDatabase,
+    db: DatabaseMode,
     metadata: ServerMetadata,
 }
 
@@ -110,7 +119,11 @@ async fn handle_query(
 ) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
     let start = Instant::now();
 
-    let response = respond(&state.crs, &state.encoded_db, &query).map_err(|e| {
+    let response = match &state.db {
+        DatabaseMode::InMemory(encoded_db) => respond(&state.crs, encoded_db, &query),
+        DatabaseMode::Mmap(mmap_db) => respond_mmap(&state.crs, mmap_db, &query),
+    }
+    .map_err(|e| {
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -157,26 +170,50 @@ async fn main() -> Result<()> {
 
     info!("CRS loaded: ring_dim={}", crs.ring_dim());
 
-    info!("Loading encoded database...");
-    let db_path = args.data_dir.join("encoded_db.json");
-    let db_file = File::open(&db_path)
-        .with_context(|| format!("Failed to open database file: {}", db_path.display()))?;
-    let reader = BufReader::new(db_file);
-    let encoded_db: EncodedDatabase = serde_json::from_reader(reader)
-        .with_context(|| "Failed to deserialize encoded database")?;
-
-    info!(
-        "Encoded database loaded: {} shards",
-        encoded_db.shards.len()
-    );
-
     let metadata = load_metadata(&args.data_dir)?;
+
+    let db = if args.mmap {
+        info!("Loading database in mmap mode...");
+        let shards_dir = args.data_dir.join("shards");
+        if !shards_dir.exists() {
+            return Err(eyre::eyre!(
+                "Shards directory not found: {}. Run setup with --binary-output first.",
+                shards_dir.display()
+            ));
+        }
+
+        let shard_config = inspire_pir::params::ShardConfig {
+            shard_size_bytes: (crs.ring_dim() as u64) * 32,
+            entry_size_bytes: 32,
+            total_entries: metadata.entry_count,
+        };
+
+        let mmap_db = MmapDatabase::open(&shards_dir, shard_config)
+            .with_context(|| "Failed to open mmap database")?;
+
+        info!("Mmap database loaded: {} shards", mmap_db.num_shards());
+        DatabaseMode::Mmap(mmap_db)
+    } else {
+        info!("Loading encoded database into memory...");
+        let db_path = args.data_dir.join("encoded_db.json");
+        let db_file = File::open(&db_path)
+            .with_context(|| format!("Failed to open database file: {}", db_path.display()))?;
+        let reader = BufReader::new(db_file);
+        let encoded_db: EncodedDatabase = serde_json::from_reader(reader)
+            .with_context(|| "Failed to deserialize encoded database")?;
+
+        info!(
+            "Encoded database loaded: {} shards",
+            encoded_db.shards.len()
+        );
+        DatabaseMode::InMemory(encoded_db)
+    };
 
     info!("Load time: {:.2?}", load_start.elapsed());
 
     let state = Arc::new(AppState {
         crs,
-        encoded_db,
+        db,
         metadata,
     });
 

@@ -19,6 +19,7 @@ use crate::math::NttContext;
 use crate::rgsw::external_product;
 use crate::rlwe::RlweCiphertext;
 
+use super::mmap::MmapDatabase;
 use super::query::ClientQuery;
 use super::setup::{EncodedDatabase, ServerCrs};
 
@@ -101,8 +102,7 @@ pub fn respond(
 /// Sequential respond using homomorphic rotation
 ///
 /// Same as `respond` but processes columns sequentially.
-/// Kept as a correctness baseline for testing and benchmarking the parallel implementation.
-#[allow(dead_code)]
+/// Useful for benchmarking parallel vs sequential performance.
 pub fn respond_sequential(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
@@ -133,6 +133,54 @@ pub fn respond_sequential(
         let rotated = external_product(&rlwe_db, &query.rgsw_ciphertext, &ctx);
         column_ciphertexts.push(rotated);
     }
+
+    let combined = if column_ciphertexts.len() == 1 {
+        column_ciphertexts[0].clone()
+    } else {
+        column_ciphertexts
+            .iter()
+            .skip(1)
+            .fold(column_ciphertexts[0].clone(), |acc, ct| acc.add(ct))
+    };
+
+    Ok(ServerResponse {
+        ciphertext: combined,
+        column_ciphertexts,
+    })
+}
+
+/// PIR.Respond using memory-mapped database
+///
+/// Same as `respond` but loads shards on-demand from disk.
+/// Use this for large databases that don't fit in RAM.
+pub fn respond_mmap(
+    crs: &ServerCrs,
+    mmap_db: &MmapDatabase,
+    query: &ClientQuery,
+) -> Result<ServerResponse> {
+    let d = crs.ring_dim();
+    let q = crs.modulus();
+    let delta = crs.params.delta();
+
+    let shard = mmap_db.get_shard(query.shard_id)?;
+
+    if shard.polynomials.is_empty() {
+        let zero = RlweCiphertext::zero(&crs.params);
+        return Ok(ServerResponse {
+            ciphertext: zero.clone(),
+            column_ciphertexts: vec![zero],
+        });
+    }
+
+    let column_ciphertexts: Vec<RlweCiphertext> = shard
+        .polynomials
+        .par_iter()
+        .map(|db_poly| {
+            let local_ctx = NttContext::new(d, q);
+            let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
+            external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
+        })
+        .collect();
 
     let combined = if column_ciphertexts.len() == 1 {
         column_ciphertexts[0].clone()
@@ -234,5 +282,36 @@ mod tests {
         let combined = ct1.add(&ct2);
 
         assert_eq!(combined.b.coeff(0), 300);
+    }
+
+    #[test]
+    fn test_respond_mmap() {
+        use crate::pir::save_shards_binary;
+        use tempfile::tempdir;
+
+        let params = test_params();
+        let mut sampler = GaussianSampler::new(params.sigma);
+
+        let entry_size = 32;
+        let num_entries = params.ring_dim;
+        let database: Vec<u8> = (0..(num_entries * entry_size))
+            .map(|i| (i % 256) as u8)
+            .collect();
+
+        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+        let dir = tempdir().unwrap();
+        save_shards_binary(&encoded_db.shards, dir.path()).unwrap();
+
+        let mmap_db = MmapDatabase::open(dir.path(), encoded_db.config.clone()).unwrap();
+
+        let target_index = 42u64;
+        let (_state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+
+        let response_inmem = respond(&crs, &encoded_db, &client_query).unwrap();
+        let response_mmap = respond_mmap(&crs, &mmap_db, &client_query).unwrap();
+
+        assert_eq!(response_inmem.ciphertext.ring_dim(), response_mmap.ciphertext.ring_dim());
+        assert_eq!(response_inmem.column_ciphertexts.len(), response_mmap.column_ciphertexts.len());
     }
 }

@@ -384,7 +384,8 @@ mod tests {
             }
 
             account_map_file.write_all(addr).unwrap();
-            account_map_file.write_all(&current_idx.to_le_bytes()).unwrap();
+            // Use 4-byte LE index to match plinko-extractor format
+            account_map_file.write_all(&(current_idx as u32).to_le_bytes()).unwrap();
 
             current_idx += WORDS_PER_ACCOUNT as u64;
         }
@@ -397,8 +398,9 @@ mod tests {
 
             storage_map_file.write_all(addr).unwrap();
             storage_map_file.write_all(slot).unwrap();
+            // Use 4-byte LE index to match plinko-extractor format
             storage_map_file
-                .write_all(&current_idx.to_le_bytes())
+                .write_all(&(current_idx as u32).to_le_bytes())
                 .unwrap();
 
             current_idx += 1;
