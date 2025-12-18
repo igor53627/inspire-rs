@@ -4,7 +4,7 @@
 
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::{InspireParams, SecurityLevel};
-use inspire_pir::pir::{extract, query, respond, setup};
+use inspire_pir::pir::{extract, query, query_seeded, respond, setup};
 
 fn test_params() -> InspireParams {
     InspireParams {
@@ -203,5 +203,36 @@ fn test_e2e_different_entry_sizes() {
             "Entry size {} mismatch for entry {}",
             entry_size, target_idx
         );
+    }
+}
+
+#[test]
+fn test_e2e_seeded_query() {
+    let params = test_params();
+
+    let num_entries = 64;
+    let entry_size = 32;
+    let mut database = vec![0u8; num_entries * entry_size];
+
+    for i in 0..num_entries {
+        for j in 0..entry_size {
+            database[i * entry_size + j] = ((i * 17 + j * 13) % 256) as u8;
+        }
+    }
+
+    let mut sampler = GaussianSampler::new(params.sigma);
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+    for target_idx in [0, 15, 31, 63] {
+        let (state, seeded_query) =
+            query_seeded(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        
+        // Server expands the seeded query before processing
+        let expanded_query = seeded_query.expand();
+        let response = respond(&crs, &encoded_db, &expanded_query).unwrap();
+        let result = extract(&crs, &state, &response, entry_size).unwrap();
+
+        let expected = &database[target_idx * entry_size..(target_idx + 1) * entry_size];
+        assert_eq!(result, expected, "Seeded query: Entry {} mismatch", target_idx);
     }
 }

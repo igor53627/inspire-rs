@@ -42,7 +42,7 @@ mod types;
 mod enc;
 mod galois;
 
-pub use types::{RlweCiphertext, RlweSecretKey};
+pub use types::{RlweCiphertext, RlweSecretKey, SeededRlweCiphertext};
 pub use galois::{
     apply_automorphism,
     automorphism_ciphertext,

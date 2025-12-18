@@ -33,6 +33,20 @@ pub struct ServerResponse {
     pub column_ciphertexts: Vec<RlweCiphertext>,
 }
 
+impl ServerResponse {
+    /// Serialize to compact binary format (bincode)
+    ///
+    /// Typically ~58% smaller than JSON (544 KB vs 1,296 KB for 17 ciphertexts)
+    pub fn to_binary(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|e| eyre!("bincode serialize failed: {}", e))
+    }
+
+    /// Deserialize from compact binary format (bincode)
+    pub fn from_binary(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes).map_err(|e| eyre!("bincode deserialize failed: {}", e))
+    }
+}
+
 /// PIR.Respond(crs, D', query) → response
 ///
 /// Computes the PIR response using homomorphic rotation (parallel version).

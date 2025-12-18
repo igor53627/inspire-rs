@@ -431,7 +431,8 @@
                 <strong style="color: var(--accent-green);">Key:</strong> Communication costs are fixed by crypto parameters, not database size. ~600KB total with binary encoding.
             </p>
             <div class="format-toggle">
-                <button class="active" data-format="seeded-binary">Seeded + Binary (~608 KB)</button>
+                <button class="active" data-format="switched-binary">Switched + Seeded (~560 KB)</button>
+                <button data-format="seeded-binary">Seeded + Binary (~608 KB)</button>
                 <button data-format="seeded-json">Seeded JSON (~1,450 KB)</button>
                 <button data-format="json">Full JSON (~1,678 KB)</button>
             </div>
@@ -506,8 +507,8 @@
             </div>
             <div class="size-results">
                 <div class="size-card query">
-                    <div class="size-label">Query Size (seeded)</div>
-                    <div class="size-value" id="calc-query">230 KB</div>
+                    <div class="size-label">Query Size (switched)</div>
+                    <div class="size-value" id="calc-query">48 KB</div>
                     <div class="size-formula" id="query-formula"></div>
                 </div>
                 <div class="size-card response">
@@ -597,7 +598,7 @@
                         <td>32 KB</td>
                         <td>1,024</td>
                         <td>1</td>
-                        <td class="same">96 KB</td>
+                        <td class="same">48 KB</td>
                         <td class="same">512 KB</td>
                         <td class="varies">~1 ms</td>
                     </tr>
@@ -605,7 +606,7 @@
                         <td>2 MB</td>
                         <td>65,536</td>
                         <td>32</td>
-                        <td class="same">96 KB</td>
+                        <td class="same">48 KB</td>
                         <td class="same">512 KB</td>
                         <td class="varies">~1.5 ms</td>
                     </tr>
@@ -613,7 +614,7 @@
                         <td>32 MB</td>
                         <td>1,048,576</td>
                         <td>512</td>
-                        <td class="same">96 KB</td>
+                        <td class="same">48 KB</td>
                         <td class="same">512 KB</td>
                         <td class="varies">~3 ms</td>
                     </tr>
@@ -621,7 +622,7 @@
                         <td>3.2 GB</td>
                         <td>100,000,000</td>
                         <td>48,829</td>
-                        <td class="same">96 KB</td>
+                        <td class="same">48 KB</td>
                         <td class="same">512 KB</td>
                         <td class="varies">~3 ms</td>
                     </tr>
@@ -629,7 +630,7 @@
                         <td style="color: var(--accent-purple);">73 GB (Ethereum)</td>
                         <td>2,400,000,000</td>
                         <td>1,171,875</td>
-                        <td class="same">96 KB</td>
+                        <td class="same">48 KB</td>
                         <td class="same">512 KB</td>
                         <td class="varies">~3 ms</td>
                     </tr>
@@ -823,7 +824,7 @@
                 id: "step1",
                 fromX: 120, toX: 780, y: 100,
                 label: "Query: RGSW(X^(-k))",
-                sublabel: "~230 KB (seeded)",
+                sublabel: "~48 KB (switched)",
                 color: COLORS.blue,
                 arrow: "right"
             },
@@ -997,6 +998,18 @@
         // Response: num_columns = (entry_size*8+15)/16, each column is 2*d*8 bytes
         // For d=2048, l=3, entry_size=32: query=2*3*(32+2048*8)=98,496 bytes, response=16*2*2048*8=524,288 bytes
         const formatData = {
+            "switched-binary": {
+                query: [
+                    { name: "RGSW b-polynomials (u32)", size: 48, formula: "2l * d * 4 = 6 * 2048 * 4 = 49,152 B" },
+                    { name: "Seeds (32B each)", size: 0.19, formula: "2l * 32 = 6 * 32 = 192 B" },
+                    { name: "Modulus metadata", size: 0.1, formula: "original_q + switched_q per poly" }
+                ],
+                response: [
+                    { name: "RLWE ciphertexts", size: 512, formula: "16 cols * 2 * 2048 * 8 = 524,288 B" }
+                ],
+                totalQuery: 48,
+                totalResponse: 512
+            },
             "seeded-binary": {
                 query: [
                     { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
@@ -1034,7 +1047,7 @@
             }
         };
 
-        let currentFormat = "seeded-binary";
+        let currentFormat = "switched-binary";
         const tooltip = d3.select("#tooltip");
         
         // Throttle chart tooltip with requestAnimationFrame
