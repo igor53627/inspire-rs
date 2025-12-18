@@ -895,11 +895,16 @@
         });
 
         let animationRunning = false;
+        let animationTimers = []; // Track timer IDs for cleanup
 
         function playAnimation() {
             if (animationRunning) return;
             animationRunning = true;
             document.getElementById("play-btn").disabled = true;
+            
+            // Clear any existing timers
+            animationTimers.forEach(id => clearTimeout(id));
+            animationTimers = [];
 
             // Reset all steps
             flowSvg.selectAll(".flow-step").attr("opacity", 0);
@@ -911,7 +916,7 @@
             steps.forEach((step, i) => {
                 const delay = i * 800;
                 
-                setTimeout(() => {
+                const timerId = setTimeout(() => {
                     const g = flowSvg.select(`#${step.id}`);
                     g.transition().duration(300).attr("opacity", 1);
 
@@ -922,15 +927,21 @@
                             .attr("x2", step.toX);
                     }
                 }, delay);
+                animationTimers.push(timerId);
             });
 
-            setTimeout(() => {
+            const finalTimerId = setTimeout(() => {
                 animationRunning = false;
                 document.getElementById("play-btn").disabled = false;
             }, steps.length * 800 + 500);
+            animationTimers.push(finalTimerId);
         }
 
         function resetAnimation() {
+            // Clear all pending timers
+            animationTimers.forEach(id => clearTimeout(id));
+            animationTimers = [];
+            
             flowSvg.selectAll(".flow-step").attr("opacity", 0);
             flowSvg.selectAll(".arrow-line").attr("x2", function() {
                 return d3.select(this).attr("x1");
@@ -992,6 +1003,19 @@
 
         let currentFormat = "seeded-binary";
         const tooltip = d3.select("#tooltip");
+        
+        // Throttle chart tooltip with requestAnimationFrame
+        let chartTooltipRafId = null;
+        function throttledTooltipMove(event) {
+            if (!chartTooltipRafId) {
+                chartTooltipRafId = requestAnimationFrame(() => {
+                    tooltip
+                        .style("left", (event.pageX + 15) + "px")
+                        .style("top", (event.pageY - 10) + "px");
+                    chartTooltipRafId = null;
+                });
+            }
+        }
 
         function drawChart(svgId, data, title, color) {
             const svg = d3.select(svgId);
@@ -1049,11 +1073,7 @@
                             <div class="formula">${d.formula}</div>
                         `);
                 })
-                .on("mousemove", function(event) {
-                    tooltip
-                        .style("left", (event.pageX + 15) + "px")
-                        .style("top", (event.pageY - 10) + "px");
-                })
+                .on("mousemove", throttledTooltipMove)
                 .on("mouseleave", function() {
                     d3.select(this).attr("opacity", 0.7);
                     tooltip.classed("visible", false);
@@ -1197,15 +1217,33 @@
             moveCryptoTooltip(event);
         }
 
+        // Throttle tooltip movement with requestAnimationFrame
+        let tooltipRafId = null;
+        let pendingTooltipEvent = null;
+        
         function moveCryptoTooltip(event) {
-            const x = event.clientX + 15;
-            const y = event.clientY - 10;
-            cryptoTooltipEl.style.left = x + "px";
-            cryptoTooltipEl.style.top = y + "px";
+            pendingTooltipEvent = event;
+            if (!tooltipRafId) {
+                tooltipRafId = requestAnimationFrame(() => {
+                    if (pendingTooltipEvent) {
+                        const x = pendingTooltipEvent.clientX + 15;
+                        const y = pendingTooltipEvent.clientY - 10;
+                        cryptoTooltipEl.style.left = x + "px";
+                        cryptoTooltipEl.style.top = y + "px";
+                    }
+                    tooltipRafId = null;
+                });
+            }
         }
 
         function hideCryptoTooltip() {
             cryptoTooltipEl.classList.remove("visible");
+            // Cancel any pending RAF
+            if (tooltipRafId) {
+                cancelAnimationFrame(tooltipRafId);
+                tooltipRafId = null;
+            }
+            pendingTooltipEvent = null;
         }
 
         // ============================================================
@@ -1588,9 +1626,15 @@
 
         // Animation
         let pipelineAnimating = false;
+        let pipelineTimers = []; // Track timer IDs for cleanup
+        
         function animatePipeline() {
             if (pipelineAnimating) return;
             pipelineAnimating = true;
+            
+            // Clear any existing timers
+            pipelineTimers.forEach(id => clearTimeout(id));
+            pipelineTimers = [];
 
             const svg = d3.select("#pipeline-svg");
 
@@ -1609,7 +1653,7 @@
             });
 
             // Animate ops
-            setTimeout(() => {
+            const opsTimer = setTimeout(() => {
                 svg.selectAll(".op-box").each(function(d, i) {
                     d3.select(this)
                         .transition().delay(i * 100).duration(300)
@@ -1618,9 +1662,10 @@
                         .attr("fill", COLORS.bgTertiary).attr("opacity", 1);
                 });
             }, 700);
+            pipelineTimers.push(opsTimer);
 
             // Animate outputs
-            setTimeout(() => {
+            const outsTimer = setTimeout(() => {
                 svg.selectAll(".out-box").each(function(d, i) {
                     d3.select(this)
                         .transition().delay(i * 60).duration(200)
@@ -1629,8 +1674,10 @@
                         .attr("fill", COLORS.bgTertiary).attr("opacity", 1);
                 });
             }, 1400);
+            pipelineTimers.push(outsTimer);
 
-            setTimeout(() => { pipelineAnimating = false; }, 2500);
+            const finalTimer = setTimeout(() => { pipelineAnimating = false; }, 2500);
+            pipelineTimers.push(finalTimer);
         }
 
         // Initial draw
