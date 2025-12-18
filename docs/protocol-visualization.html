@@ -736,9 +736,9 @@
                 </svg>
                 <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem;">
                     <label style="color: var(--text-secondary); font-size: 0.85rem;">
-                        Noise σ: <span id="sigma-value">3.2</span>
+                        Noise σ: <span id="sigma-value">6.4</span>
                     </label>
-                    <input type="range" id="sigma-slider" min="1" max="10" step="0.5" value="3.2" 
+                    <input type="range" id="sigma-slider" min="1" max="10" step="0.5" value="6.4" 
                            style="width: 150px;">
                     <button id="sample-error-btn" style="background: var(--accent-green); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         Sample New Errors
@@ -2299,7 +2299,7 @@
         // ============================================================
         // A.2 RLWE Error Distribution
         // ============================================================
-        let currentSigma = 3.2;
+        let currentSigma = 6.4;
         let errorSamples = [];
 
         function sampleGaussian(sigma) {
