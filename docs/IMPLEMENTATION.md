@@ -15,7 +15,7 @@ Based on the InsPIRe paper's validated parameters:
 | Ring dimension d | 2048 | Power of two, balances security/performance |
 | Ciphertext modulus q | 2^60 - 2^14 + 1 | NTT-friendly: q ≡ 1 (mod 4096) |
 | Plaintext modulus p | 2^16 | Packs 32-byte entries across coefficients |
-| Error σ | 3.2 | Discrete Gaussian parameter |
+| Error σ | 6.4 | Discrete Gaussian parameter |
 | Gadget base z | 2^20 | For key-switching decomposition |
 | Key-switching matrices | 2 | K_g, K_h (vs logarithmic in prior work) |
 

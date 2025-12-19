@@ -205,4 +205,4 @@ MIT OR Apache-2.0
 
 ## References
 
-- [InsPIRe Paper](https://eprint.iacr.org/2024/XXX) - Original protocol specification
+- [InsPIRe Paper](https://eprint.iacr.org/2025/1352) - Original protocol specification (IEEE S&P 2025)
