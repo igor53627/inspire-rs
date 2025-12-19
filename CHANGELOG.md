@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Performance: **35x faster** online packing (115μs vs ~4ms for d=2048, 16 LWEs)
   - CRS key material: **16,000x smaller** (64 bytes seeds vs 1056 KB for d=2048)
   - Updated docs/protocol-visualization.html with algorithm comparison toggle
+  - **Protocol Flow section now variant-aware**: Toggle between ^0, ^1, ^2, ^2+ to see different query/response flows
+  - Each variant shows accurate sizes and processing steps (e.g., InspiRING packing for ^1+)
   - New benchmark groups: `ntt_automorphism_d2048`, `production_inspiring2_d2048`
   - New example: `cargo run --release --example query_size_comparison`
   - References: https://github.com/google/private-membership/tree/main/research/InsPIRe

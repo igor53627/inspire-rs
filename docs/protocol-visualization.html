@@ -412,6 +412,12 @@
             <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
                 <strong style="color: var(--accent-green);">Key:</strong> One round-trip: client sends encrypted query, server computes on ciphertexts, returns encrypted result.
             </p>
+            <div class="format-toggle" id="flow-variant-toggle" style="margin-bottom: 1rem;">
+                <button data-variant="inspire0">InsPIRe^0 (737 KB)</button>
+                <button data-variant="inspire1" class="active">InsPIRe^1 (224 KB)</button>
+                <button data-variant="inspire2">InsPIRe^2 (128 KB)</button>
+                <button data-variant="inspire2plus">InsPIRe^2+ (80 KB)</button>
+            </div>
             <div id="protocol-flow">
                 <svg id="flow-svg" viewBox="0 0 900 320" role="img" aria-labelledby="flow-title flow-desc">
                     <title id="flow-title">PIR Protocol Flow Diagram</title>
@@ -1060,43 +1066,76 @@
                 .attr("stroke-dasharray", "6,4");
         });
 
-        // Animation steps
-        const steps = [
-            {
-                id: "step1",
-                fromX: 120, toX: 780, y: 100,
-                label: "Query: RGSW(X^(-k))",
-                sublabel: "~96 KB (seeded)",
-                color: COLORS.blue,
-                arrow: "right"
+        // Variant-specific animation steps
+        const flowVariantData = {
+            "inspire0": {
+                steps: [
+                    { id: "step1", fromX: 120, toX: 780, y: 100,
+                      label: "Query: RGSW(X^(-k))", sublabel: "192 KB (full)",
+                      color: COLORS.blue, arrow: "right" },
+                    { id: "step2", fromX: 780, toX: 780, y: 160,
+                      label: "Process: h(X) * X^(-k)", sublabel: "External product (no packing)",
+                      color: COLORS.purple, arrow: "none", isBox: true },
+                    { id: "step3", fromX: 780, toX: 120, y: 220,
+                      label: "Response: 16x RLWE(y_k)", sublabel: "545 KB (one per column)",
+                      color: COLORS.green, arrow: "left" },
+                    { id: "step4", fromX: 120, toX: 120, y: 280,
+                      label: "Extract: Decrypt each column", sublabel: "32 bytes result",
+                      color: COLORS.orange, arrow: "none", isBox: true }
+                ]
             },
-            {
-                id: "step2",
-                fromX: 780, toX: 780, y: 160,
-                label: "Process: h(X) * X^(-k)",
-                sublabel: "External product",
-                color: COLORS.purple,
-                arrow: "none",
-                isBox: true
+            "inspire1": {
+                steps: [
+                    { id: "step1", fromX: 120, toX: 780, y: 100,
+                      label: "Query: RGSW(X^(-k))", sublabel: "192 KB (full)",
+                      color: COLORS.blue, arrow: "right" },
+                    { id: "step2", fromX: 780, toX: 780, y: 160,
+                      label: "Process + Pack (InspiRING)", sublabel: "External product + 2-matrix packing",
+                      color: COLORS.purple, arrow: "none", isBox: true },
+                    { id: "step3", fromX: 780, toX: 120, y: 220,
+                      label: "Response: RLWE(packed)", sublabel: "32 KB (17x smaller!)",
+                      color: COLORS.green, arrow: "left" },
+                    { id: "step4", fromX: 120, toX: 120, y: 280,
+                      label: "Extract: Decrypt packed result", sublabel: "32 bytes result",
+                      color: COLORS.orange, arrow: "none", isBox: true }
+                ]
             },
-            {
-                id: "step3",
-                fromX: 780, toX: 120, y: 220,
-                label: "Response: RLWE(y_k)",
-                sublabel: "~544 KB (binary)",
-                color: COLORS.green,
-                arrow: "left"
+            "inspire2": {
+                steps: [
+                    { id: "step1", fromX: 120, toX: 780, y: 100,
+                      label: "Query: Seeded RGSW", sublabel: "96 KB (50% smaller)",
+                      color: COLORS.blue, arrow: "right" },
+                    { id: "step2", fromX: 780, toX: 780, y: 160,
+                      label: "Expand + Process + Pack", sublabel: "Seed expansion + InspiRING",
+                      color: COLORS.purple, arrow: "none", isBox: true },
+                    { id: "step3", fromX: 780, toX: 120, y: 220,
+                      label: "Response: RLWE(packed)", sublabel: "32 KB",
+                      color: COLORS.green, arrow: "left" },
+                    { id: "step4", fromX: 120, toX: 120, y: 280,
+                      label: "Extract: Decrypt packed result", sublabel: "32 bytes result",
+                      color: COLORS.orange, arrow: "none", isBox: true }
+                ]
             },
-            {
-                id: "step4",
-                fromX: 120, toX: 120, y: 280,
-                label: "Extract: Decrypt to get y_k",
-                sublabel: "32 bytes result",
-                color: COLORS.orange,
-                arrow: "none",
-                isBox: true
+            "inspire2plus": {
+                steps: [
+                    { id: "step1", fromX: 120, toX: 780, y: 100,
+                      label: "Query: Switched+Seeded RGSW", sublabel: "48 KB (75% smaller)",
+                      color: COLORS.blue, arrow: "right" },
+                    { id: "step2", fromX: 780, toX: 780, y: 160,
+                      label: "Expand + Switch + Process + Pack", sublabel: "Modulus switch + InspiRING",
+                      color: COLORS.purple, arrow: "none", isBox: true },
+                    { id: "step3", fromX: 780, toX: 120, y: 220,
+                      label: "Response: RLWE(packed)", sublabel: "32 KB",
+                      color: COLORS.green, arrow: "left" },
+                    { id: "step4", fromX: 120, toX: 120, y: 280,
+                      label: "Extract: Decrypt packed result", sublabel: "32 bytes result*",
+                      color: COLORS.orange, arrow: "none", isBox: true }
+                ]
             }
-        ];
+        };
+        
+        let currentFlowVariant = "inspire1";
+        let steps = flowVariantData[currentFlowVariant].steps;
 
         // Create step elements (initially hidden)
         steps.forEach((step, i) => {
@@ -1228,6 +1267,106 @@
 
         document.getElementById("play-btn").addEventListener("click", playAnimation);
         document.getElementById("reset-btn").addEventListener("click", resetAnimation);
+
+        // Function to rebuild flow diagram with new variant
+        function rebuildFlowDiagram(variant) {
+            // Clear all timers and reset animation state
+            animationTimers.forEach(id => clearTimeout(id));
+            animationTimers = [];
+            animationRunning = false;
+            document.getElementById("play-btn").disabled = false;
+            
+            // Remove old step elements
+            flowSvg.selectAll(".flow-step").remove();
+            
+            // Update steps to new variant
+            currentFlowVariant = variant;
+            steps = flowVariantData[variant].steps;
+            
+            // Create new step elements
+            steps.forEach((step, i) => {
+                const g = flowSvg.append("g")
+                    .attr("class", "flow-step")
+                    .attr("id", step.id)
+                    .attr("opacity", 0);
+
+                if (step.isBox) {
+                    g.append("rect")
+                        .attr("x", step.fromX - 100)
+                        .attr("y", step.y - 18)
+                        .attr("width", 200)
+                        .attr("height", 36)
+                        .attr("rx", 4)
+                        .attr("fill", step.color)
+                        .attr("opacity", 0.15)
+                        .attr("stroke", step.color);
+
+                    g.append("text")
+                        .attr("x", step.fromX)
+                        .attr("y", step.y - 2)
+                        .attr("text-anchor", "middle")
+                        .attr("fill", step.color)
+                        .attr("font-size", "12px")
+                        .attr("font-weight", "bold")
+                        .text(step.label);
+
+                    g.append("text")
+                        .attr("x", step.fromX)
+                        .attr("y", step.y + 12)
+                        .attr("text-anchor", "middle")
+                        .attr("fill", COLORS.textSecondary)
+                        .attr("font-size", "11px")
+                        .text(step.sublabel);
+                } else {
+                    const midX = (step.fromX + step.toX) / 2;
+                    const markerName = step.color === COLORS.blue ? 'blue' : 
+                                       step.color === COLORS.green ? 'green' : 'purple';
+                    
+                    g.append("line")
+                        .attr("class", "arrow-line")
+                        .attr("x1", step.fromX)
+                        .attr("y1", step.y)
+                        .attr("x2", step.fromX)
+                        .attr("y2", step.y)
+                        .attr("stroke", step.color)
+                        .attr("stroke-width", 2)
+                        .attr("marker-end", `url(#arrow-${markerName})`);
+
+                    g.append("text")
+                        .attr("x", midX)
+                        .attr("y", step.y - 12)
+                        .attr("text-anchor", "middle")
+                        .attr("fill", step.color)
+                        .attr("font-size", "12px")
+                        .attr("font-weight", "bold")
+                        .text(step.label);
+
+                    g.append("text")
+                        .attr("x", midX)
+                        .attr("y", step.y + 18)
+                        .attr("text-anchor", "middle")
+                        .attr("fill", COLORS.textSecondary)
+                        .attr("font-size", "11px")
+                        .text(step.sublabel);
+                }
+            });
+            
+            // Auto-play with new variant
+            setTimeout(playAnimation, 200);
+        }
+
+        // Flow variant toggle handler
+        document.querySelectorAll("#flow-variant-toggle button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                // Update button styles
+                document.querySelectorAll("#flow-variant-toggle button").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                
+                // Rebuild with new variant
+                const variant = btn.dataset.variant;
+                rebuildFlowDiagram(variant);
+            });
+        });
 
         // Auto-play on load
         setTimeout(playAnimation, 500);
