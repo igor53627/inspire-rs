@@ -11,10 +11,8 @@
 //!
 //! This rotation brings y_k to coefficient 0 of the result polynomial.
 
-use eyre::{eyre, Result};
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-
+use rayon::prelude::*;
 
 use crate::inspiring::packing_online;
 use crate::math::{NttContext, Poly};
@@ -22,6 +20,8 @@ use crate::params::InspireVariant;
 use crate::rgsw::external_product;
 use crate::rlwe::RlweCiphertext;
 
+use super::error::{pir_err, Result};
+#[cfg(feature = "server")]
 use super::mmap::MmapDatabase;
 use super::query::{ClientQuery, SeededClientQuery, SwitchedClientQuery};
 use super::setup::{EncodedDatabase, ServerCrs};
@@ -41,12 +41,12 @@ impl ServerResponse {
     ///
     /// Typically ~58% smaller than JSON (544 KB vs 1,296 KB for 17 ciphertexts)
     pub fn to_binary(&self) -> Result<Vec<u8>> {
-        bincode::serialize(self).map_err(|e| eyre!("bincode serialize failed: {}", e))
+        bincode::serialize(self).map_err(|e| pir_err!("bincode serialize failed: {}", e))
     }
 
     /// Deserialize from compact binary format (bincode)
     pub fn from_binary(bytes: &[u8]) -> Result<Self> {
-        bincode::deserialize(bytes).map_err(|e| eyre!("bincode deserialize failed: {}", e))
+        bincode::deserialize(bytes).map_err(|e| pir_err!("bincode deserialize failed: {}", e))
     }
 }
 
@@ -81,7 +81,7 @@ pub fn respond(
         .shards
         .iter()
         .find(|s| s.id == query.shard_id)
-        .ok_or_else(|| eyre!("Shard {} not found", query.shard_id))?;
+        .ok_or_else(|| pir_err!("Shard {} not found", query.shard_id))?;
 
     if shard.polynomials.is_empty() {
         let zero = RlweCiphertext::zero(&crs.params);
@@ -185,7 +185,7 @@ pub fn respond_one_packing(
         .shards
         .iter()
         .find(|s| s.id == query.shard_id)
-        .ok_or_else(|| eyre!("Shard {} not found", query.shard_id))?;
+        .ok_or_else(|| pir_err!("Shard {} not found", query.shard_id))?;
 
     if shard.polynomials.is_empty() {
         let zero = RlweCiphertext::zero(&crs.params);
@@ -255,13 +255,13 @@ pub fn respond_inspiring(
     
     // Get client packing keys (y_all) from query
     let client_packing_keys = query.inspiring_packing_keys.as_ref()
-        .ok_or_else(|| eyre!("InspiRING client packing keys not in query - use query() not query_seeded()"))?;
+        .ok_or_else(|| pir_err!("InspiRING client packing keys not in query - use query() not query_seeded()"))?;
 
     let shard = encoded_db
         .shards
         .iter()
         .find(|s| s.id == query.shard_id)
-        .ok_or_else(|| eyre!("Shard {} not found", query.shard_id))?;
+        .ok_or_else(|| pir_err!("Shard {} not found", query.shard_id))?;
 
     if shard.polynomials.is_empty() {
         let zero = RlweCiphertext::zero(&crs.params);
@@ -425,7 +425,7 @@ pub fn respond_sequential(
         .shards
         .iter()
         .find(|s| s.id == query.shard_id)
-        .ok_or_else(|| eyre!("Shard {} not found", query.shard_id))?;
+        .ok_or_else(|| pir_err!("Shard {} not found", query.shard_id))?;
 
     if shard.polynomials.is_empty() {
         let zero = RlweCiphertext::zero(&crs.params);
@@ -461,6 +461,7 @@ pub fn respond_sequential(
 ///
 /// Same as `respond` but loads shards on-demand from disk.
 /// Use this for large databases that don't fit in RAM.
+#[cfg(feature = "server")]
 pub fn respond_mmap(
     crs: &ServerCrs,
     mmap_db: &MmapDatabase,

@@ -2,7 +2,7 @@
 //!
 //! Implements PIR.Extract(crs, state, response) → entry
 
-use eyre::Result;
+use super::error::Result;
 
 use crate::math::NttContext;
 use crate::params::InspireVariant;

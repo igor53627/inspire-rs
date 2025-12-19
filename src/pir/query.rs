@@ -8,7 +8,7 @@
 //! To retrieve y_k, the client encrypts the inverse monomial X^(-k).
 //! When the server multiplies h(X) · RGSW(X^(-k)), the result has y_k at coefficient 0.
 
-use eyre::Result;
+use super::error::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::inspiring::ClientPackingKeys;
