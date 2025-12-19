@@ -46,8 +46,12 @@ pub fn collapse_one(
 
     if k == 1 {
         // Base case: collapsing from 1 to 0 means fully absorbing into b
-        let (new_a_poly, new_b) = key_switch_component(&a[0], b, ks_matrix, &ctx, &gadget);
-        return (vec![new_a_poly], new_b);
+        let (result_a, new_b) = key_switch_component(&a[0], b, ks_matrix, &ctx, &gadget);
+        // Consistency: only include result_a if non-zero (matches k > 1 case)
+        if result_a.is_zero() {
+            return (vec![], new_b);
+        }
+        return (vec![result_a], new_b);
     }
 
     // Key-switch the last component a_{k-1}
