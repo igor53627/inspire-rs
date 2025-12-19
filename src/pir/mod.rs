@@ -51,8 +51,13 @@ mod respond;
 mod setup;
 
 pub use encode_db::{encode_column, encode_database, encode_direct, inverse_monomial};
-pub use extract::extract;
+pub use extract::{extract, extract_with_variant, extract_inspiring};
 pub use mmap::{save_shards_binary, load_shard_binary, MmapDatabase};
 pub use query::{query, query_seeded, query_switched, ClientQuery, ClientState, SeededClientQuery, SwitchedClientQuery};
-pub use respond::{respond, respond_mmap, respond_sequential, ServerResponse};
+pub use respond::{
+    respond, respond_mmap, respond_sequential, respond_with_variant,
+    respond_seeded, respond_seeded_packed, respond_switched, respond_switched_packed,
+    respond_one_packing, respond_inspiring, respond_seeded_inspiring,
+    ServerResponse,
+};
 pub use setup::{setup, EncodedDatabase, InspireCrs, ServerCrs, ShardData};

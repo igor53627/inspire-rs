@@ -139,6 +139,23 @@ impl Poly {
     pub fn is_ntt(&self) -> bool {
         self.is_ntt
     }
+    
+    /// Force polynomial to be marked as NTT domain
+    /// 
+    /// **Warning**: Only use when you know the coefficients are already NTT values.
+    /// Used by apply_automorphism_ntt which permutes NTT values directly.
+    #[inline]
+    pub fn force_ntt_domain(&mut self) {
+        self.is_ntt = true;
+    }
+    
+    /// Force polynomial to be marked as coefficient domain
+    /// 
+    /// **Warning**: Only use when you know the values are already coefficients.
+    #[inline]
+    pub fn force_coeff_domain(&mut self) {
+        self.is_ntt = false;
+    }
 
     /// Get coefficient at index (only valid if not in NTT domain)
     pub fn coeff(&self, i: usize) -> u64 {
@@ -263,6 +280,62 @@ impl Poly {
             coeffs: result,
             q: self.q,
             is_ntt: true,
+        }
+    }
+
+    /// Polynomial addition when both are already in NTT domain
+    /// 
+    /// **Performance**: O(n) pointwise addition without domain conversion
+    pub fn add_ntt_domain(&self, other: &Self) -> Self {
+        assert!(self.is_ntt && other.is_ntt, "Both polynomials must be in NTT domain");
+        assert_eq!(self.q, other.q, "Moduli must match");
+        assert_eq!(self.coeffs.len(), other.coeffs.len(), "Dimensions must match");
+
+        let q = self.q;
+        let coeffs: Vec<u64> = self
+            .coeffs
+            .iter()
+            .zip(other.coeffs.iter())
+            .map(|(&a, &b)| {
+                let sum = a + b;
+                if sum >= q { sum - q } else { sum }
+            })
+            .collect();
+
+        Self {
+            coeffs,
+            q: self.q,
+            is_ntt: true,
+        }
+    }
+
+    /// In-place addition when both are in NTT domain
+    /// 
+    /// **Performance**: Avoids allocation, O(n) pointwise addition
+    pub fn add_assign_ntt_domain(&mut self, other: &Self) {
+        assert!(self.is_ntt && other.is_ntt, "Both polynomials must be in NTT domain");
+        assert_eq!(self.q, other.q, "Moduli must match");
+        
+        let q = self.q;
+        for (a, &b) in self.coeffs.iter_mut().zip(other.coeffs.iter()) {
+            let sum = *a + b;
+            *a = if sum >= q { sum - q } else { sum };
+        }
+    }
+
+    /// In-place multiply-accumulate in NTT domain: self += a * b
+    /// 
+    /// **Performance**: Single pass multiply-add without intermediate allocation
+    pub fn mul_acc_ntt_domain(&mut self, a: &Self, b: &Self, ctx: &NttContext) {
+        assert!(self.is_ntt && a.is_ntt && b.is_ntt, "All polynomials must be in NTT domain");
+        assert_eq!(self.q, a.q, "Moduli must match");
+        assert_eq!(self.q, b.q, "Moduli must match");
+        
+        let q = self.q as u128;
+        for i in 0..self.coeffs.len() {
+            let prod = ctx.pointwise_mul_single(a.coeffs[i], b.coeffs[i]);
+            let sum = self.coeffs[i] as u128 + prod as u128;
+            self.coeffs[i] = (sum % q) as u64;
         }
     }
 

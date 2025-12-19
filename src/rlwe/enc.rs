@@ -3,6 +3,7 @@
 //! Implements encryption: b = -a·s + e + Δ·m
 //! where Δ = ⌊q/p⌋ is the scaling factor.
 
+use crate::lwe::LweCiphertext;
 use crate::math::{GaussianSampler, ModQ, NttContext, Poly};
 use crate::params::InspireParams;
 
@@ -180,6 +181,32 @@ impl RlweCiphertext {
         let a = Poly::zero(params.ring_dim, params.q);
         let b = message_poly.scalar_mul(delta);
         RlweCiphertext { a, b }
+    }
+
+    /// Extract an LWE ciphertext encrypting coefficient 0 from this RLWE ciphertext
+    ///
+    /// This is the standard RLWE-to-LWE sample extraction at coefficient 0.
+    /// The resulting LWE ciphertext encrypts m_0 (the constant term of the message polynomial).
+    ///
+    /// Formula: If RLWE decryption is b(X) + a(X)·s(X) = m(X) + e(X),
+    /// then coefficient 0 gives: b_0 + Σ_i a_i · s_{-i mod d} = m_0 + e_0
+    ///
+    /// The LWE ciphertext (a', b') is:
+    /// - a'_i = a_{d-i mod d} for i > 0, a'_0 = a_0
+    /// - b' = b_0
+    pub fn sample_extract_coeff0(&self) -> LweCiphertext {
+        let d = self.ring_dim();
+        let q = self.modulus();
+
+        let mut a_vec = vec![0u64; d];
+        a_vec[0] = self.a.coeff(0);
+        for i in 1..d {
+            a_vec[i] = self.a.coeff(d - i);
+        }
+
+        let b0 = self.b.coeff(0);
+
+        LweCiphertext { a: a_vec, b: b0, q }
     }
 }
 

@@ -69,8 +69,18 @@ The key insight: storing value `y_k` at coefficient `k` of polynomial `h(X)`, th
 | Ring dimension d | 2048 | Power of two |
 | Ciphertext modulus q | 2^60 - 2^14 + 1 | NTT-friendly |
 | Plaintext modulus p | 2^16 | For 32-byte entries |
-| Error σ | 3.2 | Discrete Gaussian |
-| Key-switching matrices | 2 | K_g, K_h only |
+| Error σ | 6.4 | Discrete Gaussian |
+| Key-switching matrices | 2 | K_g, K_h only (InspiRING) |
+
+### InspiRING Key Material Comparison
+
+| Approach | KS Matrices | CRS Key Material |
+|----------|-------------|------------------|
+| Tree Packing | log(d) = 11 | 1056 KB |
+| InspiRING (2-matrix) | 2 (seeds only) | 64 bytes |
+| **Reduction** | **5.5x** | **16,000x** |
+
+Note: InspiRING stores only 32-byte seeds in CRS; masks are regenerated on demand. Per-query client packing keys (y_body) add ~48 KB.
 
 ## Building
 
@@ -108,31 +118,39 @@ cargo run --release --bin inspire-setup -- \
 
 ## Communication Costs
 
-InsPIRe communication is **O(d)** where d is the ring dimension, **not** O(√N):
+InsPIRe offers 4 protocol variants with different bandwidth/computation tradeoffs:
 
-| Component | JSON | Seeded JSON | Binary |
-|-----------|------|-------------|--------|
-| CRS (one-time) | ~100 KB | ~100 KB | ~100 KB |
-| Query (client→server) | 458 KB | **230 KB** | 230 KB |
-| Response (server→client) | 1,296 KB | 1,296 KB | **544 KB** |
-| **Total per-query** | 1,754 KB | 1,526 KB | **774 KB** |
+| Variant | Query | Response | Total | Reduction |
+|---------|-------|----------|-------|-----------|
+| **InsPIRe^0** (NoPacking) | 192 KB | 545 KB | **737 KB** | baseline |
+| **InsPIRe^1** (OnePacking) | 192 KB | 32 KB | **224 KB** | 3.3x |
+| **InsPIRe^2** (Seeded+Packed) | 96 KB | 32 KB | **128 KB** | 5.7x |
+| **InsPIRe^2+** (Switched+Packed)* | 48 KB | 32 KB | **80 KB** | 9.2x |
+
+*InsPIRe^2+ uses modulus switching which may exceed noise budget with default parameters.
 
 These costs are **independent of database size**—the same whether querying 1 MB or 73 GB.
 
 > **Why constant sizes?** This is a privacy requirement. If sizes varied with target index or database, traffic analysis could reveal what's being queried. See [docs/COMMUNICATION_COSTS.md](docs/COMMUNICATION_COSTS.md#why-pir-sizes-are-constant) for the formulas.
 
-### Seed Expansion
-
-Use `query_seeded()` instead of `query()` for ~50% smaller queries:
+### Protocol Variants
 
 ```rust
-// Client: generate compact query
-let (state, seeded_query) = query_seeded(&crs, index, &config, &sk, &mut sampler)?;
-send_to_server(&seeded_query); // 230 KB instead of 458 KB
+use inspire_pir::{query, query_seeded, respond_one_packing, respond_seeded_packed};
+use inspire_pir::params::InspireVariant;
 
-// Server: expand and process
-let expanded = seeded_query.expand();
-let response = respond(&crs, &db, &expanded)?;
+// InsPIRe^0: Simple, no packing
+let response = respond(&crs, &db, &query)?;
+
+// InsPIRe^1: Packed response (17x response reduction)
+let response = respond_one_packing(&crs, &db, &query)?;
+
+// InsPIRe^2: Seeded query + packed response (5.7x total reduction)
+let (state, seeded_query) = query_seeded(&crs, index, &config, &sk, &mut sampler)?;
+let response = respond_seeded_packed(&crs, &db, &seeded_query)?;
+
+// Extract with variant-specific extraction
+let entry = extract_with_variant(&crs, &state, &response, entry_size, InspireVariant::OnePacking)?;
 ```
 
 ## Performance
@@ -156,7 +174,24 @@ Benchmarked on AMD/Intel x64 server with d=2048, 128-bit security:
 | Client: Extract result | ~5 ms |
 | **Total round-trip** | **~12 ms** |
 
-Run benchmarks: `cargo run --release --example benchmark_seed_expansion`
+### InspiRING Packing Performance
+
+The InspiRING 2-matrix packing algorithm provides significant speedup over tree packing:
+
+| Operation | Complexity | Notes |
+|-----------|------------|-------|
+| Offline phase | O(γ × ℓ × n log n) | Precomputed once per CRS |
+| Online phase | O(γ × ℓ × n) | NTT-domain multiply-accumulate |
+| Automorphisms | O(n) | Table lookup vs O(n log n) NTT |
+
+Key optimizations matching Google's reference:
+- NTT-domain automorphisms via precomputed permutation tables
+- Fused multiply-accumulate in NTT domain
+- Pre-cached bold_t in NTT form for zero-conversion online phase
+
+Run benchmarks: `cargo bench --bench packing`
+
+Run query size analysis: `cargo run --release --example query_size_comparison`
 
 ## Documentation
 

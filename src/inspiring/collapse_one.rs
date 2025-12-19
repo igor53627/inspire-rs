@@ -17,6 +17,11 @@ use crate::rgsw::GadgetVector;
 /// The key-switching matrix K_s allows us to "absorb" one component of a
 /// into b while maintaining the encryption relationship.
 ///
+/// The correct key-switching algorithm (from ks/switch.rs):
+/// 1. Decompose a_{k-1} using gadget: g⁻¹(a) = [a₀, a₁, ..., a_{ℓ-1}]
+/// 2. Compute: (a', b') = (0, b) + Σᵢ aᵢ · K[i]
+///    - MUST use BOTH ks_row.a and ks_row.b for each row
+///
 /// # Arguments
 /// * `a` - Vector of k polynomials
 /// * `b` - Single polynomial
@@ -41,65 +46,92 @@ pub fn collapse_one(
 
     if k == 1 {
         // Base case: collapsing from 1 to 0 means fully absorbing into b
-        let new_b = key_switch_component(&a[0], b, ks_matrix, &ctx, &gadget);
-        return (vec![], new_b);
+        let (result_a, new_b) = key_switch_component(&a[0], b, ks_matrix, &ctx, &gadget);
+        // Consistency: only include result_a if non-zero (matches k > 1 case)
+        if result_a.is_zero() {
+            return (vec![], new_b);
+        }
+        return (vec![result_a], new_b);
     }
 
     // Key-switch the last component a_{k-1}
-    // The key-switching produces updates to add to b and potentially other a components
     let a_last = &a[k - 1];
 
     // Gadget decomposition of a_last
     let decomposed = rgsw_gadget_decompose(a_last, &gadget);
 
-    // Apply key-switching: each row of K_s corresponds to a gadget digit
-    let mut new_b = b.clone();
+    // Apply key-switching using BOTH ks_row.a and ks_row.b
+    // This is the correct algorithm from ks/switch.rs:
+    //   (a', b') = (0, b) + Σᵢ decomposed_i · K[i]
+    // where K[i] = (ks_row.a, ks_row.b)
+    let mut result_a = Poly::zero(d, q);
+    let mut result_b = b.clone();
 
-    // K_s encrypts s_{k-1} under s (where s is the secret we're reducing to)
-    // The key-switching computation is:
-    //   b' = b + sum_i (decomposed_i * K_s[i].b)
-    //   a'_j = a_j + sum_i (decomposed_i * K_s[i].a_j) for j < k-1
-    //
-    // For simplicity, we implement the standard approach where K_s is structured
-    // to produce valid ciphertexts under the target key.
     for (i, digit_poly) in decomposed.iter().enumerate() {
         if i < ks_matrix.len() {
-            // Get the i-th row of the key-switching matrix
             let ks_row = ks_matrix.get_row(i);
 
-            // Multiply digit by key-switch components and add to result
-            let digit_times_b = digit_poly.mul_ntt(&ks_row.b, &ctx);
-            new_b = &new_b + &digit_times_b;
+            // digit_poly · K[i].a
+            let term_a = digit_poly.mul_ntt(&ks_row.a, &ctx);
+            result_a = &result_a + &term_a;
+
+            // digit_poly · K[i].b
+            let term_b = digit_poly.mul_ntt(&ks_row.b, &ctx);
+            result_b = &result_b + &term_b;
         }
     }
 
-    // The remaining a components stay the same (in standard key-switching)
-    // More sophisticated schemes might update them as well
-    let new_a: Vec<Poly> = a[..k - 1].to_vec();
+    // The remaining a components stay, plus the new key-switched a component
+    let mut new_a: Vec<Poly> = a[..k - 1].to_vec();
+    // Add the result_a from key-switching (this replaces the absorbed component)
+    if !result_a.is_zero() {
+        // If we already have a[0], add result_a to it
+        if !new_a.is_empty() {
+            new_a[0] = &new_a[0] + &result_a;
+        } else {
+            new_a.push(result_a);
+        }
+    }
 
-    (new_a, new_b)
+    (new_a, result_b)
 }
 
-/// Apply key-switching to fully absorb a single a component into b
+/// Apply key-switching to fully absorb a single a component
+///
+/// Returns (new_a, new_b) where the key-switching result is properly computed
+/// using BOTH ks_row.a and ks_row.b
 fn key_switch_component(
     a_component: &Poly,
     b: &Poly,
     ks_matrix: &KeySwitchingMatrix,
     ctx: &NttContext,
     gadget: &GadgetVector,
-) -> Poly {
-    let decomposed = rgsw_gadget_decompose(a_component, gadget);
-    let mut new_b = b.clone();
+) -> (Poly, Poly) {
+    let d = a_component.dimension();
+    let q = a_component.modulus();
 
+    let decomposed = rgsw_gadget_decompose(a_component, gadget);
+
+    // Initialize: (a', b') = (0, b)
+    let mut result_a = Poly::zero(d, q);
+    let mut result_b = b.clone();
+
+    // Accumulate: Σᵢ decomposed_i · K[i]
     for (i, digit_poly) in decomposed.iter().enumerate() {
         if i < ks_matrix.len() {
             let ks_row = ks_matrix.get_row(i);
-            let contribution = digit_poly.mul_ntt(&ks_row.b, ctx);
-            new_b = &new_b + &contribution;
+
+            // digit_poly · K[i].a
+            let term_a = digit_poly.mul_ntt(&ks_row.a, ctx);
+            result_a = &result_a + &term_a;
+
+            // digit_poly · K[i].b
+            let term_b = digit_poly.mul_ntt(&ks_row.b, ctx);
+            result_b = &result_b + &term_b;
         }
     }
 
-    new_b
+    (result_a, result_b)
 }
 
 /// Gadget decomposition of a polynomial
@@ -109,6 +141,7 @@ fn key_switch_component(
 ///
 /// Returns l polynomials where the i-th polynomial contains the i-th digit
 /// of each coefficient.
+#[allow(dead_code)]
 pub fn gadget_decompose(poly: &Poly, params: &InspireParams) -> Vec<Poly> {
     let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
     rgsw_gadget_decompose(poly, &gadget)
