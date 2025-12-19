@@ -22,6 +22,22 @@ Optimizations:
 
 Note: Modulus switching would reduce query to 48 KB, but exceeds noise budget with current parameters. See [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs).
 
+### Protocol Variant Comparison
+
+The table above shows **InsPIRe^0 (NoPacking)** costs. With packing enabled, response sizes drop significantly:
+
+| Variant | Query (binary) | Response (binary) | Total | Notes |
+|---------|----------------|-------------------|-------|-------|
+| **InsPIRe^0** | 192 KB | 544 KB | 736 KB | No packing (17 RLWEs) |
+| **InsPIRe^0 seeded** | 96 KB | 544 KB | 640 KB | Seed expansion only |
+| **InsPIRe^1** | 192 KB | 32 KB | 224 KB | Tree-packed response (1 RLWE) |
+| **InsPIRe^2** | 96 KB | 32 KB | **128 KB** | Seeded + packed |
+| **InsPIRe^2+*** | 48 KB | 32 KB | 80 KB | + Modulus switching |
+
+*InsPIRe^2+ currently exceeds noise budget with default parameters (see [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs)).
+
+**Key insight**: Packing reduces response from 544 KB → 32 KB (17x reduction) by combining all column values into a single RLWE ciphertext using Galois automorphisms.
+
 ## CRS (Common Reference String) Overhead
 
 The CRS is shared once and reused across queries:

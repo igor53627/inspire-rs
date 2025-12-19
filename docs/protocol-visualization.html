@@ -1077,7 +1077,7 @@
                       label: "Process: h(X) * X^(-k)", sublabel: "External product (no packing)",
                       color: COLORS.purple, arrow: "none", isBox: true },
                     { id: "step3", fromX: 780, toX: 120, y: 220,
-                      label: "Response: 16x RLWE(y_k)", sublabel: "545 KB (one per column)",
+                      label: "Response: 17x RLWE(y_k)", sublabel: "545 KB (1 combined + 16 columns)",
                       color: COLORS.green, arrow: "left" },
                     { id: "step4", fromX: 120, toX: 120, y: 280,
                       label: "Extract: Decrypt each column", sublabel: "32 bytes result",
@@ -1391,7 +1391,7 @@
                     { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" }
                 ],
                 response: [
-                    { name: "16 RLWE ciphertexts", size: 545, formula: "16 cols * 2 * 2048 * 8 = 524,288 B + metadata" }
+                    { name: "17 RLWE ciphertexts", size: 545, formula: "17 * 2 * 2048 * 8 = 557,056 B (1 combined + 16 columns)" }
                 ],
                 totalQuery: 192,
                 totalResponse: 545
