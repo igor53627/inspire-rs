@@ -1,0 +1,118 @@
+{
+  "project": {
+    "name": "inspire-rs",
+    "description": "InsPIRe: Communication-Efficient PIR with Server-side Preprocessing - A Rust implementation for private queries over large databases like Ethereum state",
+    "repository": "https://github.com/igor53627/inspire-rs",
+    "license": "MIT OR Apache-2.0",
+    "language": "Rust",
+    "version": "0.1.0"
+  },
+  "architecture": {
+    "overview": "Single-server PIR using RLWE/RGSW cryptography with InspiRING ring packing",
+    "key_innovations": [
+      "InspiRING: 2-matrix packing (vs log(d) in prior work)",
+      "NTT-domain automorphisms via precomputed permutation tables",
+      "Seed expansion for 50% query size reduction",
+      "CRS model for server-side preprocessing"
+    ],
+    "modules": {
+      "math": "NTT, polynomial arithmetic, Gaussian sampling, modular arithmetic",
+      "lwe": "LWE encryption, key generation, sample extraction",
+      "rlwe": "RLWE encryption, automorphisms, key-switching",
+      "rgsw": "RGSW encryption for homomorphic multiplication",
+      "ks": "Key-switching matrices and operations",
+      "inspiring": "InspiRING 2-matrix packing algorithm (core innovation)",
+      "pir": "PIR protocol: setup, query, respond, extract",
+      "ethereum_db": "Ethereum state database format support",
+      "modulus_switch": "Ciphertext compression via modulus switching"
+    }
+  },
+  "commands": {
+    "build": "cargo build --release",
+    "test": "cargo test",
+    "test_release": "cargo test --release",
+    "bench": "cargo bench",
+    "bench_packing": "cargo bench --bench packing",
+    "bench_respond": "cargo bench --bench respond",
+    "setup": "cargo run --release --bin inspire-setup -- --database <path> --entry-size 32 --output-dir ./pir-data",
+    "server": "cargo run --release --bin inspire-server -- --crs ./pir-data/crs.json --database ./pir-data/encoded.json --port 3000",
+    "client": "cargo run --release --bin inspire-client -- --crs ./pir-data/crs.json --index <idx> --server http://localhost:3000",
+    "generate_test_data": "cargo run --example generate_test_data",
+    "query_size_comparison": "cargo run --release --example query_size_comparison"
+  },
+  "parameters": {
+    "ring_dim": 2048,
+    "modulus_q": "2^60 - 2^14 + 1 (NTT-friendly)",
+    "plaintext_p": 65536,
+    "sigma": 6.4,
+    "gadget_base": "2^20",
+    "gadget_len": 3,
+    "security_level": "128-bit"
+  },
+  "protocol_variants": {
+    "InsPIRe^0": {
+      "name": "NoPacking",
+      "query_size": "192 KB",
+      "response_size": "545 KB",
+      "total": "737 KB",
+      "notes": "Baseline"
+    },
+    "InsPIRe^1": {
+      "name": "OnePacking",
+      "query_size": "192 KB",
+      "response_size": "32 KB",
+      "total": "224 KB",
+      "notes": "Packed response (17x response reduction)"
+    },
+    "InsPIRe^2": {
+      "name": "TwoPacking/Seeded+Packed",
+      "query_size": "96 KB",
+      "response_size": "32 KB",
+      "total": "128 KB",
+      "notes": "Best practical option (5.7x total reduction)"
+    }
+  },
+  "key_files": {
+    "src/inspiring/inspiring2.rs": "InspiRING 2-matrix packing algorithm (canonical implementation)",
+    "src/inspiring/automorph_pack.rs": "Tree packing with Galois automorphisms",
+    "src/pir/setup.rs": "PIR setup: CRS generation, database encoding",
+    "src/pir/query.rs": "Client query generation (full, seeded, switched)",
+    "src/pir/respond.rs": "Server response computation",
+    "src/pir/extract.rs": "Client response extraction",
+    "src/math/ntt.rs": "Number-theoretic transform implementation",
+    "src/math/poly.rs": "Polynomial arithmetic over R_q",
+    "src/rlwe/enc.rs": "RLWE encryption and operations",
+    "src/rgsw/enc.rs": "RGSW encryption for external product"
+  },
+  "tests": {
+    "unit": "cargo test",
+    "e2e": "cargo test --test e2e_pir",
+    "ethereum": "cargo test --test ethereum_format"
+  },
+  "benchmarks": {
+    "ntt": "benches/ntt.rs - NTT performance",
+    "packing": "benches/packing.rs - InspiRING vs tree packing comparison",
+    "respond": "benches/respond.rs - Server response time"
+  },
+  "documentation": {
+    "README.md": "Project overview and usage",
+    "docs/IMPLEMENTATION.md": "Architecture details",
+    "docs/COMMUNICATION_COSTS.md": "Bandwidth analysis and formulas",
+    "docs/protocol-visualization.html": "Interactive D3 visualization",
+    "CHANGELOG.md": "Version history"
+  },
+  "performance": {
+    "inspiring_online_16_lwes": "115 μs",
+    "inspiring_offline_16_lwes": "6.1 ms",
+    "tree_packing_16_lwes": "~4 ms",
+    "server_respond_time": "~3-4 ms",
+    "e2e_latency": "~12 ms",
+    "crs_key_material_inspiring": "64 bytes (seeds only)",
+    "crs_key_material_tree": "1056 KB"
+  },
+  "related_work": {
+    "inspire_paper": "https://eprint.iacr.org/2024/XXX",
+    "google_reference": "https://github.com/google/private-membership/tree/main/research/InsPIRe"
+  },
+  "last_updated": "2024-12-19"
+}
