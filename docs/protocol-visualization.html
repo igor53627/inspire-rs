@@ -475,9 +475,9 @@
 
         <!-- Parameter Effects -->
         <div class="section">
-            <h2>3. Parameter Effects</h2>
+            <h2>3. Parameter Effects <span id="variant-indicator" style="font-size: 0.85rem; font-weight: normal; color: var(--accent-purple);">(InsPIRe^1)</span></h2>
             <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
-                <strong style="color: var(--accent-green);">Key:</strong> Sizes scale linearly with ring dimension (d) and gadget length (l). Larger entries need more ciphertexts.
+                <strong style="color: var(--accent-green);">Key:</strong> Sizes scale linearly with ring dimension (d) and gadget length (l). Select variant in Section 2 to update calculations.
             </p>
             <div class="sliders">
                 <div class="slider-group">
@@ -1374,6 +1374,8 @@
                 this.setAttribute("tabindex", "0");
                 currentFormat = this.dataset.format;
                 updateCharts();
+                // Update section 3 calculator to match selected variant
+                calculateSizes();
             });
             
             // Keyboard navigation (arrow keys)
@@ -1419,17 +1421,68 @@
             document.getElementById("entry-value").textContent = `${entrySize} bytes`;
             document.getElementById("gadget-value").textContent = gadgetLen;
 
-            // Query size (seeded): 2l * d * 8 (b-polys) + 2l * 32 (seeds) + metadata
-            // Formula from code: each RGSW row is SeededRlweCiphertext with 32-byte seed + b polynomial
-            const queryBPolys = 2 * gadgetLen * d * 8; // b polynomials
-            const querySeeds = 2 * gadgetLen * 32;     // seeds (32 bytes each)
-            const querySize = (queryBPolys + querySeeds) / 1024; // KB
-
-            // Response size: num_columns * 2 * d * 8
-            // Formula from code: num_columns = (entry_size * 8 + 15) / 16 (integer division)
-            // This is ceil(entry_bits / 16) where 16 = log2(p)
+            // Response size: num_columns * 2 * d * 8 (for NoPacking) or single RLWE (for packing)
             const numColumns = Math.floor((entrySize * 8 + 15) / 16);
-            const responseSize = (numColumns * 2 * d * 8) / 1024; // KB
+            const singleRlweSize = (2 * d * 8) / 1024; // KB
+            const unpackedResponseSize = (numColumns * 2 * d * 8) / 1024; // KB
+            
+            // Calculate query size based on current format
+            let querySize, queryFormula, queryLabel;
+            let responseSize, responseFormula, responseLabel;
+            
+            switch (currentFormat) {
+                case "inspire0": // Full query (a + b polynomials)
+                    const fullQuerySize = 2 * gadgetLen * 2 * d * 8; // both a and b
+                    querySize = fullQuerySize / 1024;
+                    queryLabel = "Query Size (full)";
+                    queryFormula = `2l*2*d*8 = 2*${gadgetLen}*2*${d}*8 = ${fullQuerySize} bytes`;
+                    responseSize = unpackedResponseSize;
+                    responseLabel = "Response Size (unpacked)";
+                    responseFormula = `${numColumns} cols * 2 * ${d} * 8 = ${numColumns * 2 * d * 8} bytes`;
+                    break;
+                    
+                case "inspire1": // Full query + packed response
+                    const fullQuerySize1 = 2 * gadgetLen * 2 * d * 8;
+                    querySize = fullQuerySize1 / 1024;
+                    queryLabel = "Query Size (full)";
+                    queryFormula = `2l*2*d*8 = 2*${gadgetLen}*2*${d}*8 = ${fullQuerySize1} bytes`;
+                    responseSize = singleRlweSize;
+                    responseLabel = "Response Size (packed)";
+                    responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
+                    break;
+                    
+                case "inspire2": // Seeded query + packed response
+                    const queryBPolys = 2 * gadgetLen * d * 8;
+                    const querySeeds = 2 * gadgetLen * 32;
+                    querySize = (queryBPolys + querySeeds) / 1024;
+                    queryLabel = "Query Size (seeded)";
+                    queryFormula = `2l*d*8 + 2l*32 = 2*${gadgetLen}*${d}*8 + ${querySeeds} = ${queryBPolys + querySeeds} bytes`;
+                    responseSize = singleRlweSize;
+                    responseLabel = "Response Size (packed)";
+                    responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
+                    break;
+                    
+                case "inspire2plus": // Switched + seeded query + packed response
+                    const queryBPolysSwitched = 2 * gadgetLen * d * 4; // 4 bytes per coeff (u32)
+                    const querySeedsSwitched = 2 * gadgetLen * 32;
+                    querySize = (queryBPolysSwitched + querySeedsSwitched) / 1024;
+                    queryLabel = "Query Size (switched)";
+                    queryFormula = `2l*d*4 + 2l*32 = 2*${gadgetLen}*${d}*4 + ${querySeedsSwitched} = ${queryBPolysSwitched + querySeedsSwitched} bytes`;
+                    responseSize = singleRlweSize;
+                    responseLabel = "Response Size (packed)";
+                    responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
+                    break;
+                    
+                default: // Default to seeded
+                    const defBPolys = 2 * gadgetLen * d * 8;
+                    const defSeeds = 2 * gadgetLen * 32;
+                    querySize = (defBPolys + defSeeds) / 1024;
+                    queryLabel = "Query Size (seeded)";
+                    queryFormula = `2l*d*8 + 2l*32 = ${defBPolys + defSeeds} bytes`;
+                    responseSize = singleRlweSize;
+                    responseLabel = "Response Size (packed)";
+                    responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
+            }
 
             const totalSize = querySize + responseSize;
 
@@ -1438,11 +1491,22 @@
             document.getElementById("calc-response").textContent = `${responseSize.toFixed(0)} KB`;
             document.getElementById("calc-total").textContent = `${totalSize.toFixed(0)} KB`;
             
+            // Update labels to reflect current variant
+            document.querySelector(".size-card.query .size-label").textContent = queryLabel;
+            document.querySelector(".size-card.response .size-label").textContent = responseLabel;
+            
+            // Update variant indicator in section header
+            const variantNames = {
+                "inspire0": "InsPIRe^0",
+                "inspire1": "InsPIRe^1", 
+                "inspire2": "InsPIRe^2",
+                "inspire2plus": "InsPIRe^2+"
+            };
+            document.getElementById("variant-indicator").textContent = `(${variantNames[currentFormat] || currentFormat})`;
+            
             // Update formula details
-            document.getElementById("query-formula").textContent = 
-                `2l*d*8 + 2l*32 = 2*${gadgetLen}*${d}*8 + ${2*gadgetLen*32} = ${queryBPolys + querySeeds} bytes`;
-            document.getElementById("response-formula").textContent = 
-                `${numColumns} cols * 2 * ${d} * 8 = ${numColumns * 2 * d * 8} bytes`;
+            document.getElementById("query-formula").textContent = queryFormula;
+            document.getElementById("response-formula").textContent = responseFormula;
         }
 
         document.getElementById("d-slider").addEventListener("input", calculateSizes);
