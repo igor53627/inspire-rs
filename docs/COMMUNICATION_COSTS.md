@@ -28,10 +28,21 @@ The CRS is shared once and reused across queries:
 
 | Component | Size (d=2048) | Purpose |
 |-----------|---------------|---------|
-| Key-switching matrices (K_g, K_h) | 60-84 KB | Ring packing |
-| RGSW gadget encryptions | ~10-20 KB | Polynomial evaluation |
-| Galois keys | ~10-20 KB | Automorphisms τ_g |
-| **Total CRS** | **~100-130 KB** | |
+| InspiRING seeds (w_seed, v_seed) | 64 bytes | Ring packing key generation |
+| RGSW gadget parameters | ~100 bytes | Gadget decomposition |
+| Galois keys (tree packing) | ~1056 KB | Automorphisms τ_g (if using tree packing) |
+| **Total CRS (InspiRING)** | **~1 KB** | Seeds + metadata |
+| **Total CRS (Tree packing)** | **~1 MB** | Full key-switching matrices |
+
+### InspiRING vs Tree Packing Key Material
+
+| Approach | CRS Storage | Per-Query Keys |
+|----------|-------------|----------------|
+| Tree Packing | 11 × 96 KB = 1056 KB | None |
+| InspiRING | 64 bytes (seeds) | y_body = 48 KB |
+| **Reduction** | **16,000x** | +48 KB per query |
+
+InspiRING trades CRS size for per-query packing keys. For most deployments, this is beneficial since CRS is cached locally while queries are sent over the network.
 
 ## Why PIR Sizes Are Constant
 

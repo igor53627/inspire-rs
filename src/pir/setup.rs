@@ -10,6 +10,7 @@
 use eyre::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::inspiring::{PackParams, PackingKeyBody, PrecompInsPIR, packing_offline};
 use crate::ks::{generate_automorphism_ks_matrix, generate_packing_ks_matrix, KeySwitchingMatrix};
 use crate::lwe::LweSecretKey;
 use crate::math::{GaussianSampler, NttContext, Poly};
@@ -40,6 +41,22 @@ pub struct ServerCrs {
     /// Key-switching matrix for InspiRING packing (LWE→RLWE, conjugation h)
     /// Required for full packing (d ciphertexts)
     pub packing_k_h: Option<KeySwitchingMatrix>,
+    /// InspiRING packing parameters (canonical API)
+    #[serde(skip)]
+    pub inspiring_pack_params: Option<PackParams>,
+    /// InspiRING offline precomputation (a_hat, bold_t)
+    /// Computed from crs_a_vectors during setup
+    pub inspiring_precomp: Option<PrecompInsPIR>,
+    /// InspiRING packing key body (w_all rotations - server side)
+    #[serde(skip)]
+    pub inspiring_packing_key: Option<PackingKeyBody>,
+    /// InspiRING w_seed: shared seed for generating w_mask
+    /// Client uses this to generate y_body = τ_g(s)·G - s·w_mask + error
+    pub inspiring_w_seed: [u8; 32],
+    /// InspiRING v_seed: shared seed for conjugation mask (full packing only)
+    pub inspiring_v_seed: [u8; 32],
+    /// Number of columns per entry (γ for InspiRING packing)
+    pub inspiring_num_columns: usize,
 }
 
 impl ServerCrs {
@@ -139,6 +156,42 @@ pub fn setup(
     let packing_k_g = generate_packing_ks_matrix(&lwe_sk, &rlwe_sk, &gadget, sampler, &ctx);
     let packing_k_h = generate_packing_ks_matrix(&lwe_sk, &rlwe_sk, &gadget, sampler, &ctx);
 
+    // InspiRING canonical packing setup
+    // γ (num_to_pack) must match the actual number of columns being packed
+    // num_columns = ceil(entry_size_bytes * 8 / 16) = ceil(entry_size / 2)
+    // Each column is 16 bits (2 bytes) of the entry
+    let bytes_per_column = 2usize; // 16-bit columns
+    let num_columns = (entry_size + bytes_per_column - 1) / bytes_per_column;
+    let num_columns = num_columns.max(1); // At least 1 column
+    
+    let inspiring_pack_params = PackParams::new(params, num_columns);
+    
+    // Generate random seeds for InspiRING (shared between client and server)
+    let mut inspiring_w_seed = [0u8; 32];
+    let mut inspiring_v_seed = [0u8; 32];
+    use rand::RngCore;
+    rand::thread_rng().fill_bytes(&mut inspiring_w_seed);
+    rand::thread_rng().fill_bytes(&mut inspiring_v_seed);
+    
+    // Generate offline packing keys from w_seed (server-side)
+    let inspiring_packing_key = PackingKeyBody::generate(
+        &inspiring_pack_params,
+        inspiring_w_seed,
+    );
+    
+    // Precompute offline phase using CRS a-vectors (only need num_columns a-vectors)
+    let a_polys: Vec<Poly> = crs_a_vectors
+        .iter()
+        .take(num_columns) // Only use first num_columns a-vectors
+        .map(|a| Poly::from_coeffs(a.clone(), q))
+        .collect();
+    let inspiring_precomp = packing_offline(
+        &inspiring_pack_params,
+        &inspiring_packing_key,
+        &a_polys,
+        &ctx,
+    );
+
     let shard_data = encode_database(database, entry_size, params, &shard_config);
 
     let crs = ServerCrs {
@@ -150,6 +203,12 @@ pub fn setup(
         crs_a_vectors,
         packing_k_g: Some(packing_k_g),
         packing_k_h: Some(packing_k_h),
+        inspiring_pack_params: Some(inspiring_pack_params),
+        inspiring_precomp: Some(inspiring_precomp),
+        inspiring_packing_key: Some(inspiring_packing_key),
+        inspiring_w_seed,
+        inspiring_v_seed,
+        inspiring_num_columns: num_columns,
     };
 
     let encoded_db = EncodedDatabase {

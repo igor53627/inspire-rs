@@ -131,6 +131,39 @@ fn extract_packed(
     Ok(entry)
 }
 
+/// Extract from InspiRING 2-matrix packing response
+///
+/// Unlike tree packing, InspiRING does NOT scale values by d.
+/// Values are placed at coefficients 0, 1, 2, ... at their natural scale.
+pub fn extract_inspiring(
+    crs: &InspireCrs,
+    state: &ClientState,
+    response: &ServerResponse,
+    entry_size: usize,
+) -> Result<Vec<u8>> {
+    let d = crs.ring_dim();
+    let q = crs.modulus();
+    let p = crs.params.p;
+    let delta = crs.params.delta();
+    let ctx = NttContext::new(d, q);
+
+    let num_columns = (entry_size * 8 + 15) / 16;
+
+    // Decrypt the packed ciphertext
+    let decrypted = response.ciphertext.decrypt(&state.rlwe_secret_key, delta, p, &ctx);
+
+    // Extract column values from their positions (NO d-scaling for InspiRING)
+    let mut column_values = Vec::with_capacity(num_columns);
+    for col in 0..num_columns {
+        let value = decrypted.coeff(col);
+        column_values.push(value);
+    }
+
+    let entry = reconstruct_entry(&column_values, entry_size);
+
+    Ok(entry)
+}
+
 /// Compute modular inverse using extended Euclidean algorithm
 fn mod_inverse(a: u64, m: u64) -> Option<u64> {
     let (g, x, _) = extended_gcd(a as i64, m as i64);

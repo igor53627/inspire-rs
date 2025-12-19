@@ -174,6 +174,12 @@ impl NttContext {
         }
     }
 
+    /// Single pointwise multiplication (for fused multiply-add operations)
+    #[inline]
+    pub fn pointwise_mul_single(&self, a: u64, b: u64) -> u64 {
+        self.montgomery_mul(a, b)
+    }
+
     /// Convert value to Montgomery form
     pub fn to_mont(&self, a: u64) -> u64 {
         Self::to_montgomery(a, self.q, self.r_squared, self.q_inv_neg)

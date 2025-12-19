@@ -4,7 +4,10 @@
 
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::{InspireParams, InspireVariant, SecurityLevel};
-use inspire_pir::pir::{extract, extract_with_variant, query, query_seeded, query_switched, respond, respond_with_variant, setup};
+use inspire_pir::pir::{
+    extract, extract_with_variant, extract_inspiring, query, query_seeded, query_switched,
+    respond, respond_with_variant, respond_inspiring, setup,
+};
 
 fn test_params() -> InspireParams {
     InspireParams {
@@ -414,4 +417,62 @@ fn test_e2e_variant_two_packing() {
         &extracted[..],
         &expected[..]
     );
+}
+
+/// Test InspiRING canonical packing (2-matrix algorithm)
+///
+/// Uses the canonical InspiRING implementation which is 226x faster than tree packing.
+#[test]
+fn test_e2e_inspiring_packing() {
+    let params = test_params();
+    let d = params.ring_dim;
+
+    let num_entries = d;
+    let entry_size = 2; // 1 column per entry, value < 256
+    
+    // Create database with column values < 256 (high byte = 0)
+    let database: Vec<u8> = (0..num_entries)
+        .flat_map(|i| {
+            let low_byte = (i % 256) as u8;
+            let high_byte = 0u8;
+            vec![low_byte, high_byte]
+        })
+        .collect();
+
+    let mut sampler = GaussianSampler::new(params.sigma);
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+    // Verify InspiRING precomputation was set up
+    assert!(crs.inspiring_precomp.is_some(), "InspiRING precomp should be set");
+    assert!(crs.inspiring_pack_params.is_some(), "InspiRING pack_params should be set");
+
+    // Test multiple indices
+    for target_index in [0u64, 1, 42, 100] {
+        let (state, client_query) =
+            query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+
+        // Use InspiRING packing
+        let response = respond_inspiring(&crs, &encoded_db, &client_query)
+            .expect("InspiRING respond should succeed");
+
+        // Verify we got a packed response
+        assert_eq!(response.ciphertext.ring_dim(), params.ring_dim);
+        assert!(response.column_ciphertexts.is_empty(), "InspiRING should pack into single ciphertext");
+
+        // Extract using InspiRING extraction (NOT tree packing - different scaling)
+        let extracted = extract_inspiring(&crs, &state, &response, entry_size)
+            .expect("Extract should succeed");
+
+        let expected_start = (target_index as usize) * entry_size;
+        let expected = &database[expected_start..expected_start + entry_size];
+
+        assert_eq!(
+            extracted.as_slice(),
+            expected,
+            "InspiRING failed for index {}: extracted {:?}, expected {:?}",
+            target_index,
+            &extracted[..],
+            &expected[..]
+        );
+    }
 }

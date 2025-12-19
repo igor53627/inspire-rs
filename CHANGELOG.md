@@ -9,17 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **InspiRING 2-Matrix Packing Algorithm**: Alternative to tree packing with dramatically better performance
-  - `inspiring2` module implementing Google's reference algorithm
+- **InspiRING 2-Matrix Packing Algorithm**: Canonical port of Google's reference implementation
+  - `inspiring2` module faithfully implementing Google's `packing.rs` algorithm
   - Uses only 2 key-switching matrices (K_g, K_h) instead of log(d)=11 matrices
-  - `GeneratorPowers` - precomputed g^i mod 2d table for generator-based indexing
-  - `RotatedKsMatrix` - pre-rotated K_g by automorphisms τ_{g^i}
-  - `precompute_inspiring()` - offline phase: inner products + backward recursion
-  - `pack_inspiring()` - online phase: single matrix multiply
-  - `pack_inspiring_full()` - full d-slot packing using both K_g and K_h
-  - Performance: **226x faster** online packing (4.2ms vs 948ms for d=2048, 16 LWEs)
-  - Key material: **5.5x smaller** (12,288 vs 67,584 coefficients)
+  - **New canonical API** (matching Google's structure):
+    - `PackParams` - packing parameters with correct generator formula `gen = 2n/gamma + 1`
+    - `PrecompInsPIR` - offline precomputation (a_hat, bold_t, bold_t_bar, bold_t_hat)
+    - `OfflinePackingKeys` - server-side key generation with w_all rotations
+    - `ClientPackingKeys` - client-side key generation with y_all rotations
+    - `packing_offline()` - R[i] inner products with g^(n-i), 1/gamma scaling, automorphisms, backward recursion
+    - `packing_online()` - y_all x bold_t multiplication
+    - `packing_online_fully_ntt()` - fully NTT-optimized online phase (O(n) per multiply)
+    - `full_packing_offline()` - parallel dual recursion for gamma=n
+    - `generate_rotations()` - generate y_all from y_body
+  - **Google-matching performance optimizations**:
+    - NTT-domain automorphisms via precomputed permutation tables: O(n) vs O(n log n)
+    - `automorph_tables` stored in `PackParams` for all odd automorphism indices
+    - `apply_automorphism_ntt()` and `apply_automorphism_ntt_double()` for O(n) NTT-domain automorphisms
+    - `mod_inv_poly_ntt` for fast scalar multiply in NTT domain
+    - Fused multiply-accumulate using `mul_acc_ntt_domain()` in Poly
+    - Pre-cached `bold_t_ntt` in PrecompInsPIR for zero-conversion online phase
+    - Shared `NttContext` passed through key generation functions
+    - All rotation generation uses NTT-domain automorphisms
+  - **Legacy API** (compatibility layer):
+    - `GeneratorPowers` - precomputed g^i mod 2d table
+    - `RotatedKsMatrix` - pre-rotated K_g by automorphisms
+    - `precompute_inspiring()`, `pack_inspiring_legacy()`, `pack_inspiring_partial()`, `pack_inspiring_full()`
+  - Performance: **35x faster** online packing (115μs vs ~4ms for d=2048, 16 LWEs)
+  - CRS key material: **16,000x smaller** (64 bytes seeds vs 1056 KB for d=2048)
   - Updated docs/protocol-visualization.html with algorithm comparison toggle
+  - New benchmark groups: `ntt_automorphism_d2048`, `production_inspiring2_d2048`
+  - New example: `cargo run --release --example query_size_comparison`
+  - References: https://github.com/google/private-membership/tree/main/research/InsPIRe
 
 - **InsPIRe^1 (OnePacking) implementation**: Automorphism-based tree packing for response compression
   - `pack_lwes()` packs multiple LWE ciphertexts into single RLWE using Galois automorphisms

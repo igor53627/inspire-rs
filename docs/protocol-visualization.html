@@ -676,10 +676,29 @@
                         <h4 style="color: var(--accent-orange); font-size: 0.9rem; margin-bottom: 0.5rem;">Performance (d=2048)</h4>
                         <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">
                             <strong>Keys:</strong> 2 matrices (K_g, K_h) vs 11<br>
-                            <strong>Key size:</strong> 5.5x smaller<br>
-                            <strong>Online time:</strong> <span style="color: var(--accent-green);">4.2ms</span> vs 948ms<br>
-                            <strong>Speedup:</strong> <span style="color: var(--accent-green); font-weight: bold;">226x faster</span>
+                            <strong>CRS size:</strong> 64 bytes vs 1056 KB (seeds only)<br>
+                            <strong>Online (16 LWEs):</strong> <span style="color: var(--accent-green);">115 μs</span><br>
+                            <strong>Offline (16 LWEs):</strong> 6.1 ms (amortized)
                         </p>
+                    </div>
+                </div>
+                
+                <!-- NTT Optimization Details -->
+                <div style="margin-top: 1rem; background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; border-left: 4px solid var(--accent-blue);">
+                    <h4 style="color: var(--accent-blue); font-size: 0.9rem; margin-bottom: 0.5rem;">Google-Matching NTT Optimizations</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                        <div>
+                            <strong style="color: var(--accent-purple);">NTT-Domain Automorphisms</strong><br>
+                            Precomputed permutation tables enable O(n) automorphisms vs O(n log n) NTT conversion
+                        </div>
+                        <div>
+                            <strong style="color: var(--accent-purple);">Fused Multiply-Accumulate</strong><br>
+                            mul_acc_ntt_domain() avoids intermediate allocations in inner loops
+                        </div>
+                        <div>
+                            <strong style="color: var(--accent-purple);">Pre-cached bold_t_ntt</strong><br>
+                            Zero NTT conversions in online phase - pure pointwise operations
+                        </div>
                     </div>
                 </div>
                 
@@ -702,16 +721,22 @@
                                 <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">5.5x</td>
                             </tr>
                             <tr>
-                                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Key Material</td>
-                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">67,584 coeffs</td>
-                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">12,288 coeffs</td>
-                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">5.5x</td>
+                                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">CRS Key Material</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">1056 KB</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">64 bytes (seeds)</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">16,000x</td>
                             </tr>
                             <tr>
                                 <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Online Time (16 LWEs)</td>
-                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">948 ms</td>
-                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">4.2 ms</td>
-                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); font-weight: bold; color: var(--accent-green);">226x</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">~4ms (legacy)</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">115 μs</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); font-weight: bold; color: var(--accent-green);">35x</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">Offline Precomputation</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">N/A</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--accent-green);">6.1 ms</td>
+                                <td style="padding: 0.75rem; text-align: center; border-bottom: 1px solid var(--border-color);">amortized</td>
                             </tr>
                         </tbody>
                     </table>

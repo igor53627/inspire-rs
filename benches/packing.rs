@@ -1,12 +1,15 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use inspire_pir::inspiring::{
-    pack_lwes, precompute_inspiring, pack_inspiring, YConstants, GeneratorPowers,
+    pack_lwes, precompute_inspiring, pack_inspiring_legacy, YConstants, GeneratorPowers,
+    PackParams, OfflinePackingKeys, ClientPackingKeys,
+    packing_offline, packing_online, packing_online_fully_ntt,
 };
 use inspire_pir::ks::generate_automorphism_ks_matrix;
 use inspire_pir::math::{GaussianSampler, NttContext, Poly};
 use inspire_pir::params::InspireParams;
 use inspire_pir::pir::setup;
 use inspire_pir::rgsw::GadgetVector;
+use inspire_pir::rlwe::RlweSecretKey;
 
 fn test_params() -> InspireParams {
     InspireParams {
@@ -75,7 +78,7 @@ fn inspiring2_benchmark(c: &mut Criterion) {
 
     let entry_size = 32;
     let database: Vec<u8> = (0..(d * entry_size)).map(|i| (i % 256) as u8).collect();
-    let (crs, _encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+    let (_crs, _encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, q);
     let g = 3;
@@ -111,7 +114,7 @@ fn inspiring2_benchmark(c: &mut Criterion) {
             BenchmarkId::new("pack_online", format!("{}_lwes", num_lwes)),
             &num_lwes,
             |b, _| {
-                b.iter(|| pack_inspiring(&lwe_cts, &precomp, &k_g, &params));
+                b.iter(|| pack_inspiring_legacy(&lwe_cts, &precomp, &k_g, &params));
             },
         );
     }
@@ -157,13 +160,13 @@ fn comparison_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("inspiring2_online", |b| {
-        b.iter(|| pack_inspiring(&lwe_cts, &precomp, &k_g, &params));
+        b.iter(|| pack_inspiring_legacy(&lwe_cts, &precomp, &k_g, &params));
     });
 
     group.bench_function("inspiring2_full", |b| {
         b.iter(|| {
             let precomp = precompute_inspiring(&crs_a_vectors, &k_g, &params);
-            pack_inspiring(&lwe_cts, &precomp, &k_g, &params)
+            pack_inspiring_legacy(&lwe_cts, &precomp, &k_g, &params)
         });
     });
 
@@ -209,7 +212,7 @@ fn production_comparison_benchmark(c: &mut Criterion) {
     });
 
     group.bench_function("inspiring2_online", |b| {
-        b.iter(|| pack_inspiring(&lwe_cts, &precomp, &k_g, &params));
+        b.iter(|| pack_inspiring_legacy(&lwe_cts, &precomp, &k_g, &params));
     });
 
     group.finish();
@@ -254,6 +257,134 @@ fn y_constants_benchmark(c: &mut Criterion) {
     });
 }
 
+fn canonical_api_benchmark(c: &mut Criterion) {
+    let params = test_params();
+    let d = params.ring_dim;
+    let q = params.q;
+    let ctx = NttContext::new(d, q);
+    let mut sampler = GaussianSampler::new(params.sigma);
+
+    let entry_size = 32;
+    let database: Vec<u8> = (0..(d * entry_size)).map(|i| (i % 256) as u8).collect();
+    let (_crs, _encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+    let mut group = c.benchmark_group("canonical_api");
+
+    for num_lwes in [8, 16, 32] {
+        let a_polys: Vec<Poly> = (0..num_lwes)
+            .map(|_| Poly::random(d, q))
+            .collect();
+
+        let pack_params = PackParams::new(&params, num_lwes);
+        let packing_key = OfflinePackingKeys::generate(&pack_params, [0u8; 32]);
+
+        group.bench_with_input(
+            BenchmarkId::new("packing_offline", format!("{}_lwes", num_lwes)),
+            &num_lwes,
+            |b, _| {
+                b.iter(|| packing_offline(&pack_params, &packing_key, &a_polys, &ctx));
+            },
+        );
+
+        let mut precomp = packing_offline(&pack_params, &packing_key, &a_polys, &ctx);
+        precomp.ensure_ntt_cached(&ctx);
+        
+        let client_keys = ClientPackingKeys::generate(&rlwe_sk, &pack_params, [0u8; 32], &mut sampler);
+        let b_poly = Poly::random(d, q);
+
+        group.bench_with_input(
+            BenchmarkId::new("packing_online", format!("{}_lwes", num_lwes)),
+            &num_lwes,
+            |b, _| {
+                b.iter(|| packing_online(&precomp, &client_keys.y_all, &b_poly, &ctx));
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("packing_online_fully_ntt", format!("{}_lwes", num_lwes)),
+            &num_lwes,
+            |b, _| {
+                b.iter(|| packing_online_fully_ntt(&precomp, &client_keys.y_all_ntt, &b_poly, &ctx));
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn ntt_automorphism_benchmark(c: &mut Criterion) {
+    let params = production_params();
+    let d = params.ring_dim;
+    let q = params.q;
+    let _ctx = NttContext::new(d, q);
+    let mut sampler = GaussianSampler::new(params.sigma);
+
+    let mut group = c.benchmark_group("ntt_automorphism_d2048");
+    group.sample_size(50);
+
+    let pack_params = PackParams::new(&params, 16);
+    
+    group.bench_function("automorph_table_generation", |b| {
+        b.iter(|| PackParams::new(&params, 16));
+    });
+
+    group.bench_function("offline_packing_keys_generate", |b| {
+        b.iter(|| OfflinePackingKeys::generate(&pack_params, [0u8; 32]));
+    });
+
+    let rlwe_sk = RlweSecretKey::generate(&params, &mut sampler);
+    group.bench_function("client_packing_keys_generate", |b| {
+        b.iter(|| ClientPackingKeys::generate(&rlwe_sk, &pack_params, [0u8; 32], &mut sampler));
+    });
+
+    group.finish();
+}
+
+fn production_inspiring2_benchmark(c: &mut Criterion) {
+    let params = production_params();
+    let d = params.ring_dim;
+    let q = params.q;
+    let ctx = NttContext::new(d, q);
+    let mut sampler = GaussianSampler::new(params.sigma);
+
+    let rlwe_sk = RlweSecretKey::generate(&params, &mut sampler);
+
+    let mut group = c.benchmark_group("production_inspiring2_d2048");
+    group.sample_size(20);
+
+    for num_lwes in [16, 32, 64, 128] {
+        let a_polys: Vec<Poly> = (0..num_lwes)
+            .map(|_| Poly::random(d, q))
+            .collect();
+
+        let pack_params = PackParams::new(&params, num_lwes);
+        let packing_key = OfflinePackingKeys::generate(&pack_params, [0u8; 32]);
+
+        group.bench_with_input(
+            BenchmarkId::new("offline", format!("{}_lwes", num_lwes)),
+            &num_lwes,
+            |b, _| {
+                b.iter(|| packing_offline(&pack_params, &packing_key, &a_polys, &ctx));
+            },
+        );
+
+        let mut precomp = packing_offline(&pack_params, &packing_key, &a_polys, &ctx);
+        precomp.ensure_ntt_cached(&ctx);
+        let client_keys = ClientPackingKeys::generate(&rlwe_sk, &pack_params, [0u8; 32], &mut sampler);
+        let b_poly = Poly::random(d, q);
+
+        group.bench_with_input(
+            BenchmarkId::new("online_fully_ntt", format!("{}_lwes", num_lwes)),
+            &num_lwes,
+            |b, _| {
+                b.iter(|| packing_online_fully_ntt(&precomp, &client_keys.y_all_ntt, &b_poly, &ctx));
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     pack_lwes_benchmark,
@@ -261,6 +392,9 @@ criterion_group!(
     comparison_benchmark,
     production_comparison_benchmark,
     key_material_benchmark,
-    y_constants_benchmark
+    y_constants_benchmark,
+    canonical_api_benchmark,
+    ntt_automorphism_benchmark,
+    production_inspiring2_benchmark
 );
 criterion_main!(benches);

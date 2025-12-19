@@ -11,6 +11,7 @@
 use eyre::Result;
 use serde::{Deserialize, Serialize};
 
+use crate::inspiring::ClientPackingKeys;
 use crate::lwe::LweSecretKey;
 use crate::math::{GaussianSampler, NttContext};
 use crate::modulus_switch::{SwitchedSeededRgswCiphertext, DEFAULT_SWITCHED_Q};
@@ -59,6 +60,10 @@ pub struct ClientQuery {
     pub shard_id: u32,
     /// RGSW ciphertext of evaluation point for polynomial evaluation
     pub rgsw_ciphertext: RgswCiphertext,
+    /// InspiRING client packing keys (optional, for InspiRING packing)
+    /// Contains y_all = τ_{g^i}(y_body) where y_body = τ_g(s)·G - s·w_mask + error
+    #[serde(skip)]  // Skip during serialization since it's large - generated on server side if needed
+    pub inspiring_packing_keys: Option<ClientPackingKeys>,
 }
 
 /// Seeded client query for network transmission
@@ -75,10 +80,14 @@ pub struct SeededClientQuery {
 
 impl SeededClientQuery {
     /// Expand to full ClientQuery by regenerating `a` polynomials from seeds
+    ///
+    /// Note: This does NOT include InspiRING packing keys since those require
+    /// the secret key to generate. Use `expand_with_packing_keys()` if needed.
     pub fn expand(&self) -> ClientQuery {
         ClientQuery {
             shard_id: self.shard_id,
             rgsw_ciphertext: self.rgsw_ciphertext.expand(),
+            inspiring_packing_keys: None, // Not available for seeded queries
         }
     }
 }
@@ -104,11 +113,14 @@ impl SwitchedClientQuery {
     /// Expand to full ClientQuery
     ///
     /// First expands modulus (q' → q), then expands seeds (seed → polynomial).
+    ///
+    /// Note: This does NOT include InspiRING packing keys.
     pub fn expand(&self) -> ClientQuery {
         let seeded = self.rgsw_ciphertext.expand();
         ClientQuery {
             shard_id: self.shard_id,
             rgsw_ciphertext: seeded.expand(),
+            inspiring_packing_keys: None,
         }
     }
     
@@ -170,9 +182,22 @@ pub fn query(
         local_index,
     };
 
+    // Generate InspiRING client packing keys if pack_params available
+    let inspiring_packing_keys = if let Some(ref pack_params) = crs.inspiring_pack_params {
+        Some(ClientPackingKeys::generate(
+            rlwe_sk,
+            pack_params,
+            crs.inspiring_w_seed,
+            sampler,
+        ))
+    } else {
+        None
+    };
+
     let query = ClientQuery {
         shard_id,
         rgsw_ciphertext,
+        inspiring_packing_keys,
     };
 
     Ok((state, query))
