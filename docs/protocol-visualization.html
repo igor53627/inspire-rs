@@ -750,65 +750,134 @@
             <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
                 <strong style="color: var(--accent-green);">Key:</strong> Query and response sizes are <strong style="color: var(--accent-blue);">CONSTANT</strong> regardless of database size. This is essential for privacy.
             </p>
+            
+            <!-- Variant selector for the table -->
+            <div class="format-toggle" id="table-variant-toggle" style="margin-bottom: 1rem;">
+                <button data-variant="inspire0">InsPIRe^0</button>
+                <button data-variant="inspire1" class="active">InsPIRe^1</button>
+                <button data-variant="inspire2">InsPIRe^2</button>
+                <button data-variant="inspire2plus">InsPIRe^2+</button>
+            </div>
+            
             <table class="comparison-table">
                 <thead>
                     <tr>
                         <th>Database Size</th>
                         <th>Entries</th>
                         <th>Shards</th>
-                        <th>Query Size</th>
-                        <th>Response Size</th>
+                        <th id="table-query-header">Query Size</th>
+                        <th id="table-response-header">Response Size</th>
+                        <th>Total</th>
                         <th>Server Time</th>
                     </tr>
                     <tr class="annotation-row" style="background: var(--bg-tertiary);">
                         <td colspan="3" style="text-align: right; color: var(--text-secondary); font-size: 0.8rem; font-style: italic;">Varies with N --></td>
-                        <td colspan="2" style="text-align: center; color: var(--accent-green); font-weight: bold; font-size: 0.85rem;">O(d) - Constant!</td>
+                        <td colspan="3" style="text-align: center; color: var(--accent-green); font-weight: bold; font-size: 0.85rem;">O(d) - Constant!</td>
                         <td style="text-align: center; color: var(--accent-orange); font-size: 0.8rem; font-style: italic;">O(log N)</td>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="comparison-table-body">
                     <tr>
                         <td>32 KB</td>
                         <td>1,024</td>
                         <td>1</td>
-                        <td class="same">96 KB</td>
-                        <td class="same">512 KB</td>
+                        <td class="same" data-query>192 KB</td>
+                        <td class="same" data-response>32 KB</td>
+                        <td class="same" data-total>224 KB</td>
                         <td class="varies">~1 ms</td>
                     </tr>
                     <tr>
                         <td>2 MB</td>
                         <td>65,536</td>
                         <td>32</td>
-                        <td class="same">96 KB</td>
-                        <td class="same">512 KB</td>
+                        <td class="same" data-query>192 KB</td>
+                        <td class="same" data-response>32 KB</td>
+                        <td class="same" data-total>224 KB</td>
                         <td class="varies">~1.5 ms</td>
                     </tr>
                     <tr>
                         <td>32 MB</td>
                         <td>1,048,576</td>
                         <td>512</td>
-                        <td class="same">96 KB</td>
-                        <td class="same">512 KB</td>
+                        <td class="same" data-query>192 KB</td>
+                        <td class="same" data-response>32 KB</td>
+                        <td class="same" data-total>224 KB</td>
                         <td class="varies">~3 ms</td>
                     </tr>
                     <tr>
                         <td>3.2 GB</td>
                         <td>100,000,000</td>
                         <td>48,829</td>
-                        <td class="same">96 KB</td>
-                        <td class="same">512 KB</td>
+                        <td class="same" data-query>192 KB</td>
+                        <td class="same" data-response>32 KB</td>
+                        <td class="same" data-total>224 KB</td>
                         <td class="varies">~3 ms</td>
                     </tr>
                     <tr>
                         <td style="color: var(--accent-purple);">73 GB (Ethereum)</td>
                         <td>2,400,000,000</td>
                         <td>1,171,875</td>
-                        <td class="same">96 KB</td>
-                        <td class="same">512 KB</td>
+                        <td class="same" data-query>192 KB</td>
+                        <td class="same" data-response>32 KB</td>
+                        <td class="same" data-total>224 KB</td>
                         <td class="varies">~3 ms</td>
                     </tr>
                 </tbody>
             </table>
+            
+            <!-- Summary comparison across all variants -->
+            <div style="margin-top: 1.5rem;">
+                <h3 style="color: var(--accent-purple); font-size: 1rem; margin-bottom: 0.75rem;">All Variants Summary (d=2048, 32-byte entries)</h3>
+                <table class="comparison-table" style="font-size: 0.9rem;">
+                    <thead>
+                        <tr>
+                            <th>Variant</th>
+                            <th>Query</th>
+                            <th>Response</th>
+                            <th>Total</th>
+                            <th>Reduction</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="font-weight: 600;">InsPIRe^0</td>
+                            <td>192 KB</td>
+                            <td>545 KB</td>
+                            <td style="color: var(--text-secondary);">737 KB</td>
+                            <td>baseline</td>
+                            <td style="font-size: 0.8rem; color: var(--text-secondary);">Full query + unpacked</td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 600; color: var(--accent-blue);">InsPIRe^1</td>
+                            <td>192 KB</td>
+                            <td style="color: var(--accent-green);">32 KB</td>
+                            <td style="color: var(--accent-blue);">224 KB</td>
+                            <td style="color: var(--accent-green);">3.3x</td>
+                            <td style="font-size: 0.8rem; color: var(--text-secondary);">Packed response</td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 600; color: var(--accent-green);">InsPIRe^2</td>
+                            <td style="color: var(--accent-green);">96 KB</td>
+                            <td style="color: var(--accent-green);">32 KB</td>
+                            <td style="color: var(--accent-green);">128 KB</td>
+                            <td style="color: var(--accent-green);">5.7x</td>
+                            <td style="font-size: 0.8rem; color: var(--text-secondary);">Seeded + packed</td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 600; color: var(--accent-orange);">InsPIRe^2+</td>
+                            <td style="color: var(--accent-orange);">48 KB</td>
+                            <td style="color: var(--accent-green);">32 KB</td>
+                            <td style="color: var(--accent-orange);">80 KB</td>
+                            <td style="color: var(--accent-orange);">9.2x</td>
+                            <td style="font-size: 0.8rem; color: var(--accent-orange);">Switched* + packed</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                    *InsPIRe^2+ uses modulus switching which may exceed noise budget with default parameters.
+                </p>
+            </div>
         </div>
 
         <!-- Appendix: Lattice Cryptography -->
@@ -1514,6 +1583,57 @@
         document.getElementById("gadget-slider").addEventListener("input", calculateSizes);
 
         calculateSizes();
+
+        // ============================================================
+        // Section 5: Database Size Comparison Table Variant Toggle
+        // ============================================================
+        const tableVariantSizes = {
+            "inspire0": { query: 192, response: 545, queryLabel: "full", responseLabel: "unpacked" },
+            "inspire1": { query: 192, response: 32, queryLabel: "full", responseLabel: "packed" },
+            "inspire2": { query: 96, response: 32, queryLabel: "seeded", responseLabel: "packed" },
+            "inspire2plus": { query: 48, response: 32, queryLabel: "switched", responseLabel: "packed" }
+        };
+        
+        let currentTableVariant = "inspire1";
+        
+        function updateComparisonTable() {
+            const sizes = tableVariantSizes[currentTableVariant];
+            const total = sizes.query + sizes.response;
+            
+            // Update all query cells
+            document.querySelectorAll("[data-query]").forEach(cell => {
+                cell.textContent = `${sizes.query} KB`;
+            });
+            
+            // Update all response cells
+            document.querySelectorAll("[data-response]").forEach(cell => {
+                cell.textContent = `${sizes.response} KB`;
+            });
+            
+            // Update all total cells
+            document.querySelectorAll("[data-total]").forEach(cell => {
+                cell.textContent = `${total} KB`;
+            });
+            
+            // Update column headers
+            document.getElementById("table-query-header").textContent = `Query (${sizes.queryLabel})`;
+            document.getElementById("table-response-header").textContent = `Response (${sizes.responseLabel})`;
+        }
+        
+        // Set up Section 5 variant toggle buttons
+        document.querySelectorAll("#table-variant-toggle button").forEach(btn => {
+            btn.addEventListener("click", function() {
+                document.querySelectorAll("#table-variant-toggle button").forEach(b => {
+                    b.classList.remove("active");
+                });
+                this.classList.add("active");
+                currentTableVariant = this.dataset.variant;
+                updateComparisonTable();
+            });
+        });
+        
+        // Initialize table with default variant
+        updateComparisonTable();
 
         // ============================================================
         // Crypto Tooltip Functions
