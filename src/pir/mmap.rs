@@ -7,8 +7,9 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use eyre::{eyre, Result};
 use memmap2::Mmap;
+
+use super::error::{pir_err, Result};
 
 use crate::math::Poly;
 use crate::params::ShardConfig;
@@ -102,7 +103,7 @@ impl MmapDatabase {
     pub fn get_shard(&self, id: u32) -> Result<ShardData> {
         let path = self.shard_dir.join(format!("shard-{:04}.bin", id));
         if !path.exists() {
-            return Err(eyre!("Shard {} not found", id));
+            return Err(pir_err!("Shard {} not found", id));
         }
         load_shard_binary(&path)
     }

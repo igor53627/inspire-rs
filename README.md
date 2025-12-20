@@ -88,6 +88,40 @@ Note: InspiRING stores only 32-byte seeds in CRS; masks are regenerated on deman
 cargo build --release
 ```
 
+### WebAssembly (WASM) Builds
+
+The library supports building for `wasm32-unknown-unknown` targets (browsers) by disabling server-specific features:
+
+```toml
+# In your Cargo.toml
+[dependencies]
+inspire-pir = { version = "0.1", default-features = false }
+```
+
+Build with wasm-pack:
+
+```bash
+wasm-pack build --target web -- --no-default-features
+```
+
+#### WASM Caveats
+
+1. **Parallelism (rayon)**: The library uses `rayon` for parallel computation. On WASM:
+   - Requires wasm threads (nightly + `-Z build-std` + `+atomics,+bulk-memory`)
+   - Integrate with `wasm-bindgen-rayon` for thread pool initialization
+   - Without threads, operations run sequentially on the main thread
+
+2. **Random number generation**: The `rand` crate requires `getrandom` JS support:
+   ```toml
+   [dependencies]
+   getrandom = { version = "0.2", features = ["js"] }
+   ```
+
+3. **Feature availability**: With `default-features = false`:
+   - [OK] Core PIR: setup, query, respond, extract
+   - [X] Server features: mmap, ethereum_db, HTTP endpoints
+   - [X] CLI features: binary executables
+
 ## Testing
 
 ```bash

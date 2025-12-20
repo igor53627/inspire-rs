@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **WASM Support**: Enable building for `wasm32-unknown-unknown` targets (browsers)
+  - `server` feature flag: gates axum, tokio, memmap2, reqwest dependencies
+  - `cli` feature flag: gates clap, eyre, tracing-subscriber, indicatif dependencies
+  - Stable `PirError` type that works across all feature configurations
+  - `pir_err!` macro for portable error creation
+  - Server-only modules (`mmap`, `ethereum_db`) gated behind `server` feature
+  - Binaries have `required-features` to prevent build failures with `--no-default-features`
+  - Documentation for WASM build caveats (rayon threads, getrandom JS)
+
+### Changed
+
 - **InspiRING 2-Matrix Packing Algorithm**: Canonical port of Google's reference implementation
   - `inspiring2` module faithfully implementing Google's `packing.rs` algorithm
   - Uses only 2 key-switching matrices (K_g, K_h) instead of log(d)=11 matrices

@@ -66,14 +66,17 @@ harness = false
 [[bin]]
 name = "inspire-server"
 path = "src/bin/server.rs"
+required-features = ["server", "cli"]
 
 [[bin]]
 name = "inspire-client"
 path = "src/bin/client.rs"
+required-features = ["cli"]
 
 [[bin]]
 name = "inspire-setup"
 path = "src/bin/setup.rs"
+required-features = ["server", "cli"]
 
 [[test]]
 name = "e2e_pir"

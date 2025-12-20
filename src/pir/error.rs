@@ -1,35 +1,50 @@
 //! Error handling for PIR module
 //!
-//! Uses eyre when the cli feature is enabled, otherwise uses a simple error type.
+//! Provides a stable `PirError` type that works across all feature configurations.
+//! This ensures the public API doesn't change based on enabled features.
 
-#[cfg(feature = "cli")]
-pub use eyre::Result;
+use std::fmt;
 
-#[cfg(feature = "cli")]
-macro_rules! pir_err {
-    ($($arg:tt)*) => {
-        eyre::eyre!($($arg)*)
-    };
-}
-
-#[cfg(not(feature = "cli"))]
-pub type Result<T> = std::result::Result<T, PirError>;
-
-#[cfg(not(feature = "cli"))]
+/// PIR operation error
+///
+/// A simple, stable error type for PIR operations that works in all environments
+/// including WASM. This type is always the same regardless of feature flags.
 #[derive(Debug)]
 pub struct PirError(pub String);
 
-#[cfg(not(feature = "cli"))]
-impl std::fmt::Display for PirError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for PirError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-#[cfg(not(feature = "cli"))]
 impl std::error::Error for PirError {}
 
-#[cfg(not(feature = "cli"))]
+impl PirError {
+    /// Create a new PIR error with the given message
+    pub fn new(msg: impl Into<String>) -> Self {
+        Self(msg.into())
+    }
+}
+
+impl From<std::io::Error> for PirError {
+    fn from(err: std::io::Error) -> Self {
+        Self(err.to_string())
+    }
+}
+
+impl From<bincode::Error> for PirError {
+    fn from(err: bincode::Error) -> Self {
+        Self(err.to_string())
+    }
+}
+
+/// Result type for PIR operations
+///
+/// Always uses `PirError` regardless of feature flags for API stability.
+pub type Result<T> = std::result::Result<T, PirError>;
+
+/// Create a PirError with format string support
 macro_rules! pir_err {
     ($($arg:tt)*) => {
         $crate::pir::error::PirError(format!($($arg)*))

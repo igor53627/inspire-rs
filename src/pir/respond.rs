@@ -593,6 +593,7 @@ mod tests {
         assert_eq!(combined.b.coeff(0), 300);
     }
 
+    #[cfg(feature = "server")]
     #[test]
     fn test_respond_mmap() {
         use crate::pir::save_shards_binary;
