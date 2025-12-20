@@ -43,21 +43,28 @@
 //! ```
 
 mod encode_db;
+mod error;
 mod eval_poly;
 mod extract;
+#[cfg(feature = "server")]
 mod mmap;
 mod query;
 mod respond;
 mod setup;
 
+pub use error::Result;
+
 pub use encode_db::{encode_column, encode_database, encode_direct, inverse_monomial};
 pub use extract::{extract, extract_with_variant, extract_inspiring};
+#[cfg(feature = "server")]
 pub use mmap::{save_shards_binary, load_shard_binary, MmapDatabase};
 pub use query::{query, query_seeded, query_switched, ClientQuery, ClientState, SeededClientQuery, SwitchedClientQuery};
 pub use respond::{
-    respond, respond_mmap, respond_sequential, respond_with_variant,
+    respond, respond_sequential, respond_with_variant,
     respond_seeded, respond_seeded_packed, respond_switched, respond_switched_packed,
     respond_one_packing, respond_inspiring, respond_seeded_inspiring,
     ServerResponse,
 };
+#[cfg(feature = "server")]
+pub use respond::respond_mmap;
 pub use setup::{setup, EncodedDatabase, InspireCrs, ServerCrs, ShardData};

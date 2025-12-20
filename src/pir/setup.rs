@@ -7,7 +7,7 @@
 //! - `EncodedDatabase`: Database encoded as polynomials
 //! - `RlweSecretKey`: Client secret key for encryption/decryption
 
-use eyre::Result;
+use super::error::{pir_err, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::inspiring::{PackParams, PackingKeyBody, PrecompInsPIR, packing_offline};
@@ -112,7 +112,7 @@ pub fn setup(
     entry_size: usize,
     sampler: &mut GaussianSampler,
 ) -> Result<(ServerCrs, EncodedDatabase, RlweSecretKey)> {
-    params.validate().map_err(|e| eyre::eyre!(e))?;
+    params.validate().map_err(|e| pir_err!("{}", e))?;
 
     let d = params.ring_dim;
     let q = params.q;
