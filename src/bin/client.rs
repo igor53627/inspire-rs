@@ -16,8 +16,8 @@ use tracing_subscriber::FmtSubscriber;
 
 use inspire_pir::ethereum_db::{load_account_mapping, load_storage_mapping};
 use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::ShardConfig;
-use inspire_pir::pir::{extract, query, ClientQuery, ServerCrs, ServerResponse};
+use inspire_pir::params::{InspireVariant, ShardConfig};
+use inspire_pir::pir::{extract_with_variant, query, ClientQuery, ServerCrs, ServerResponse};
 use inspire_pir::rlwe::RlweSecretKey;
 
 #[derive(Parser)]
@@ -214,7 +214,7 @@ async fn query_by_index(server: &str, sk_path: &PathBuf, index: u64) -> Result<(
     info!("Extracting result...");
     let extract_start = Instant::now();
 
-    let entry = extract(&crs, &state, &response.response, 32)
+    let entry = extract_with_variant(&crs, &state, &response.response, 32, InspireVariant::OnePacking)
         .with_context(|| "Failed to extract result")?;
 
     info!("Extraction time: {:.2?}", extract_start.elapsed());
@@ -348,7 +348,7 @@ async fn batch_query(server: &str, sk_path: &PathBuf, file: &PathBuf) -> Result<
         let response = send_query(server, &client_query).await?;
         total_server_time += response.processing_time_ms;
 
-        let entry = extract(&crs, &state, &response.response, 32)?;
+        let entry = extract_with_variant(&crs, &state, &response.response, 32, InspireVariant::OnePacking)?;
         results.push((*index, entry));
 
         pb.inc(1);

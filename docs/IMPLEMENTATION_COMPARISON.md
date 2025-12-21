@@ -17,16 +17,17 @@
 ```
 lib.rs
 ├── params          # InspireParams, SecurityLevel
+├── modulus_switch  # Modulus switching (experimental)
 ├── math            # Poly, NTT, samplers
 ├── lwe             # LWE primitives
 ├── rlwe            # RlweSecretKey, RlweCiphertext
 ├── rgsw            # RgswCiphertext, external_product
 ├── ks              # Key-switching
-├── inspiring       # InspiRING packing
+├── inspiring       # InspiRING packing (inspiring2, automorph_pack, etc.)
 ├── pir             # setup/query/respond/extract API
 │   ├── encode_db
 │   ├── mmap
-│   ├── modulus_switch
+│   ├── error
 │   └── ...
 └── ethereum_db     # Ethereum integration
 ```
@@ -58,11 +59,19 @@ lib.rs
 | SimplePIR | [X] | [OK] |
 | DoublePIR | [X] | [OK] |
 | InsPIRe (full) | [OK] | [OK] |
-| InsPIRe^0 | [X] | [OK] |
-| InsPIRe^2 | [X] | [OK] |
+| InsPIRe^0 (NoPacking) | [OK] | [OK] |
+| InsPIRe^1 (OnePacking) | [OK] | [OK] |
+| InsPIRe^2 (Seeded+Packed) | [OK] | [OK] |
+| InsPIRe^2+ (ModSwitch+Packed) | [OK]* | [OK] |
 | Sqrt-N layout | [OK] | (via nu_1/nu_2) |
 
-**inspire-rs** focuses exclusively on the final InsPIRe protocol with homomorphic polynomial evaluation - the most communication-efficient variant.
+*InsPIRe^2+ is experimental and may exceed noise budget with default parameters.
+
+**inspire-rs** implements the InsPIRe protocol with multiple variants:
+- InsPIRe^0: `respond()` - no packing
+- InsPIRe^1: `respond_one_packing()` - tree-packed response (uses `automorph_pack`)
+- InsPIRe^2: `query_seeded()` + `respond_seeded_packed()` - seeded + packed
+- InsPIRe^2+: `query_switched()` + `respond_switched_packed()` - experimental
 
 ---
 
@@ -134,14 +143,16 @@ Raw bytes → YServer::new() → in-memory matrices
 
 | Aspect | inspire-rs | Google |
 |--------|------------|--------|
-| Key-switch matrices | 2 | 2 (but configurable) |
+| Key-switch matrices | 2 (InspiRING) / log(d) (tree) | 2 (but configurable) |
 | Multi-gamma support | [X] | [OK] (gamma_0, gamma_1, gamma_2) |
-| Packing variants | Single | NoPacking, CDKS, InspiRING |
-| API exposure | Internal module | Full packing pipeline |
+| Packing variants | Tree packing (default), InspiRING | NoPacking, CDKS, InspiRING |
+| API exposure | Internal module + respond variants | Full packing pipeline |
 
 Google's InspiRING is deeply integrated with multi-layer PIR (DoublePIR, InsPIRe variants), using multiple gamma parameters for staged packing.
 
-inspire-rs implements InspiRING more directly as a supporting module for the final InsPIRe protocol.
+**inspire-rs** implements both packing approaches:
+- **Tree packing** (`automorph_pack`): Used by `respond_one_packing()` and the HTTP server. Uses log(d) Galois key-switching matrices stored in `galois_keys`.
+- **InspiRING 2-matrix** (`inspiring2`): Available via `respond_inspiring()` for local experiments. Requires `ClientPackingKeys` which are not currently transmitted over the network API.
 
 ---
 

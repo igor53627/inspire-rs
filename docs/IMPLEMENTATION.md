@@ -34,11 +34,15 @@ inspire-pir/
 ├── src/
 │   ├── lib.rs                 # Public API
 │   ├── params.rs              # Parameter sets
+│   ├── modulus_switch.rs      # Modulus switching (experimental)
 │   ├── math/
 │   │   ├── mod_q.rs           # Modular arithmetic Z_q
+│   │   ├── modular.rs         # Montgomery reduction
 │   │   ├── ntt.rs             # Number-Theoretic Transform
 │   │   ├── poly.rs            # Polynomials over R_q
-│   │   └── gaussian.rs        # Error sampling
+│   │   ├── gaussian.rs        # Error sampling
+│   │   ├── sampler.rs         # Sampler traits
+│   │   └── sampling.rs        # Uniform/ternary sampling
 │   ├── lwe/
 │   │   ├── types.rs           # LWE ciphertext, secret key
 │   │   └── enc.rs             # LWE encryption/decryption
@@ -56,7 +60,11 @@ inspire-pir/
 │   │   ├── transform.rs       # Transform, TransformPartial
 │   │   ├── collapse.rs        # Collapse, CollapseHalf
 │   │   ├── collapse_one.rs    # CollapseOne
-│   │   └── pack.rs            # Pack, PartialPack
+│   │   ├── pack.rs            # Pack, PartialPack
+│   │   ├── inspiring2.rs      # Canonical 2-matrix InspiRING API
+│   │   ├── automorph_pack.rs  # Tree packing via automorphisms
+│   │   ├── simple_pack.rs     # Simple LWE packing
+│   │   └── types.rs           # Packing types
 │   ├── pir/
 │   │   ├── setup.rs           # InsPIRe.Setup
 │   │   ├── query.rs           # InsPIRe.Query
@@ -64,7 +72,8 @@ inspire-pir/
 │   │   ├── extract.rs         # InsPIRe.Extract
 │   │   ├── encode_db.rs       # EncodeDB, Interpolate
 │   │   ├── eval_poly.rs       # Homomorphic polynomial evaluation
-│   │   └── mmap.rs            # Memory-mapped database support
+│   │   ├── mmap.rs            # Memory-mapped database support
+│   │   └── error.rs           # PIR error types
 │   ├── ethereum_db/
 │   │   ├── mapping.rs         # Parse account/storage mappings
 │   │   └── adapter.rs         # Convert to InsPIRe shards
@@ -93,10 +102,8 @@ Transforms d LWE ciphertexts into a single RLWE ciphertext using only 2 key-swit
 ### InsPIRe PIR Protocol
 
 1. **Setup(D)**: Server-side preprocessing
-   - Generate CRS (K_g, K_h, Galois keys)
-   - EncodeDB: Convert database to polynomial representation
-   - Interpolate: Cooley-Tukey for polynomial coefficients
-   - GenFixedQueryParts: Precompute CRS-dependent values
+   - Generate CRS: automorphism key-switching matrices (`k_g`, `k_h`), tree-packing Galois keys, CRS `a`-vectors, and InspiRING packing precomputation
+   - EncodeDB: Convert database to polynomial representation (encoding + interpolation internally)
 
 2. **Query(idx)**: Client generates query
    - Decompose: `idx → (shard_id, local_idx)`
@@ -118,9 +125,11 @@ Transforms d LWE ciphertexts into a single RLWE ciphertext using only 2 key-swit
 
 | Component | Time | Storage |
 |-----------|------|---------|
-| CRS/Key material | seconds-minutes | <10 MB |
+| CRS/Key material | seconds-minutes | ~40-50 MB (d=2048) |
 | DB encoding (73 GB) | 1-2 hours | ~73 GB |
-| Total | ~2 hours | ~150 GB |
+| Total | ~2 hours | ~120 GB |
+
+Note: CRS size is dominated by `crs_a_vectors` (d×d coefficients ≈ 33 MB for d=2048) and InspiRING offline precomputation.
 
 ### Online Query
 
@@ -178,18 +187,27 @@ Benefits:
 ### Data Format (from plinko-extractor)
 
 - **database.bin**: Flat binary, 32-byte words
-  - Accounts: 3 words (nonce, balance, bytecode_hash)
-  - Storage: 1 word (value)
-- **account-mapping.bin**: Address(20) + Index(4)
-- **storage-mapping.bin**: Address(20) + SlotKey(32) + Index(4)
+  - Accounts: 3 words (nonce, balance, bytecode_hash) = 96 bytes
+  - Storage: 1 word (value) = 32 bytes
+- **account-mapping.bin**: Address(20 bytes) + Index(8 bytes LE)
+- **storage-mapping.bin**: Address(20 bytes) + SlotKey(32 bytes) + Index(8 bytes LE)
 
 ### Client Flow
 
 1. Wallet needs `(address, maybe_slot)`
 2. Lookup index via mapping (local or remote)
-3. `InspireClient::query(idx)` → PIR query
-4. Send to server → `InspireServer::respond()`
-5. `InspireClient::extract()` → 32-byte value
+3. Client generates query: `query(&crs, idx, ...)` or `query_seeded(...)` → PIR query
+4. Send to server HTTP endpoint → server calls `respond(&crs, &db, &query)`
+5. Client extracts: `extract(&crs, &state, &response, entry_size)` → 32-byte value
+
+CLI usage:
+```bash
+# Query by raw index
+inspire-client --server http://localhost:3000 Index --index 12345
+
+# Query account by address
+inspire-client --server http://localhost:3000 Account --address 0x...
+```
 
 ## Dependencies
 
@@ -202,10 +220,10 @@ Core (no external FHE library needed):
 ## Security Considerations
 
 - Parameters validated via lattice-estimator for 128-bit security
-- CRS model: random components fixed but secret keys re-sampled per query
+- CRS model: random CRS components and key-switching matrices are fixed at `setup`; the RLWE secret key is generated once and reused across queries
 - No client-specific server state (supports anonymity)
 - Circular security assumption (standard for lattice FHE)
-- Secret keys separated from CRS (ServerCrs contains only public params)
+- Secret keys separated from CRS (`ServerCrs` contains only public parameters and precomputation, no secret key)
 - `#[serde(skip)]` on secret key fields prevents accidental serialization
 
 ## Implementation Phases

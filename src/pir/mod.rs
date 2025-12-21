@@ -66,5 +66,5 @@ pub use respond::{
     ServerResponse,
 };
 #[cfg(feature = "server")]
-pub use respond::respond_mmap;
+pub use respond::{respond_mmap, respond_mmap_one_packing};
 pub use setup::{setup, EncodedDatabase, InspireCrs, ServerCrs, ShardData};
