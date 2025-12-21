@@ -506,6 +506,55 @@ pub fn respond_mmap(
     })
 }
 
+/// PIR.Respond with tree packing using memory-mapped database
+///
+/// Same as `respond_one_packing` but loads shards on-demand from disk.
+/// Returns a single packed RLWE ciphertext (32 KB) instead of 17 separate ones (544 KB).
+#[cfg(feature = "server")]
+pub fn respond_mmap_one_packing(
+    crs: &ServerCrs,
+    mmap_db: &MmapDatabase,
+    query: &ClientQuery,
+) -> Result<ServerResponse> {
+    use crate::inspiring::automorph_pack::pack_lwes;
+
+    let d = crs.ring_dim();
+    let q = crs.modulus();
+    let delta = crs.params.delta();
+
+    let shard = mmap_db.get_shard(query.shard_id)?;
+
+    if shard.polynomials.is_empty() {
+        let zero = RlweCiphertext::zero(&crs.params);
+        return Ok(ServerResponse {
+            ciphertext: zero,
+            column_ciphertexts: vec![],
+        });
+    }
+
+    let column_ciphertexts: Vec<RlweCiphertext> = shard
+        .polynomials
+        .par_iter()
+        .map(|db_poly| {
+            let local_ctx = NttContext::new(d, q);
+            let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
+            external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
+        })
+        .collect();
+
+    let lwe_cts: Vec<_> = column_ciphertexts
+        .iter()
+        .map(|rlwe| rlwe.sample_extract_coeff0())
+        .collect();
+
+    let packed = pack_lwes(&lwe_cts, &crs.galois_keys, &crs.params);
+
+    Ok(ServerResponse {
+        ciphertext: packed,
+        column_ciphertexts: vec![],
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

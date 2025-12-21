@@ -30,27 +30,36 @@ InsPIRe achieves state-of-the-art communication efficiency for single-server PIR
 
 ```bash
 cargo run --release --bin inspire-setup -- \
-  --database path/to/database.bin \
-  --entry-size 32 \
-  --output-dir ./pir-data
+  --data-dir path/to/plinko-output \
+  --output-dir ./inspire_data \
+  --ring-dim 2048 \
+  --binary-output  # optional: also write binary shards for mmap
 ```
 
 ### Server
 
 ```bash
 cargo run --release --bin inspire-server -- \
-  --crs ./pir-data/crs.json \
-  --database ./pir-data/encoded.json \
-  --port 3000
+  --data-dir ./inspire_data \
+  --bind 0.0.0.0:3000 \
+  --mmap  # optional: use memory-mapped shards
 ```
 
 ### Client
 
 ```bash
+# Query by raw index
 cargo run --release --bin inspire-client -- \
-  --crs ./pir-data/crs.json \
-  --index 12345 \
-  --server http://localhost:3000
+  --server http://localhost:3000 \
+  --secret-key inspire_data/secret_key.json \
+  Index --index 12345
+
+# Query account by address
+cargo run --release --bin inspire-client -- \
+  --server http://localhost:3000 \
+  --secret-key inspire_data/secret_key.json \
+  --account-mapping inspire_data/account-mapping.bin \
+  Account --address 0x...
 ```
 
 ## Protocol
@@ -72,15 +81,15 @@ The key insight: storing value `y_k` at coefficient `k` of polynomial `h(X)`, th
 | Error σ | 6.4 | Discrete Gaussian |
 | Key-switching matrices | 2 | K_g, K_h only (InspiRING) |
 
-### InspiRING Key Material Comparison
+### InspiRING Key Material Comparison (Conceptual)
 
-| Approach | KS Matrices | CRS Key Material |
-|----------|-------------|------------------|
+| Approach | KS Matrices | Conceptual Storage |
+|----------|-------------|-------------------|
 | Tree Packing | log(d) = 11 | 1056 KB |
 | InspiRING (2-matrix) | 2 (seeds only) | 64 bytes |
 | **Reduction** | **5.5x** | **16,000x** |
 
-Note: InspiRING stores only 32-byte seeds in CRS; masks are regenerated on demand. Per-query client packing keys (y_body) add ~48 KB.
+**Note**: The conceptual 64-byte figure refers only to InspiRING packing-key seeds. The actual `ServerCrs` in this implementation is ~40-50 MB (d=2048), dominated by `crs_a_vectors` (d×d coefficients ≈ 33 MB) and offline precomputation. The HTTP server currently uses **tree packing** (`respond_one_packing`); InspiRING 2-matrix packing (`respond_inspiring`) is available for local experiments.
 
 ## Building
 
@@ -208,20 +217,23 @@ Benchmarked on AMD/Intel x64 server with d=2048, 128-bit security:
 | Client: Extract result | ~5 ms |
 | **Total round-trip** | **~12 ms** |
 
-### InspiRING Packing Performance
+### Packing Performance
 
-The InspiRING 2-matrix packing algorithm provides significant speedup over tree packing:
+The implementation supports two packing approaches:
 
-| Operation | Complexity | Notes |
-|-----------|------------|-------|
-| Offline phase | O(γ × ℓ × n log n) | Precomputed once per CRS |
-| Online phase | O(γ × ℓ × n) | NTT-domain multiply-accumulate |
-| Automorphisms | O(n) | Table lookup vs O(n log n) NTT |
+| Approach | Used By | Complexity | Notes |
+|----------|---------|------------|-------|
+| Tree packing | `respond_one_packing()`, HTTP server | O(log d) key-switches | Default for networked API |
+| InspiRING 2-matrix | `respond_inspiring()` | O(γ × ℓ × n) online | Local experiments only |
 
-Key optimizations matching Google's reference:
+**Tree packing** (via `automorph_pack`) is the default for the HTTP server. The server uses `respond_one_packing()` to return 32 KB packed responses, and the client uses `extract_with_variant(..., InspireVariant::OnePacking)` to unpack. This uses log(d) Galois key-switching matrices stored in the CRS.
+
+**InspiRING 2-matrix** packing is implemented in `inspiring2` module with optimizations matching Google's reference:
 - NTT-domain automorphisms via precomputed permutation tables
 - Fused multiply-accumulate in NTT domain
 - Pre-cached bold_t in NTT form for zero-conversion online phase
+
+Note: InspiRING requires `ClientPackingKeys` which are not currently transmitted over the network API.
 
 Run benchmarks: `cargo bench --bench packing`
 

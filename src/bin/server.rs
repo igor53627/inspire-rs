@@ -21,7 +21,10 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use inspire_pir::pir::{respond, respond_mmap, ClientQuery, EncodedDatabase, InspireCrs, MmapDatabase, ServerResponse};
+use inspire_pir::pir::{
+    respond_one_packing, respond_mmap_one_packing,
+    ClientQuery, EncodedDatabase, InspireCrs, MmapDatabase, ServerResponse,
+};
 
 #[derive(Parser)]
 #[command(name = "inspire-server")]
@@ -120,8 +123,8 @@ async fn handle_query(
     let start = Instant::now();
 
     let response = match &state.db {
-        DatabaseMode::InMemory(encoded_db) => respond(&state.crs, encoded_db, &query),
-        DatabaseMode::Mmap(mmap_db) => respond_mmap(&state.crs, mmap_db, &query),
+        DatabaseMode::InMemory(encoded_db) => respond_one_packing(&state.crs, encoded_db, &query),
+        DatabaseMode::Mmap(mmap_db) => respond_mmap_one_packing(&state.crs, mmap_db, &query),
     }
     .map_err(|e| {
         (

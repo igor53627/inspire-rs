@@ -40,25 +40,34 @@ The table above shows **InsPIRe^0 (NoPacking)** costs. With packing enabled, res
 
 ## CRS (Common Reference String) Overhead
 
-The CRS is shared once and reused across queries:
+The CRS is shared once and reused across queries.
+
+### Conceptual Key Material (Algorithm)
+
+| Approach | KS Matrices | Conceptual Storage |
+|----------|-------------|-------------------|
+| Tree Packing | log(d) = 11 | 11 × 96 KB = 1056 KB |
+| InspiRING | 2 (seeds only) | 64 bytes |
+| **Reduction** | **5.5x** | **16,000x** |
+
+### Actual ServerCrs Size (This Implementation)
 
 | Component | Size (d=2048) | Purpose |
 |-----------|---------------|---------|
-| InspiRING seeds (w_seed, v_seed) | 64 bytes | Ring packing key generation |
-| RGSW gadget parameters | ~100 bytes | Gadget decomposition |
-| Galois keys (tree packing) | ~1056 KB | Automorphisms τ_g (if using tree packing) |
-| **Total CRS (InspiRING)** | **~1 KB** | Seeds + metadata |
-| **Total CRS (Tree packing)** | **~1 MB** | Full key-switching matrices |
+| `crs_a_vectors` (d×d) | ~33 MB | Query verification / expansion |
+| Galois keys (tree packing) | ~1 MB | Automorphisms τ_g |
+| Key-switching matrices (k_g, k_h) | ~200 KB | InspiRING automorphisms |
+| InspiRING precomputation | ~2-5 MB | Offline packing data |
+| Metadata + seeds | <1 KB | Parameters, seeds |
+| **Total ServerCrs** | **~40-50 MB** | Full CRS for d=2048 |
 
-### InspiRING vs Tree Packing Key Material
+**Note**: The current implementation stores `crs_a_vectors` (d random a-vectors, d coefficients each) in the CRS, which dominates storage. The 64-byte figure refers only to the conceptual InspiRING packing-key seeds.
 
-| Approach | CRS Storage | Per-Query Keys |
-|----------|-------------|----------------|
-| Tree Packing | 11 × 96 KB = 1056 KB | None |
-| InspiRING | 64 bytes (seeds) | y_body = 48 KB |
-| **Reduction** | **16,000x** | +48 KB per query |
+### Packing Approach in HTTP Server
 
-InspiRING trades CRS size for per-query packing keys. For most deployments, this is beneficial since CRS is cached locally while queries are sent over the network.
+The HTTP server uses **tree packing** (`respond_one_packing` / `respond_mmap_one_packing`) for all responses, returning packed 32 KB responses instead of 544 KB unpacked responses. The client uses `extract_with_variant(..., InspireVariant::OnePacking)` to unpack the columns.
+
+InspiRING 2-matrix packing (`respond_inspiring`) is also implemented but requires `ClientPackingKeys` which are not currently transmitted over the network API.
 
 ## Why PIR Sizes Are Constant
 
@@ -105,14 +114,17 @@ The response contains RLWE ciphertexts for each column of the entry:
 Response Size = num_ciphertexts × 2 × d × 8 bytes
 
 Where:
-  num_ciphertexts = ceil(entry_bits / log₂(p)) + 1
+  num_ciphertexts = num_columns + 1 (combined + per-column)
                   = ceil(256 / 16) + 1 = 17  (for 32-byte entries)
   d = ring dimension (2048)
   8 = bytes per coefficient
 
-Calculation: 17 × 2 × 2048 × 8 = 557,056 bytes ≈ 544 KB (binary)
+Calculation (NoPacking): 17 × 2 × 2048 × 8 = 557,056 bytes ≈ 544 KB (binary)
+                         18 ciphertexts in implementation = ~576 KB actual
 With JSON overhead: ~1,296 KB
 ```
+
+Note: The implementation includes one additional combined ciphertext alongside the 16 per-column ciphertexts, so the actual binary size is closer to 576 KB for InsPIRe^0 (NoPacking). The "Binary" column assumes bincode serialization; the HTTP API uses JSON by default.
 
 **What affects response size:**
 | Factor | Effect |
