@@ -124,6 +124,10 @@ pub fn respond(
 /// - `NoPacking` (InsPIRe^0): One RLWE per column, simplest
 /// - `OnePacking` (InsPIRe^1): InspiRING packed response (single RLWE ciphertext)
 /// - `TwoPacking` (InsPIRe^2): Double-packed response (not yet implemented)
+///
+/// # Packing Algorithm Selection
+/// - If `inspiring_packing_keys` is present in query: uses InspiRING (~35x faster online)
+/// - Otherwise: falls back to tree packing (requires galois_keys in CRS)
 pub fn respond_with_variant(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
@@ -132,12 +136,13 @@ pub fn respond_with_variant(
 ) -> Result<ServerResponse> {
     match variant {
         InspireVariant::NoPacking => respond(crs, encoded_db, query),
-        InspireVariant::OnePacking => respond_one_packing(crs, encoded_db, query),
-        InspireVariant::TwoPacking => {
-            // TwoPacking uses the same response format as OnePacking
-            // The difference is that the query was compressed (seeded/switched)
-            // and expanded by the server before calling this function
-            respond_one_packing(crs, encoded_db, query)
+        InspireVariant::OnePacking | InspireVariant::TwoPacking => {
+            // Use InspiRING if packing keys available, otherwise tree packing
+            if query.inspiring_packing_keys.is_some() {
+                respond_inspiring(crs, encoded_db, query)
+            } else {
+                respond_one_packing(crs, encoded_db, query)
+            }
         }
     }
 }
@@ -230,8 +235,8 @@ pub fn respond_one_packing(
 /// PIR.Respond using InspiRING 2-matrix packing (canonical implementation)
 ///
 /// Uses the canonical InspiRING algorithm with only 2 key-switching matrices
-/// instead of log(d) matrices for tree packing. This is **226x faster** than
-/// tree packing for online computation.
+/// instead of log(d) matrices for tree packing. This is **~35x faster** than
+/// tree packing for online computation (115 μs vs ~4 ms for d=2048, 16 LWEs).
 ///
 /// # Algorithm
 /// 1. Compute external product for each column (same as tree packing)
@@ -334,7 +339,7 @@ pub fn respond_inspiring(
 
 /// PIR.Respond with seeded query using InspiRING packing
 ///
-/// Combines seeded query (50% query reduction) with InspiRING packing (226x faster).
+/// Combines seeded query (50% query reduction) with InspiRING packing (~35x faster).
 pub fn respond_seeded_inspiring(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
