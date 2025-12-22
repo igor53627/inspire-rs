@@ -22,7 +22,7 @@ use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use inspire_pir::pir::{
-    respond_one_packing, respond_mmap_one_packing,
+    respond_one_packing, respond_mmap_one_packing, respond_inspiring,
     ClientQuery, EncodedDatabase, InspireCrs, MmapDatabase, ServerResponse,
 };
 
@@ -122,9 +122,19 @@ async fn handle_query(
 ) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
     let start = Instant::now();
 
+    // Use InspiRING if packing keys available (~35x faster), otherwise tree packing
     let response = match &state.db {
-        DatabaseMode::InMemory(encoded_db) => respond_one_packing(&state.crs, encoded_db, &query),
-        DatabaseMode::Mmap(mmap_db) => respond_mmap_one_packing(&state.crs, mmap_db, &query),
+        DatabaseMode::InMemory(encoded_db) => {
+            if query.inspiring_packing_keys.is_some() {
+                respond_inspiring(&state.crs, encoded_db, &query)
+            } else {
+                respond_one_packing(&state.crs, encoded_db, &query)
+            }
+        }
+        DatabaseMode::Mmap(mmap_db) => {
+            // TODO: Add respond_mmap_inspiring when needed
+            respond_mmap_one_packing(&state.crs, mmap_db, &query)
+        }
     }
     .map_err(|e| {
         (

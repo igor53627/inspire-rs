@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Default packing algorithm**: `respond_with_variant` for OnePacking/TwoPacking now uses InspiRING when `inspiring_packing_keys` is present in the query (~35x faster online), falling back to tree packing otherwise
+- **HTTP server**: Uses InspiRING for in-memory databases when packing keys are available
+- **Documentation**: Fixed performance claims ("226x faster" -> "~35x faster") and clarified CRS size comparison in protocol-visualization.html
+
 ### Added
 
 - **WASM Support**: Enable building for `wasm32-unknown-unknown` targets (browsers)
