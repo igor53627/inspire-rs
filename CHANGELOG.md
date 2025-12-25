@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **HTTP server**: Uses InspiRING for in-memory databases when packing keys are available
 - **Documentation**: Fixed performance claims ("226x faster" -> "~35x faster") and clarified CRS size comparison in protocol-visualization.html
 
+### Fixed
+
+- **protocol-visualization.html**: Fixed incorrect claims per issue #31
+  - Key Privacy Property: Now correctly states query size depends on N (via N/t indicator) and response depends on entry size
+  - Query structures: InsPIRe_0 and InsPIRe^(2) now correctly show LWE indicator vectors (no RGSW); only InsPIRe uses RGSW ciphertext
+  - Variant naming: Aligned with paper notation (InsPIRe_0, InsPIRe^(2), InsPIRe, InsPIRe+)
+  - Key material: Added separate "Upload Keys" chart showing packing keys (86 KB) per Theorem 12; Protocol Flow now shows "Upload: Keys + Query" breakdown matching paper's Figure 2/3
+
 ### Added
 
 - **WASM Support**: Enable building for `wasm32-unknown-unknown` targets (browsers)

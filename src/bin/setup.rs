@@ -11,6 +11,7 @@ use std::time::Instant;
 use clap::Parser;
 use eyre::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
+use tiny_keccak::{Hasher, Keccak};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -18,6 +19,9 @@ use inspire_pir::ethereum_db::EthereumStateDb;
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::InspireParams;
 use inspire_pir::pir::{setup, save_shards_binary, EncodedDatabase, ServerCrs};
+
+/// Number of buckets for sparse index (2^18 = 256K)
+const NUM_BUCKETS: usize = 262_144;
 
 #[derive(Parser)]
 #[command(name = "inspire-setup")]
@@ -43,6 +47,10 @@ struct Args {
     /// Save shards as binary files for memory-mapped loading
     #[arg(long)]
     binary_output: bool,
+
+    /// Generate bucket index for sparse client lookups
+    #[arg(long, default_value = "true")]
+    bucket_index: bool,
 }
 
 fn main() -> Result<()> {
@@ -96,6 +104,21 @@ fn main() -> Result<()> {
         entry_count, db_size_mb
     );
     info!("Load time: {:.2?}", load_start.elapsed());
+
+    // Build bucket index while iterating storage mapping
+    let bucket_counts = if args.bucket_index {
+        info!("Building bucket index from storage mapping...");
+        let bucket_start = Instant::now();
+        let counts = build_bucket_index(eth_db.storage_map());
+        info!(
+            "Bucket index built: {} buckets in {:.2?}",
+            NUM_BUCKETS,
+            bucket_start.elapsed()
+        );
+        Some(counts)
+    } else {
+        None
+    };
 
     info!("Reading database entries...");
     let pb = ProgressBar::new(entry_count);
@@ -197,6 +220,11 @@ fn main() -> Result<()> {
         info!("Binary shards saved to {}", shards_dir.display());
     }
 
+    // Save bucket index if generated
+    if let Some(ref counts) = bucket_counts {
+        save_bucket_index(&args.output_dir, counts)?;
+    }
+
     save_metadata(&args.output_dir, &params, &crs, &encoded_db, entry_count)?;
 
     let total_time = total_start.elapsed();
@@ -257,5 +285,69 @@ fn save_metadata(
     serde_json::to_writer_pretty(meta_file, &metadata)?;
 
     info!("Metadata saved to {}", meta_path.display());
+    Ok(())
+}
+
+/// Build bucket index from storage mapping
+///
+/// Computes keccak256(address || slot) for each entry and counts per bucket.
+fn build_bucket_index(storage_map: &inspire_pir::ethereum_db::StorageMapping) -> Vec<u32> {
+    let mut bucket_counts = vec![0u32; NUM_BUCKETS];
+
+    for (address, slot, _index) in storage_map.iter() {
+        let bucket_id = compute_bucket_id(&address, &slot);
+        bucket_counts[bucket_id] += 1;
+    }
+
+    bucket_counts
+}
+
+/// Compute bucket ID from address and slot using keccak256
+fn compute_bucket_id(address: &[u8; 20], slot: &[u8; 32]) -> usize {
+    let mut hasher = Keccak::v256();
+    hasher.update(address);
+    hasher.update(slot);
+
+    let mut hash = [0u8; 32];
+    hasher.finalize(&mut hash);
+
+    // Take first 18 bits as bucket ID
+    let bucket_id = ((hash[0] as usize) << 10) | ((hash[1] as usize) << 2) | ((hash[2] as usize) >> 6);
+    bucket_id & (NUM_BUCKETS - 1)
+}
+
+/// Save bucket index to output directory
+fn save_bucket_index(output_dir: &PathBuf, counts: &[u32]) -> Result<()> {
+    // Save uncompressed
+    let index_path = output_dir.join("bucket-index.bin");
+    let mut file = BufWriter::new(File::create(&index_path)?);
+    for &count in counts {
+        file.write_all(&(count as u16).to_le_bytes())?;
+    }
+    file.flush()?;
+
+    let uncompressed_size = counts.len() * 2;
+    info!(
+        "Bucket index saved: {} ({} KB)",
+        index_path.display(),
+        uncompressed_size / 1024
+    );
+
+    // Save compressed
+    let compressed_path = output_dir.join("bucket-index.bin.zst");
+    let raw_data: Vec<u8> = counts
+        .iter()
+        .flat_map(|&c| (c as u16).to_le_bytes())
+        .collect();
+    let compressed = zstd::encode_all(&raw_data[..], 19)?;
+    std::fs::write(&compressed_path, &compressed)?;
+
+    info!(
+        "Compressed bucket index: {} ({} KB, {:.1}%)",
+        compressed_path.display(),
+        compressed.len() / 1024,
+        compressed.len() as f64 / uncompressed_size as f64 * 100.0
+    );
+
     Ok(())
 }

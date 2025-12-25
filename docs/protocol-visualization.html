@@ -401,8 +401,8 @@
         <!-- Key Insight -->
         <div class="section">
             <div class="key-insight">
-                <strong>Key Privacy Property:</strong> Query and response sizes are constant regardless of database size.
-                If sizes varied with the target index or database, traffic analysis could reveal what's being queried.
+                <strong>Key Privacy Property:</strong> For a given database and parameter set, every query uses the same amount of communication, regardless of which entry is requested.
+                Query size scales with database size N (via N/t indicator vector), and response size scales with entry size. If sizes varied with the target index, traffic analysis could reveal what's being queried.
             </div>
         </div>
 
@@ -413,10 +413,10 @@
                 <strong style="color: var(--accent-green);">Key:</strong> One round-trip: client sends encrypted query, server computes on ciphertexts, returns encrypted result.
             </p>
             <div class="format-toggle" id="flow-variant-toggle" style="margin-bottom: 1rem;">
-                <button data-variant="inspire0">InsPIRe^0 (737 KB)</button>
-                <button data-variant="inspire1" class="active">InsPIRe^1 (224 KB)</button>
-                <button data-variant="inspire2">InsPIRe^2 (128 KB)</button>
-                <button data-variant="inspire2plus">InsPIRe^2+ (80 KB)</button>
+                <button data-variant="inspire0">InsPIRe_0 (246 KB)</button>
+                <button data-variant="inspire1" class="active">InsPIRe (310 KB)</button>
+                <button data-variant="inspire2">InsPIRe^(2) (214 KB)</button>
+                <button data-variant="inspire2plus">InsPIRe+ (166 KB)</button>
             </div>
             <div id="protocol-flow">
                 <svg id="flow-svg" viewBox="0 0 900 320" role="img" aria-labelledby="flow-title flow-desc">
@@ -434,41 +434,46 @@
         <div class="section">
             <h2>2. Size Breakdown</h2>
             <p class="section-caption" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
-                <strong style="color: var(--accent-green);">Key:</strong> InsPIRe offers 4 protocol variants trading server computation for bandwidth. ^1 achieves 3.3x reduction, ^2 achieves 5.7x, ^2+ achieves 9.2x.
+                <strong style="color: var(--accent-green);">Key:</strong> Three paper protocols (InsPIRe_0, InsPIRe^(2), InsPIRe) with different query structures. InsPIRe_0 and InsPIRe^(2) use LWE indicators only; InsPIRe adds RGSW for polynomial evaluation. InsPIRe+ is an experimental seeded+switched variant.
             </p>
             <div class="format-toggle">
-                <button data-format="inspire0">InsPIRe^0 (~737 KB)</button>
-                <button class="active" data-format="inspire1">InsPIRe^1 (~224 KB)</button>
-                <button data-format="inspire2">InsPIRe^2 (~128 KB)</button>
-                <button data-format="inspire2plus">InsPIRe^2+ (~80 KB)*</button>
+                <button data-format="inspire0">InsPIRe_0 (~246 KB)</button>
+                <button class="active" data-format="inspire1">InsPIRe (~310 KB)</button>
+                <button data-format="inspire2">InsPIRe^(2) (~214 KB)</button>
+                <button data-format="inspire2plus">InsPIRe+ (~166 KB)</button>
             </div>
             <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                *InsPIRe^2+ uses modulus switching which may exceed noise budget with default parameters. See <a href="COMMUNICATION_COSTS.md#modulus-switching-tradeoffs">tradeoffs</a>.
+                InsPIRe+ uses modulus switching which may exceed noise budget with default parameters. See <a href="COMMUNICATION_COSTS.md#modulus-switching-tradeoffs">tradeoffs</a>.
             </p>
-            <div id="size-breakdown">
+            <div id="size-breakdown" style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;">
+                <div class="chart-container">
+                    <svg id="keys-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="keys-chart-title">
+                        <title id="keys-chart-title">Upload Keys Breakdown Chart</title>
+                    </svg>
+                </div>
                 <div class="chart-container">
                     <svg id="query-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="query-chart-title">
-                        <title id="query-chart-title">Query Size Breakdown Chart</title>
+                        <title id="query-chart-title">Upload Query Breakdown Chart</title>
                     </svg>
                 </div>
                 <div class="chart-container">
                     <svg id="response-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="response-chart-title">
-                        <title id="response-chart-title">Response Size Breakdown Chart</title>
+                        <title id="response-chart-title">Download Response Breakdown Chart</title>
                     </svg>
                 </div>
             </div>
             <div class="legend">
                 <div class="legend-item">
+                    <div class="legend-color" style="background: #d29922;"></div>
+                    <span>Upload Keys (packing/KS matrices)</span>
+                </div>
+                <div class="legend-item">
                     <div class="legend-color" style="background: #58a6ff;"></div>
-                    <span>RGSW Rows (Query)</span>
+                    <span>Upload Query (indicator / RGSW)</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-color" style="background: #3fb950;"></div>
-                    <span>RLWE Ciphertexts (Response)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background: #8b949e;"></div>
-                    <span>Metadata/Overhead</span>
+                    <span>Download (RLWE response)</span>
                 </div>
             </div>
             <div class="tooltip" id="tooltip"></div>
@@ -759,10 +764,10 @@
             
             <!-- Variant selector for the table -->
             <div class="format-toggle" id="table-variant-toggle" style="margin-bottom: 1rem;">
-                <button data-variant="inspire0">InsPIRe^0</button>
-                <button data-variant="inspire1" class="active">InsPIRe^1</button>
-                <button data-variant="inspire2">InsPIRe^2</button>
-                <button data-variant="inspire2plus">InsPIRe^2+</button>
+                <button data-variant="inspire0">InsPIRe_0</button>
+                <button data-variant="inspire1" class="active">InsPIRe</button>
+                <button data-variant="inspire2">InsPIRe^(2)</button>
+                <button data-variant="inspire2plus">InsPIRe+</button>
             </div>
             
             <table class="comparison-table">
@@ -1067,33 +1072,34 @@
         });
 
         // Variant-specific animation steps
+        // Paper breakdown: Upload Keys (86 KB) + Upload Query + Download
         const flowVariantData = {
             "inspire0": {
                 steps: [
                     { id: "step1", fromX: 120, toX: 780, y: 100,
-                      label: "Query: RGSW(X^(-k))", sublabel: "192 KB (full)",
+                      label: "Upload: Keys (86 KB) + Query (128 KB)", sublabel: "LWE indicator, no RGSW",
                       color: COLORS.blue, arrow: "right" },
                     { id: "step2", fromX: 780, toX: 780, y: 160,
-                      label: "Process: h(X) * X^(-k)", sublabel: "External product (no packing)",
+                      label: "Process: Two-level LWE PIR", sublabel: "DoublePIR + InspiRING packing",
                       color: COLORS.purple, arrow: "none", isBox: true },
                     { id: "step3", fromX: 780, toX: 120, y: 220,
-                      label: "Response: 17x RLWE(y_k)", sublabel: "545 KB (1 combined + 16 columns)",
+                      label: "Download: RLWE(packed)", sublabel: "32 KB",
                       color: COLORS.green, arrow: "left" },
                     { id: "step4", fromX: 120, toX: 120, y: 280,
-                      label: "Extract: Decrypt each column", sublabel: "32 bytes result",
+                      label: "Extract: Decrypt packed result", sublabel: "32 bytes result",
                       color: COLORS.orange, arrow: "none", isBox: true }
                 ]
             },
             "inspire1": {
                 steps: [
                     { id: "step1", fromX: 120, toX: 780, y: 100,
-                      label: "Query: RGSW(X^(-k))", sublabel: "192 KB (full)",
+                      label: "Upload: Keys (86 KB) + Query (192 KB)", sublabel: "LWE indicator + RGSW(X^(-k))",
                       color: COLORS.blue, arrow: "right" },
                     { id: "step2", fromX: 780, toX: 780, y: 160,
                       label: "Process + Pack (InspiRING)", sublabel: "External product + 2-matrix packing",
                       color: COLORS.purple, arrow: "none", isBox: true },
                     { id: "step3", fromX: 780, toX: 120, y: 220,
-                      label: "Response: RLWE(packed)", sublabel: "32 KB (17x smaller!)",
+                      label: "Download: RLWE(packed)", sublabel: "32 KB",
                       color: COLORS.green, arrow: "left" },
                     { id: "step4", fromX: 120, toX: 120, y: 280,
                       label: "Extract: Decrypt packed result", sublabel: "32 bytes result",
@@ -1103,13 +1109,13 @@
             "inspire2": {
                 steps: [
                     { id: "step1", fromX: 120, toX: 780, y: 100,
-                      label: "Query: Seeded RGSW", sublabel: "96 KB (50% smaller)",
+                      label: "Upload: Keys (86 KB) + Query (96 KB)", sublabel: "LWE indicator, no RGSW",
                       color: COLORS.blue, arrow: "right" },
                     { id: "step2", fromX: 780, toX: 780, y: 160,
-                      label: "Expand + Process + Pack", sublabel: "Seed expansion + InspiRING",
+                      label: "Process + PartialInspiRING", sublabel: "Two-stage packing",
                       color: COLORS.purple, arrow: "none", isBox: true },
                     { id: "step3", fromX: 780, toX: 120, y: 220,
-                      label: "Response: RLWE(packed)", sublabel: "32 KB",
+                      label: "Download: RLWE(packed)", sublabel: "32 KB",
                       color: COLORS.green, arrow: "left" },
                     { id: "step4", fromX: 120, toX: 120, y: 280,
                       label: "Extract: Decrypt packed result", sublabel: "32 bytes result",
@@ -1119,16 +1125,16 @@
             "inspire2plus": {
                 steps: [
                     { id: "step1", fromX: 120, toX: 780, y: 100,
-                      label: "Query: Switched+Seeded RGSW", sublabel: "48 KB (75% smaller)",
+                      label: "Upload: Keys (86 KB) + Query (48 KB)", sublabel: "Seeded+Switched RGSW",
                       color: COLORS.blue, arrow: "right" },
                     { id: "step2", fromX: 780, toX: 780, y: 160,
                       label: "Expand + Switch + Process + Pack", sublabel: "Modulus switch + InspiRING",
                       color: COLORS.purple, arrow: "none", isBox: true },
                     { id: "step3", fromX: 780, toX: 120, y: 220,
-                      label: "Response: RLWE(packed)", sublabel: "32 KB",
+                      label: "Download: RLWE(packed)", sublabel: "32 KB",
                       color: COLORS.green, arrow: "left" },
                     { id: "step4", fromX: 120, toX: 120, y: 280,
-                      label: "Extract: Decrypt packed result", sublabel: "32 bytes result*",
+                      label: "Extract: Decrypt packed result", sublabel: "32 bytes result",
                       color: COLORS.orange, arrow: "none", isBox: true }
                 ]
             }
@@ -1382,57 +1388,73 @@
         // - Switched query: 49,524 bytes (48.4 KB)
         // - NoPacking response: 557,642 bytes (544.6 KB)
         // - OnePacking response: 32,810 bytes (32.0 KB)
+        // Paper's communication breakdown: Upload Keys + Upload Query + Download
+        // From Theorem 12: d*l_ks*log2(q) + (N/t)*log2(q) + 4*l_gsw*d*log2(q) + 2*d*log2(q)
+        // Packing keys: 2 * d * l_ks * log2(q) / 8 = 2 * 2048 * 3 * 56 / 8 = 86 KB
         const formatData = {
             "inspire0": {
-                name: "InsPIRe^0 (NoPacking)",
-                description: "Full query + unpacked response (one RLWE per column)",
+                name: "InsPIRe_0 (DoublePIR-based)",
+                description: "Two-level LWE PIR with ring packing (no RGSW in query)",
+                keys: [
+                    { name: "Packing keys (KS matrices)", size: 86, formula: "2 * d * l_ks * log2(q) / 8 = 2 * 2048 * 3 * 56 / 8" }
+                ],
                 query: [
-                    { name: "RGSW a-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
-                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" }
+                    { name: "LWE indicator vector", size: 128, formula: "(N/t) * log2(q) / 8 = indicator for column selection" }
                 ],
                 response: [
-                    { name: "17 RLWE ciphertexts", size: 545, formula: "17 * 2 * 2048 * 8 = 557,056 B (1 combined + 16 columns)" }
+                    { name: "Packed RLWE ciphertext", size: 32, formula: "2 * d * log2(q) / 8 = 32 KB" }
                 ],
-                totalQuery: 192,
-                totalResponse: 545
+                totalKeys: 86,
+                totalQuery: 128,
+                totalResponse: 32
             },
             "inspire1": {
-                name: "InsPIRe^1 (OnePacking)",
-                description: "Full query + tree-packed response (single RLWE via automorphisms)",
+                name: "InsPIRe (RGSW-based)",
+                description: "LWE indicator + RGSW ciphertext + InspiRING packing",
+                keys: [
+                    { name: "Packing keys (KS matrices)", size: 86, formula: "2 * d * l_ks * log2(q) / 8 = 2 * 2048 * 3 * 56 / 8" }
+                ],
                 query: [
-                    { name: "RGSW a-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
-                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" }
+                    { name: "LWE indicator vector", size: 64, formula: "(N/t) * log2(q) / 8 = indicator for column selection" },
+                    { name: "RGSW ciphertext", size: 128, formula: "4 * l_gsw * d * log2(q) / 8 = encrypted evaluation point" }
                 ],
                 response: [
-                    { name: "1 packed RLWE", size: 32, formula: "2 * 2048 * 8 = 32,768 B (17x smaller!)" }
+                    { name: "1 packed RLWE", size: 32, formula: "2 * d * log2(q) / 8 = 32 KB" }
                 ],
+                totalKeys: 86,
                 totalQuery: 192,
                 totalResponse: 32
             },
             "inspire2": {
-                name: "InsPIRe^2 (Seeded + Packed)",
-                description: "Seeded query (50% smaller) + tree-packed response",
+                name: "InsPIRe^(2) (Two-level packing)",
+                description: "LWE indicator query + PartialInspiRING two-stage packing (no RGSW)",
+                keys: [
+                    { name: "Packing keys (KS matrices)", size: 86, formula: "2 * d * l_ks * log2(q) / 8 = 2 * 2048 * 3 * 56 / 8" }
+                ],
                 query: [
-                    { name: "RGSW b-polynomials", size: 96, formula: "2l * d * 8 = 6 * 2048 * 8 = 98,304 B" },
-                    { name: "Seeds (32B each)", size: 0.19, formula: "2l * 32 = 6 * 32 = 192 B" }
+                    { name: "LWE indicator vector", size: 96, formula: "(N/t) * log2(q) / 8 = indicator for column selection" }
                 ],
                 response: [
-                    { name: "1 packed RLWE", size: 32, formula: "2 * 2048 * 8 = 32,768 B" }
+                    { name: "1 packed RLWE", size: 32, formula: "2 * d * log2(q) / 8 = 32 KB" }
                 ],
+                totalKeys: 86,
                 totalQuery: 96,
                 totalResponse: 32
             },
             "inspire2plus": {
-                name: "InsPIRe^2+ (Switched + Packed)",
-                description: "Switched+seeded query (75% smaller) + tree-packed response",
+                name: "InsPIRe (Seeded+Switched)",
+                description: "Seeded RGSW query with modulus switching (75% query reduction)",
+                keys: [
+                    { name: "Packing keys (KS matrices)", size: 86, formula: "2 * d * l_ks * log2(q) / 8 = 2 * 2048 * 3 * 56 / 8" }
+                ],
                 query: [
-                    { name: "RGSW b-polynomials (u32)", size: 48, formula: "2l * d * 4 = 6 * 2048 * 4 = 49,152 B" },
-                    { name: "Seeds (32B each)", size: 0.19, formula: "2l * 32 = 6 * 32 = 192 B" },
-                    { name: "Modulus metadata", size: 0.1, formula: "original_q + switched_q per poly" }
+                    { name: "LWE indicator vector", size: 16, formula: "(N/t) * log2(q_switched) / 8" },
+                    { name: "Seeded RGSW (switched)", size: 32, formula: "2 * l_gsw * d * 4 + seeds = modulus-switched" }
                 ],
                 response: [
-                    { name: "1 packed RLWE", size: 32, formula: "2 * 2048 * 8 = 32,768 B" }
+                    { name: "1 packed RLWE", size: 32, formula: "2 * d * log2(q) / 8 = 32 KB" }
                 ],
+                totalKeys: 86,
                 totalQuery: 48,
                 totalResponse: 32
             }
@@ -1560,8 +1582,9 @@
 
         function updateCharts() {
             const data = formatData[currentFormat];
-            drawChart("#query-chart", data.query, "Query Breakdown", COLORS.blue);
-            drawChart("#response-chart", data.response, "Response Breakdown", COLORS.green);
+            drawChart("#keys-chart", data.keys, "Upload Keys", COLORS.orange);
+            drawChart("#query-chart", data.query, "Upload Query", COLORS.blue);
+            drawChart("#response-chart", data.response, "Download", COLORS.green);
         }
 
         // Format toggle with keyboard accessibility
@@ -1639,54 +1662,54 @@
             let responseSize, responseFormula, responseLabel;
             
             switch (currentFormat) {
-                case "inspire0": // Full query (a + b polynomials)
-                    const fullQuerySize = 2 * gadgetLen * 2 * d * 8; // both a and b
-                    querySize = fullQuerySize / 1024;
-                    queryLabel = "Query Size (full)";
-                    queryFormula = `2l*2*d*8 = 2*${gadgetLen}*2*${d}*8 = ${fullQuerySize} bytes`;
-                    responseSize = unpackedResponseSize;
-                    responseLabel = "Response Size (unpacked)";
-                    responseFormula = `${numColumns} cols * 2 * ${d} * 8 = ${numColumns * 2 * d * 8} bytes`;
-                    break;
-                    
-                case "inspire1": // Full query + packed response
-                    const fullQuerySize1 = 2 * gadgetLen * 2 * d * 8;
-                    querySize = fullQuerySize1 / 1024;
-                    queryLabel = "Query Size (full)";
-                    queryFormula = `2l*2*d*8 = 2*${gadgetLen}*2*${d}*8 = ${fullQuerySize1} bytes`;
+                case "inspire0": // InsPIRe_0: LWE indicator + packing keys (no RGSW)
+                    const indicatorSize0 = (numColumns * 8) + (d * gadgetLen * 8); // indicator + KS keys
+                    querySize = indicatorSize0 / 1024;
+                    queryLabel = "Query Size (LWE indicator + keys)";
+                    queryFormula = `(N/t)*log2(q)/8 + d*l_ks*log2(q)/8 = ${indicatorSize0} bytes`;
                     responseSize = singleRlweSize;
                     responseLabel = "Response Size (packed)";
                     responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
                     break;
                     
-                case "inspire2": // Seeded query + packed response
-                    const queryBPolys = 2 * gadgetLen * d * 8;
-                    const querySeeds = 2 * gadgetLen * 32;
-                    querySize = (queryBPolys + querySeeds) / 1024;
-                    queryLabel = "Query Size (seeded)";
-                    queryFormula = `2l*d*8 + 2l*32 = 2*${gadgetLen}*${d}*8 + ${querySeeds} = ${queryBPolys + querySeeds} bytes`;
+                case "inspire1": // InsPIRe: LWE indicator + RGSW ciphertext
+                    const indicatorSize1 = numColumns * 8; // indicator vector
+                    const rgswSize = 4 * gadgetLen * d * 8; // RGSW ciphertext
+                    querySize = (indicatorSize1 + rgswSize) / 1024;
+                    queryLabel = "Query Size (indicator + RGSW)";
+                    queryFormula = `(N/t)*log2(q)/8 + 4*l_gsw*d*log2(q)/8 = ${indicatorSize1 + rgswSize} bytes`;
                     responseSize = singleRlweSize;
                     responseLabel = "Response Size (packed)";
                     responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
                     break;
                     
-                case "inspire2plus": // Switched + seeded query + packed response
+                case "inspire2": // InsPIRe^(2): LWE indicator only (no RGSW)
+                    const indicatorSize2 = numColumns * 8; // just indicator vector
+                    querySize = indicatorSize2 / 1024;
+                    queryLabel = "Query Size (LWE indicator)";
+                    queryFormula = `(N/t)*log2(q)/8 = ${indicatorSize2} bytes`;
+                    responseSize = singleRlweSize;
+                    responseLabel = "Response Size (packed)";
+                    responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
+                    break;
+                    
+                case "inspire2plus": // InsPIRe+: Seeded+switched RGSW
                     const queryBPolysSwitched = 2 * gadgetLen * d * 4; // 4 bytes per coeff (u32)
                     const querySeedsSwitched = 2 * gadgetLen * 32;
                     querySize = (queryBPolysSwitched + querySeedsSwitched) / 1024;
-                    queryLabel = "Query Size (switched)";
+                    queryLabel = "Query Size (seeded+switched)";
                     queryFormula = `2l*d*4 + 2l*32 = 2*${gadgetLen}*${d}*4 + ${querySeedsSwitched} = ${queryBPolysSwitched + querySeedsSwitched} bytes`;
                     responseSize = singleRlweSize;
                     responseLabel = "Response Size (packed)";
                     responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
                     break;
                     
-                default: // Default to seeded
-                    const defBPolys = 2 * gadgetLen * d * 8;
-                    const defSeeds = 2 * gadgetLen * 32;
-                    querySize = (defBPolys + defSeeds) / 1024;
-                    queryLabel = "Query Size (seeded)";
-                    queryFormula = `2l*d*8 + 2l*32 = ${defBPolys + defSeeds} bytes`;
+                default: // Default to InsPIRe (indicator + RGSW)
+                    const defIndicator = numColumns * 8;
+                    const defRgsw = 4 * gadgetLen * d * 8;
+                    querySize = (defIndicator + defRgsw) / 1024;
+                    queryLabel = "Query Size (indicator + RGSW)";
+                    queryFormula = `(N/t)*log2(q)/8 + 4*l_gsw*d*log2(q)/8 = ${defIndicator + defRgsw} bytes`;
                     responseSize = singleRlweSize;
                     responseLabel = "Response Size (packed)";
                     responseFormula = `1 RLWE = 2 * ${d} * 8 = ${2 * d * 8} bytes`;
@@ -1727,21 +1750,21 @@
         // Section 5: Database Size Comparison Table Variant Toggle
         // ============================================================
         const tableVariantSizes = {
-            "inspire0": { query: 192, response: 545, queryLabel: "full", responseLabel: "unpacked" },
-            "inspire1": { query: 192, response: 32, queryLabel: "full", responseLabel: "packed" },
-            "inspire2": { query: 96, response: 32, queryLabel: "seeded", responseLabel: "packed" },
-            "inspire2plus": { query: 48, response: 32, queryLabel: "switched", responseLabel: "packed" }
+            "inspire0": { keys: 86, query: 128, response: 32, queryLabel: "LWE indicator", responseLabel: "packed" },
+            "inspire1": { keys: 86, query: 192, response: 32, queryLabel: "indicator+RGSW", responseLabel: "packed" },
+            "inspire2": { keys: 86, query: 96, response: 32, queryLabel: "LWE indicator", responseLabel: "packed" },
+            "inspire2plus": { keys: 86, query: 48, response: 32, queryLabel: "seeded+switched", responseLabel: "packed" }
         };
         
         let currentTableVariant = "inspire1";
         
         function updateComparisonTable() {
             const sizes = tableVariantSizes[currentTableVariant];
-            const total = sizes.query + sizes.response;
+            const total = sizes.keys + sizes.query + sizes.response;
             
-            // Update all query cells
+            // Update all query cells (now shows keys + query combined as "Upload")
             document.querySelectorAll("[data-query]").forEach(cell => {
-                cell.textContent = `${sizes.query} KB`;
+                cell.textContent = `${sizes.keys + sizes.query} KB`;
             });
             
             // Update all response cells
@@ -1755,8 +1778,8 @@
             });
             
             // Update column headers
-            document.getElementById("table-query-header").textContent = `Query (${sizes.queryLabel})`;
-            document.getElementById("table-response-header").textContent = `Response (${sizes.responseLabel})`;
+            document.getElementById("table-query-header").textContent = `Upload (keys+${sizes.queryLabel})`;
+            document.getElementById("table-response-header").textContent = `Download (${sizes.responseLabel})`;
         }
         
         // Set up Section 5 variant toggle buttons
