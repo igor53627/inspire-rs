@@ -88,13 +88,6 @@ impl EthereumStateDb {
             .map_err(|e| eyre::eyre!("Failed to parse state header: {}", e))?;
 
         ensure!(
-            header.magic == STATE_MAGIC,
-            "Invalid state file magic: expected {:?}, got {:?}",
-            STATE_MAGIC,
-            header.magic
-        );
-
-        ensure!(
             header.version == StateHeader::VERSION,
             "Unsupported state file version: {} (expected {})",
             header.version,
