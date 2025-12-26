@@ -1,7 +1,6 @@
 //! inspire-setup: Database preprocessing CLI for InsPIRe PIR
 //!
-//! Preprocesses a database from plinko-extractor output into the format
-//! required for InsPIRe PIR queries.
+//! Preprocesses a STATE_FORMAT state.bin into the format required for InsPIRe PIR queries.
 
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
@@ -18,7 +17,7 @@ use tracing_subscriber::FmtSubscriber;
 use inspire_pir::ethereum_db::EthereumStateDb;
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{setup, save_shards_binary, EncodedDatabase, ServerCrs};
+use inspire_pir::pir::{save_shards_binary, setup, EncodedDatabase, ServerCrs};
 
 /// Number of buckets for sparse index (2^18 = 256K)
 const NUM_BUCKETS: usize = 262_144;
@@ -28,7 +27,7 @@ const NUM_BUCKETS: usize = 262_144;
 #[command(about = "Preprocess database for InsPIRe PIR")]
 #[command(version)]
 struct Args {
-    /// Path to plinko-extractor output directory (containing database.bin)
+    /// Path to state data (either a state.bin file or a directory containing state.bin)
     #[arg(long)]
     data_dir: PathBuf,
 
@@ -89,7 +88,7 @@ fn main() -> Result<()> {
 
     let total_start = Instant::now();
 
-    info!("Loading database from plinko-extractor...");
+    info!("Loading database from state.bin (STATE_FORMAT)...");
     let load_start = Instant::now();
 
     let eth_db = EthereumStateDb::open(&args.data_dir)
@@ -103,13 +102,19 @@ fn main() -> Result<()> {
         "Loaded database: {} entries ({:.2} MB)",
         entry_count, db_size_mb
     );
+    info!(
+        "State block: #{} (chain_id={}, hash=0x{})",
+        eth_db.header().block_number,
+        eth_db.header().chain_id,
+        hex::encode(&eth_db.header().block_hash[..8])
+    );
     info!("Load time: {:.2?}", load_start.elapsed());
 
-    // Build bucket index while iterating storage mapping
+    // Build bucket index from storage entries
     let bucket_counts = if args.bucket_index {
-        info!("Building bucket index from storage mapping...");
+        info!("Building bucket index from state.bin...");
         let bucket_start = Instant::now();
-        let counts = build_bucket_index(eth_db.storage_map());
+        let counts = build_bucket_index(&eth_db);
         info!(
             "Bucket index built: {} buckets in {:.2?}",
             NUM_BUCKETS,
@@ -124,7 +129,9 @@ fn main() -> Result<()> {
     let pb = ProgressBar::new(entry_count);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")?
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+            )?
             .progress_chars("#>-"),
     );
 
@@ -151,10 +158,7 @@ fn main() -> Result<()> {
     let mut sampler = GaussianSampler::with_seed(params.sigma, seed);
 
     let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")?,
-    );
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}")?);
     pb.set_message("Running PIR setup...");
     pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
@@ -166,8 +170,12 @@ fn main() -> Result<()> {
     info!("Setup time: {:.2?}", setup_start.elapsed());
     info!("Number of shards: {}", encoded_db.shards.len());
 
-    fs::create_dir_all(&args.output_dir)
-        .with_context(|| format!("Failed to create output directory: {}", args.output_dir.display()))?;
+    fs::create_dir_all(&args.output_dir).with_context(|| {
+        format!(
+            "Failed to create output directory: {}",
+            args.output_dir.display()
+        )
+    })?;
 
     info!("Saving CRS...");
     let save_start = Instant::now();
@@ -176,8 +184,7 @@ fn main() -> Result<()> {
     let crs_file = File::create(&crs_path)
         .with_context(|| format!("Failed to create CRS file: {}", crs_path.display()))?;
     let mut writer = BufWriter::new(crs_file);
-    serde_json::to_writer(&mut writer, &crs)
-        .with_context(|| "Failed to serialize CRS")?;
+    serde_json::to_writer(&mut writer, &crs).with_context(|| "Failed to serialize CRS")?;
     writer.flush()?;
 
     let crs_size = fs::metadata(&crs_path)?.len();
@@ -288,14 +295,15 @@ fn save_metadata(
     Ok(())
 }
 
-/// Build bucket index from storage mapping
+/// Build bucket index from storage entries in state.bin
 ///
 /// Computes keccak256(address || slot) for each entry and counts per bucket.
-fn build_bucket_index(storage_map: &inspire_pir::ethereum_db::StorageMapping) -> Vec<u32> {
+fn build_bucket_index(eth_db: &EthereumStateDb) -> Vec<u32> {
     let mut bucket_counts = vec![0u32; NUM_BUCKETS];
 
-    for (address, slot, _index) in storage_map.iter() {
-        let bucket_id = compute_bucket_id(&address, &slot);
+    for i in 0..eth_db.entry_count() {
+        let entry = eth_db.read_storage_entry(i).expect("valid entry");
+        let bucket_id = compute_bucket_id(&entry.address, &entry.slot);
         bucket_counts[bucket_id] += 1;
     }
 
@@ -312,7 +320,8 @@ fn compute_bucket_id(address: &[u8; 20], slot: &[u8; 32]) -> usize {
     hasher.finalize(&mut hash);
 
     // Take first 18 bits as bucket ID
-    let bucket_id = ((hash[0] as usize) << 10) | ((hash[1] as usize) << 2) | ((hash[2] as usize) >> 6);
+    let bucket_id =
+        ((hash[0] as usize) << 10) | ((hash[1] as usize) << 2) | ((hash[2] as usize) >> 6);
     bucket_id & (NUM_BUCKETS - 1)
 }
 
@@ -322,6 +331,13 @@ fn save_bucket_index(output_dir: &PathBuf, counts: &[u32]) -> Result<()> {
     let index_path = output_dir.join("bucket-index.bin");
     let mut file = BufWriter::new(File::create(&index_path)?);
     for &count in counts {
+        if count > u16::MAX as u32 {
+            return Err(eyre::eyre!(
+                "Bucket count overflow: {} exceeds max {} (too many entries per bucket)",
+                count,
+                u16::MAX
+            ));
+        }
         file.write_all(&(count as u16).to_le_bytes())?;
     }
     file.flush()?;
@@ -333,21 +349,24 @@ fn save_bucket_index(output_dir: &PathBuf, counts: &[u32]) -> Result<()> {
         uncompressed_size / 1024
     );
 
-    // Save compressed
-    let compressed_path = output_dir.join("bucket-index.bin.zst");
-    let raw_data: Vec<u8> = counts
-        .iter()
-        .flat_map(|&c| (c as u16).to_le_bytes())
-        .collect();
-    let compressed = zstd::encode_all(&raw_data[..], 19)?;
-    std::fs::write(&compressed_path, &compressed)?;
+    // Save compressed (if zstd feature is enabled)
+    #[cfg(feature = "zstd")]
+    {
+        let compressed_path = output_dir.join("bucket-index.bin.zst");
+        let raw_data: Vec<u8> = counts
+            .iter()
+            .flat_map(|&c| (c as u16).to_le_bytes())
+            .collect();
+        let compressed = zstd::encode_all(&raw_data[..], 19)?;
+        std::fs::write(&compressed_path, &compressed)?;
 
-    info!(
-        "Compressed bucket index: {} ({} KB, {:.1}%)",
-        compressed_path.display(),
-        compressed.len() / 1024,
-        compressed.len() as f64 / uncompressed_size as f64 * 100.0
-    );
+        info!(
+            "Compressed bucket index: {} ({} KB, {:.1}%)",
+            compressed_path.display(),
+            compressed.len() / 1024,
+            compressed.len() as f64 / uncompressed_size as f64 * 100.0
+        );
+    }
 
     Ok(())
 }

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **STATE_FORMAT support**: `inspire-setup` now reads new `state.bin` format instead of plinko-extractor format (Issue #32)
+  - Single `state.bin` file with 64-byte header + 84-byte entries (address + slot + value)
+  - Removed support for legacy `database.bin`, `account-mapping.bin`, `storage-mapping.bin` files
+  - Added `StateHeader`, `StorageEntry` types to `ethereum_db` module
+  - PIR entries remain 32 bytes (value only); address+slot used for bucket indexing
+  - Updated `inspire-client` to use `state.bin` for storage slot lookups
+  - Removed `AccountMapping`, `StorageMapping` and related functions
 - **Default packing algorithm**: `respond_with_variant` for OnePacking/TwoPacking now uses InspiRING when `inspiring_packing_keys` is present in the query (~35x faster online), falling back to tree packing otherwise
 - **HTTP server**: Uses InspiRING for in-memory databases when packing keys are available
 - **Documentation**: Fixed performance claims ("226x faster" -> "~35x faster") and clarified CRS size comparison in protocol-visualization.html

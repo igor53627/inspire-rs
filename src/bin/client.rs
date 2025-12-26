@@ -14,7 +14,7 @@ use serde::Deserialize;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use inspire_pir::ethereum_db::{load_account_mapping, load_storage_mapping};
+use inspire_pir::ethereum_db::EthereumStateDb;
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::{InspireVariant, ShardConfig};
 use inspire_pir::pir::{extract_with_variant, query, ClientQuery, ServerCrs, ServerResponse};
@@ -33,13 +33,9 @@ struct Args {
     #[arg(long, default_value = "inspire_data/secret_key.json")]
     secret_key: PathBuf,
 
-    /// Path to account mapping file
-    #[arg(long, default_value = "inspire_data/account-mapping.bin")]
-    account_mapping: PathBuf,
-
-    /// Path to storage mapping file
-    #[arg(long, default_value = "inspire_data/storage-mapping.bin")]
-    storage_mapping: PathBuf,
+    /// Path to state.bin file or directory containing it (for storage lookup)
+    #[arg(long, default_value = "inspire_data")]
+    state_path: PathBuf,
 
     #[command(subcommand)]
     command: Commands,
@@ -47,12 +43,6 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Query account balance
-    Account {
-        /// Ethereum address (hex, with or without 0x prefix)
-        #[arg(long)]
-        address: String,
-    },
     /// Query storage slot
     Storage {
         /// Contract address (hex, with or without 0x prefix)
@@ -70,7 +60,7 @@ enum Commands {
     },
     /// Batch query from file
     Batch {
-        /// File with addresses/slots (one per line)
+        /// File with indices (one per line)
         #[arg(long)]
         file: PathBuf,
     },
@@ -125,11 +115,15 @@ async fn main() -> Result<()> {
         Commands::Index { index } => {
             query_by_index(&args.server, &args.secret_key, index).await?;
         }
-        Commands::Account { address } => {
-            query_account(&args.server, &args.secret_key, &args.account_mapping, &address).await?;
-        }
         Commands::Storage { address, slot } => {
-            query_storage(&args.server, &args.secret_key, &args.storage_mapping, &address, &slot).await?;
+            query_storage(
+                &args.server,
+                &args.secret_key,
+                &args.state_path,
+                &address,
+                &slot,
+            )
+            .await?;
         }
         Commands::Batch { file } => {
             batch_query(&args.server, &args.secret_key, &file).await?;
@@ -205,17 +199,20 @@ async fn query_by_index(server: &str, sk_path: &PathBuf, index: u64) -> Result<(
 
     let response = send_query(server, &client_query).await?;
 
-    info!(
-        "Server processing time: {} ms",
-        response.processing_time_ms
-    );
+    info!("Server processing time: {} ms", response.processing_time_ms);
     info!("Network round-trip: {:.2?}", send_start.elapsed());
 
     info!("Extracting result...");
     let extract_start = Instant::now();
 
-    let entry = extract_with_variant(&crs, &state, &response.response, 32, InspireVariant::OnePacking)
-        .with_context(|| "Failed to extract result")?;
+    let entry = extract_with_variant(
+        &crs,
+        &state,
+        &response.response,
+        32,
+        InspireVariant::OnePacking,
+    )
+    .with_context(|| "Failed to extract result")?;
 
     info!("Extraction time: {:.2?}", extract_start.elapsed());
 
@@ -237,46 +234,35 @@ async fn query_by_index(server: &str, sk_path: &PathBuf, index: u64) -> Result<(
     Ok(())
 }
 
-async fn query_account(
-    server: &str,
-    sk_path: &PathBuf,
-    mapping_path: &PathBuf,
-    address: &str,
-) -> Result<()> {
-    let address_bytes = parse_hex_address(address)?;
-
-    info!("Loading account mapping from {}...", mapping_path.display());
-    let mapping = load_account_mapping(mapping_path)
-        .with_context(|| format!("Failed to load account mapping from {}", mapping_path.display()))?;
-
-    let index = match mapping.lookup(&address_bytes) {
-        Some(idx) => idx,
-        None => {
-            println!("Account not found: 0x{}", hex_encode(&address_bytes));
-            println!("The address is not in the database.");
-            return Ok(());
-        }
-    };
-
-    info!("Found account at index {}", index);
-    query_by_index(server, sk_path, index).await
-}
-
 async fn query_storage(
     server: &str,
     sk_path: &PathBuf,
-    mapping_path: &PathBuf,
+    state_path: &PathBuf,
     address: &str,
     slot: &str,
 ) -> Result<()> {
     let address_bytes = parse_hex_address(address)?;
     let slot_bytes = parse_hex_slot(slot)?;
 
-    info!("Loading storage mapping from {}...", mapping_path.display());
-    let mapping = load_storage_mapping(mapping_path)
-        .with_context(|| format!("Failed to load storage mapping from {}", mapping_path.display()))?;
+    info!("Loading state.bin from {}...", state_path.display());
+    let eth_db = EthereumStateDb::open(state_path)
+        .with_context(|| format!("Failed to load state.bin from {}", state_path.display()))?;
 
-    let index = match mapping.lookup(&address_bytes, &slot_bytes) {
+    info!("Searching for storage slot (linear scan)...");
+    let search_start = Instant::now();
+
+    let mut found_index: Option<u64> = None;
+    for i in 0..eth_db.entry_count() {
+        let entry = eth_db.read_storage_entry(i)?;
+        if entry.address == address_bytes && entry.slot == slot_bytes {
+            found_index = Some(i);
+            break;
+        }
+    }
+
+    info!("Search time: {:.2?}", search_start.elapsed());
+
+    let index = match found_index {
         Some(idx) => idx,
         None => {
             println!(
@@ -334,7 +320,9 @@ async fn batch_query(server: &str, sk_path: &PathBuf, file: &PathBuf) -> Result<
     let pb = ProgressBar::new(indices.len() as u64);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")?
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+            )?
             .progress_chars("#>-"),
     );
 
@@ -348,7 +336,13 @@ async fn batch_query(server: &str, sk_path: &PathBuf, file: &PathBuf) -> Result<
         let response = send_query(server, &client_query).await?;
         total_server_time += response.processing_time_ms;
 
-        let entry = extract_with_variant(&crs, &state, &response.response, 32, InspireVariant::OnePacking)?;
+        let entry = extract_with_variant(
+            &crs,
+            &state,
+            &response.response,
+            32,
+            InspireVariant::OnePacking,
+        )?;
         results.push((*index, entry));
 
         pb.inc(1);
@@ -392,12 +386,7 @@ async fn fetch_params(server: &str) -> Result<ParamsResponse> {
     let url = format!("{}/params", server);
     let client = reqwest::Client::new();
 
-    let params: ParamsResponse = client
-        .get(&url)
-        .send()
-        .await?
-        .json()
-        .await?;
+    let params: ParamsResponse = client.get(&url).send().await?.json().await?;
 
     Ok(params)
 }
@@ -406,8 +395,8 @@ fn load_secret_key(path: &PathBuf) -> Result<RlweSecretKey> {
     let file = File::open(path)
         .with_context(|| format!("Failed to open secret key file: {}", path.display()))?;
     let reader = BufReader::new(file);
-    let sk: RlweSecretKey = serde_json::from_reader(reader)
-        .with_context(|| "Failed to parse secret key")?;
+    let sk: RlweSecretKey =
+        serde_json::from_reader(reader).with_context(|| "Failed to parse secret key")?;
     Ok(sk)
 }
 
