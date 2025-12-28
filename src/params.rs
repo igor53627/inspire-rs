@@ -85,7 +85,7 @@ impl InspireParams {
         Self {
             ring_dim: 2048,
             q,
-            p: 1 << 16, // 65536
+            p: 65537, // Fermat prime F4, coprime with any power-of-2 ring dimension
             sigma: 6.4,
             gadget_base,
             gadget_len,
@@ -103,7 +103,7 @@ impl InspireParams {
         Self {
             ring_dim: 4096,
             q,
-            p: 1 << 16,
+            p: 65537, // Fermat prime F4, coprime with any power-of-2 ring dimension
             sigma: 6.4,
             gadget_base,
             gadget_len,
