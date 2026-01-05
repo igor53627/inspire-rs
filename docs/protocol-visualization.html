@@ -388,10 +388,34 @@
             text-decoration: none;
         }
 
-        .footer a:hover {
-            text-decoration: underline;
-        }
-    </style>
+            .footer a:hover {
+                text-decoration: underline;
+            }
+
+            /* Accessibility: Focus styles for interactive elements */
+            button:focus-visible,
+            input:focus-visible,
+            select:focus-visible {
+                outline: 2px solid var(--accent-blue);
+                outline-offset: 2px;
+            }
+
+            .bar:focus {
+                outline: 2px solid var(--accent-blue);
+                outline-offset: 1px;
+            }
+
+                    /* Accessibility: Reduced motion support */
+                    @media (prefers-reduced-motion: reduce) {
+                        *,
+                        *::before,
+                        *::after {
+                            animation-duration: 0.01ms !important;
+                            animation-iteration-count: 1 !important;
+                            transition-duration: 0.01ms !important;
+                        }
+                    }
+                </style>
 </head>
 <body>
     <div class="container">
@@ -419,7 +443,7 @@
                 <button data-variant="inspire2plus">InsPIRe+ (166 KB)</button>
             </div>
             <div id="protocol-flow">
-                <svg id="flow-svg" viewBox="0 0 900 320" role="img" aria-labelledby="flow-title flow-desc">
+                <svg id="flow-svg" viewBox="0 0 900 320" role="img" aria-labelledby="flow-title" aria-describedby="flow-desc">
                     <title id="flow-title">PIR Protocol Flow Diagram</title>
                     <desc id="flow-desc">Animated sequence diagram showing client-server communication: Query (RGSW ciphertext), Server Processing (external product), Response (RLWE ciphertext), and Client Extraction.</desc>
                 </svg>
@@ -447,19 +471,22 @@
             </p>
             <div id="size-breakdown" style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;">
                 <div class="chart-container">
-                    <svg id="keys-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="keys-chart-title">
-                        <title id="keys-chart-title">Upload Keys Breakdown Chart</title>
-                    </svg>
+                                        <svg id="keys-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="keys-chart-title" aria-describedby="keys-chart-desc">
+                                            <title id="keys-chart-title">Upload Keys Breakdown Chart</title>
+                                            <desc id="keys-chart-desc">Bar chart showing the size breakdown of uploaded keys including packing matrices and key-switching matrices.</desc>
+                                        </svg>
                 </div>
                 <div class="chart-container">
-                    <svg id="query-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="query-chart-title">
-                        <title id="query-chart-title">Upload Query Breakdown Chart</title>
-                    </svg>
+                                        <svg id="query-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="query-chart-title" aria-describedby="query-chart-desc">
+                                            <title id="query-chart-title">Upload Query Breakdown Chart</title>
+                                            <desc id="query-chart-desc">Bar chart showing the size breakdown of uploaded query components including LWE indicators and optional RGSW ciphertexts.</desc>
+                                        </svg>
                 </div>
                 <div class="chart-container">
-                    <svg id="response-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="response-chart-title">
-                        <title id="response-chart-title">Download Response Breakdown Chart</title>
-                    </svg>
+                                        <svg id="response-chart" viewBox="0 0 420 280" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="response-chart-title" aria-describedby="response-chart-desc">
+                                            <title id="response-chart-title">Download Response Breakdown Chart</title>
+                                            <desc id="response-chart-desc">Bar chart showing the size breakdown of downloaded response containing RLWE ciphertexts.</desc>
+                                        </svg>
                 </div>
             </div>
             <div class="legend">
@@ -491,27 +518,27 @@
                 <strong style="color: var(--accent-green);">Key:</strong> Sizes scale linearly with ring dimension (d) and gadget length (l). Select variant in Section 2 to update calculations.
             </p>
             <div class="sliders">
-                <div class="slider-group">
-                    <label>Ring Dimension (d): <span id="d-value">2048</span></label>
-                    <input type="range" id="d-slider" min="0" max="2" value="1">
+                                <div class="slider-group">
+                                    <label for="d-slider">Ring Dimension (d): <span id="d-value">2048</span></label>
+                                    <input type="range" id="d-slider" min="0" max="2" value="1" aria-describedby="d-value">
                     <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
                         <span>1024</span>
                         <span>2048</span>
                         <span>4096</span>
                     </div>
                 </div>
-                <div class="slider-group">
-                    <label>Entry Size: <span id="entry-value">32 bytes</span></label>
-                    <input type="range" id="entry-slider" min="0" max="2" value="0">
+                                <div class="slider-group">
+                                    <label for="entry-slider">Entry Size: <span id="entry-value">32 bytes</span></label>
+                                    <input type="range" id="entry-slider" min="0" max="2" value="0" aria-describedby="entry-value">
                     <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
                         <span>32 B</span>
                         <span>64 B</span>
                         <span>128 B</span>
                     </div>
                 </div>
-                <div class="slider-group">
-                    <label>Gadget Length (l): <span id="gadget-value">3</span></label>
-                    <input type="range" id="gadget-slider" min="2" max="4" value="3">
+                                <div class="slider-group">
+                                    <label for="gadget-slider">Gadget Length (l): <span id="gadget-value">3</span></label>
+                                    <input type="range" id="gadget-slider" min="2" max="4" value="3" aria-describedby="gadget-value">
                     <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
                         <span>2</span>
                         <span>3</span>
@@ -547,9 +574,10 @@
             <!-- Shard Selection -->
             <div style="margin-bottom: 1.5rem;">
                 <h3 style="color: var(--accent-blue); font-size: 1rem; margin-bottom: 0.5rem;">Step 1: Shard Selection</h3>
-                <svg id="shard-svg" viewBox="0 0 900 180" role="img" aria-labelledby="shard-title">
-                    <title id="shard-title">Shard Selection visualization showing database partitioning</title>
-                </svg>
+                                <svg id="shard-svg" viewBox="0 0 900 180" role="img" aria-labelledby="shard-title" aria-describedby="shard-desc">
+                                    <title id="shard-title">Shard Selection visualization showing database partitioning</title>
+                                    <desc id="shard-desc">Visual grid of database shards with the target shard highlighted. Each shard contains entries encoded as polynomials.</desc>
+                                </svg>
                 <div class="server-controls" style="margin-top: 0.5rem;">
                     <label style="color: var(--text-secondary); font-size: 0.9rem;">
                         Database size: 
@@ -566,9 +594,10 @@
             <!-- Processing Pipeline -->
             <div style="margin-bottom: 1.5rem;">
                 <h3 style="color: var(--accent-green); font-size: 1rem; margin-bottom: 0.5rem;">Step 2: External Product (Parallel)</h3>
-                <svg id="pipeline-svg" viewBox="0 0 900 280" role="img" aria-labelledby="pipeline-title">
-                    <title id="pipeline-title">Server Processing Pipeline showing parallel external product operations</title>
-                </svg>
+                                <svg id="pipeline-svg" viewBox="0 0 900 280" role="img" aria-labelledby="pipeline-title" aria-describedby="pipeline-desc">
+                                    <title id="pipeline-title">Server Processing Pipeline showing parallel external product operations</title>
+                                    <desc id="pipeline-desc">Animated diagram showing how the server computes external products between query ciphertexts and database polynomials in parallel.</desc>
+                                </svg>
                 <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
                     <button id="animate-pipeline-btn" style="background: var(--accent-green); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         Animate Processing
@@ -579,9 +608,10 @@
             <!-- Output Assembly -->
             <div>
                 <h3 style="color: var(--accent-purple); font-size: 1rem; margin-bottom: 0.5rem;">Step 3: Response Assembly</h3>
-                <svg id="output-svg" viewBox="0 0 900 150" role="img" aria-labelledby="output-title">
-                    <title id="output-title">Response Assembly showing ServerResponse structure and network transmission</title>
-                </svg>
+                                <svg id="output-svg" viewBox="0 0 900 150" role="img" aria-labelledby="output-title" aria-describedby="output-desc">
+                                    <title id="output-title">Response Assembly showing ServerResponse structure and network transmission</title>
+                                    <desc id="output-desc">Diagram showing how RLWE ciphertexts are assembled into the server response and transmitted back to the client.</desc>
+                                </svg>
             </div>
         </div>
 
@@ -608,9 +638,10 @@
                 </button>
             </div>
 
-            <svg id="tree-pack-svg" viewBox="0 0 900 420" role="img" aria-labelledby="tree-pack-title">
-                <title id="tree-pack-title">Tree Packing Algorithm showing how 8 LWE ciphertexts are combined into 1 RLWE</title>
-            </svg>
+                        <svg id="tree-pack-svg" viewBox="0 0 900 420" role="img" aria-labelledby="tree-pack-title" aria-describedby="tree-pack-desc">
+                            <title id="tree-pack-title">Tree Packing Algorithm showing how 8 LWE ciphertexts are combined into 1 RLWE</title>
+                            <desc id="tree-pack-desc">Animated tree diagram showing the hierarchical packing process using Galois automorphisms to combine multiple LWE ciphertexts into a single RLWE ciphertext.</desc>
+                        </svg>
             
             <div style="display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
                 <button id="animate-tree-btn" style="background: var(--accent-purple); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
@@ -904,9 +935,10 @@
                 <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
                     A lattice is a regular grid of points. Security comes from the hardness of finding short vectors.
                 </p>
-                <svg id="lattice-svg" viewBox="0 0 900 350" role="img" aria-labelledby="lattice-title">
-                    <title id="lattice-title">2D Lattice visualization showing basis vectors and the Shortest Vector Problem</title>
-                </svg>
+                                <svg id="lattice-svg" viewBox="0 0 900 350" role="img" aria-labelledby="lattice-title" aria-describedby="lattice-desc">
+                                    <title id="lattice-title">2D Lattice visualization showing basis vectors and the Shortest Vector Problem</title>
+                                    <desc id="lattice-desc">Interactive 2D lattice grid showing basis vectors and demonstrating the Shortest Vector Problem which underlies lattice-based cryptography security.</desc>
+                                </svg>
                 <div style="display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap;">
                     <button id="toggle-basis-btn" style="background: var(--accent-blue); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         Toggle Good/Bad Basis
@@ -923,9 +955,10 @@
                 <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
                     Gaussian noise hides the secret. Without noise, the problem would be easy linear algebra.
                 </p>
-                <svg id="error-svg" viewBox="0 0 900 280" role="img" aria-labelledby="error-title">
-                    <title id="error-title">Discrete Gaussian Error Distribution histogram with adjustable sigma parameter</title>
-                </svg>
+                                <svg id="error-svg" viewBox="0 0 900 280" role="img" aria-labelledby="error-title" aria-describedby="error-desc">
+                                    <title id="error-title">Discrete Gaussian Error Distribution histogram with adjustable sigma parameter</title>
+                                    <desc id="error-desc">Histogram showing the discrete Gaussian distribution used for RLWE noise. The sigma parameter controls the spread of the distribution.</desc>
+                                </svg>
                 <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem;">
                     <label style="color: var(--text-secondary); font-size: 0.85rem;">
                         Noise σ: <span id="sigma-value">6.4</span>
@@ -944,9 +977,10 @@
                 <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem;">
                     R_q = Z_q[X]/(X^d + 1): Polynomials with cyclic structure. Multiplication by X rotates coefficients.
                 </p>
-                <svg id="ring-svg" viewBox="0 0 900 320" role="img" aria-labelledby="ring-title">
-                    <title id="ring-title">Polynomial Ring Structure showing cyclic coefficient rotation when multiplying by X</title>
-                </svg>
+                                <svg id="ring-svg" viewBox="0 0 900 320" role="img" aria-labelledby="ring-title" aria-describedby="ring-desc">
+                                    <title id="ring-title">Polynomial Ring Structure showing cyclic coefficient rotation when multiplying by X</title>
+                                    <desc id="ring-desc">Interactive visualization of the polynomial ring R_q showing how multiplication by X causes cyclic rotation of coefficients with sign change.</desc>
+                                </svg>
                 <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
                     <button id="rotate-ring-btn" style="background: var(--accent-purple); color: white; border: none; padding: 0.4rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         Multiply by X (Rotate)
@@ -969,28 +1003,35 @@
     </div>
 
     <script>
-        // ============================================================
-        // Centralized Color Configuration
-        // ============================================================
-        const COLORS = {
-            bgPrimary: '#0d1117',
-            bgSecondary: '#161b22',
-            bgTertiary: '#21262d',
-            textPrimary: '#e6edf3',
-            textSecondary: '#8b949e',
-            textMuted: '#6e7681',
-            blue: '#58a6ff',
-            green: '#3fb950',
-            purple: '#a371f7',
-            orange: '#d29922',
-            red: '#ff6b6b',
-            yellow: '#ffd93d',
-            border: '#30363d'
-        };
+                // ============================================================
+                // Centralized Color Configuration
+                // ============================================================
+                const COLORS = {
+                    bgPrimary: '#0d1117',
+                    bgSecondary: '#161b22',
+                    bgTertiary: '#21262d',
+                    textPrimary: '#e6edf3',
+                    textSecondary: '#8b949e',
+                    textMuted: '#6e7681',
+                    blue: '#58a6ff',
+                    green: '#3fb950',
+                    purple: '#a371f7',
+                    orange: '#d29922',
+                    red: '#ff6b6b',
+                    yellow: '#ffd93d',
+                    border: '#30363d'
+                };
 
-        // ============================================================
-        // Shared SVG Definitions (markers, gradients, etc.)
-        // ============================================================
+                // ============================================================
+                // Accessibility: Reduced Motion Support
+                // ============================================================
+                const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                // Helper to get animation duration (0 if user prefers reduced motion)
+                const getAnimDuration = (ms) => prefersReducedMotion ? 0 : ms;
+
+                // ============================================================
+                // Shared SVG Definitions (markers, gradients, etc.)
+                // ============================================================
         function initSharedDefs() {
             // Create a hidden SVG for shared defs
             const defsSvg = d3.select("body").append("svg")
@@ -1239,12 +1280,12 @@
                 
                 const timerId = setTimeout(() => {
                     const g = flowSvg.select(`#${step.id}`);
-                    g.transition().duration(300).attr("opacity", 1);
+                    g.transition().duration(getAnimDuration(300)).attr("opacity", 1);
 
                     if (!step.isBox) {
                         g.select(".arrow-line")
                             .transition()
-                            .duration(400)
+                            .duration(getAnimDuration(400))
                             .attr("x2", step.toX);
                     }
                 }, delay);
@@ -1511,32 +1552,40 @@
                 .range([0, chartHeight])
                 .padding(0.3);
 
-            // Bars
-            g.selectAll(".bar")
-                .data(data)
-                .join("rect")
-                .attr("class", "bar")
-                .attr("x", 0)
-                .attr("y", d => y(d.name))
-                .attr("width", d => x(d.size))
-                .attr("height", y.bandwidth())
-                .attr("fill", color)
-                .attr("opacity", 0.7)
-                .attr("rx", 3)
-                .on("mouseenter", function(event, d) {
-                    d3.select(this).attr("opacity", 1);
-                    tooltip.classed("visible", true)
-                        .html(`
-                            <div class="label">${d.name}</div>
-                            <div class="value">${d.size.toFixed(1)} KB (${((d.size / total) * 100).toFixed(1)}%)</div>
-                            <div class="formula">${d.formula}</div>
-                        `);
-                })
-                .on("mousemove", throttledTooltipMove)
-                .on("mouseleave", function() {
-                    d3.select(this).attr("opacity", 0.7);
-                    tooltip.classed("visible", false);
-                });
+                                                // Bars with keyboard accessibility (role="img" kept on parent SVG only)
+                                                g.selectAll(".bar")
+                                                    .data(data)
+                                                    .join("rect")
+                                                    .attr("class", "bar")
+                                                    .attr("tabindex", "0")
+                                                    .attr("aria-label", d => `${d.name}: ${d.size.toFixed(1)} KB (${((d.size / total) * 100).toFixed(1)}%)`)
+                            .attr("x", 0)
+                            .attr("y", d => y(d.name))
+                            .attr("width", d => x(d.size))
+                            .attr("height", y.bandwidth())
+                            .attr("fill", color)
+                            .attr("opacity", 0.7)
+                            .attr("rx", 3)
+                            .on("mouseenter focus", function(event, d) {
+                                d3.select(this).attr("opacity", 1);
+                                tooltip.classed("visible", true)
+                                    .html(`
+                                        <div class="label">${d.name}</div>
+                                        <div class="value">${d.size.toFixed(1)} KB (${((d.size / total) * 100).toFixed(1)}%)</div>
+                                        <div class="formula">${d.formula}</div>
+                                    `);
+                                // Position tooltip near the element for keyboard users
+                                if (event.type === "focus") {
+                                    const rect = this.getBoundingClientRect();
+                                    tooltip.style("left", (rect.right + 10) + "px")
+                                           .style("top", (rect.top + window.scrollY) + "px");
+                                }
+                            })
+                            .on("mousemove", throttledTooltipMove)
+                            .on("mouseleave blur", function() {
+                                d3.select(this).attr("opacity", 0.7);
+                                tooltip.classed("visible", false);
+                            });
 
             // Labels
             g.selectAll(".label")
@@ -2271,9 +2320,9 @@
             // Animate polys
             svg.selectAll(".poly-box").each(function(d, i) {
                 d3.select(this)
-                    .transition().delay(i * 80).duration(200)
+                    .transition().delay(i * 80).duration(getAnimDuration(200))
                     .attr("fill", COLORS.green).attr("opacity", 0.5)
-                    .transition().duration(200)
+                    .transition().duration(getAnimDuration(200))
                     .attr("fill", COLORS.bgTertiary).attr("opacity", 1);
             });
 
@@ -2281,9 +2330,9 @@
             const opsTimer = setTimeout(() => {
                 svg.selectAll(".op-box").each(function(d, i) {
                     d3.select(this)
-                        .transition().delay(i * 100).duration(300)
+                        .transition().delay(i * 100).duration(getAnimDuration(300))
                         .attr("fill", COLORS.orange).attr("opacity", 0.4)
-                        .transition().duration(300)
+                        .transition().duration(getAnimDuration(300))
                         .attr("fill", COLORS.bgTertiary).attr("opacity", 1);
                 });
             }, 700);
@@ -2293,9 +2342,9 @@
             const outsTimer = setTimeout(() => {
                 svg.selectAll(".out-box").each(function(d, i) {
                     d3.select(this)
-                        .transition().delay(i * 60).duration(200)
+                        .transition().delay(i * 60).duration(getAnimDuration(200))
                         .attr("fill", COLORS.purple).attr("opacity", 0.5)
-                        .transition().duration(200)
+                        .transition().duration(getAnimDuration(200))
                         .attr("fill", COLORS.bgTertiary).attr("opacity", 1);
                 });
             }, 1400);
