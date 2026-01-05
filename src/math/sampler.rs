@@ -1,8 +1,8 @@
 //! Gaussian sampling for error generation
 
 use rand::Rng;
-use rand_chacha::ChaCha20Rng;
 use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 
 /// Gaussian sampler for error polynomials
 pub struct GaussianSampler {

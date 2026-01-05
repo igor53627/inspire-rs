@@ -177,7 +177,11 @@ impl RlweCiphertext {
     /// * `message_poly` - Message polynomial (coefficients in [0, p))
     /// * `delta` - Scaling factor Δ = ⌊q/p⌋
     /// * `params` - System parameters
-    pub fn trivial_encrypt(message_poly: &Poly, delta: u64, params: &InspireParams) -> RlweCiphertext {
+    pub fn trivial_encrypt(
+        message_poly: &Poly,
+        delta: u64,
+        params: &InspireParams,
+    ) -> RlweCiphertext {
         let a = Poly::zero(params.ring_dim, params.q);
         let b = message_poly.scalar_mul(delta);
         RlweCiphertext { a, b }
@@ -250,7 +254,9 @@ mod tests {
         let sk = RlweSecretKey::generate(&params, &mut sampler);
 
         // Create message polynomial with small coefficients
-        let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % params.p).collect();
+        let msg_coeffs: Vec<u64> = (0..params.ring_dim)
+            .map(|i| (i as u64) % params.p)
+            .collect();
         let message = Poly::from_coeffs(msg_coeffs.clone(), params.q);
 
         // Generate random a and error
@@ -438,7 +444,9 @@ mod tests {
         // Simulate CRS: a publicly known random polynomial
         let crs_a = random_poly(params.ring_dim, params.q);
 
-        let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % params.p).collect();
+        let msg_coeffs: Vec<u64> = (0..params.ring_dim)
+            .map(|i| (i as u64) % params.p)
+            .collect();
         let message = Poly::from_coeffs(msg_coeffs.clone(), params.q);
         let error = sample_error_poly(params.ring_dim, params.q, &mut sampler);
 

@@ -54,7 +54,9 @@ pub fn extract(
         }
     } else {
         // Fallback: all columns summed in single ciphertext
-        let decrypted = response.ciphertext.decrypt(&state.rlwe_secret_key, delta, p, &ctx);
+        let decrypted = response
+            .ciphertext
+            .decrypt(&state.rlwe_secret_key, delta, p, &ctx);
         let value = decrypted.coeff(0);
         for _ in 0..num_columns {
             column_values.push(value);
@@ -109,14 +111,16 @@ fn extract_packed(
     let num_columns = (entry_size * 8 + 15) / 16;
 
     // Decrypt the packed ciphertext
-    let decrypted = response.ciphertext.decrypt(&state.rlwe_secret_key, delta, p, &ctx);
+    let decrypted = response
+        .ciphertext
+        .decrypt(&state.rlwe_secret_key, delta, p, &ctx);
 
     // Extract column values from their positions
     // Values are scaled by d from tree packing, need to divide
     // Note: d_inv only exists if gcd(d, p) = 1. For d=256, p=65536, this fails.
     // In practice, this limits column values to < p/d to avoid overflow.
     let d_inv = mod_inverse(d as u64, p).unwrap_or(1);
-    
+
     let mut column_values = Vec::with_capacity(num_columns);
     for col in 0..num_columns {
         // Get the raw value at position col (scaled by d)
@@ -150,7 +154,9 @@ pub fn extract_inspiring(
     let num_columns = (entry_size * 8 + 15) / 16;
 
     // Decrypt the packed ciphertext
-    let decrypted = response.ciphertext.decrypt(&state.rlwe_secret_key, delta, p, &ctx);
+    let decrypted = response
+        .ciphertext
+        .decrypt(&state.rlwe_secret_key, delta, p, &ctx);
 
     // Extract column values from their positions (NO d-scaling for InspiRING)
     let mut column_values = Vec::with_capacity(num_columns);
@@ -220,7 +226,9 @@ pub fn extract_with_tolerance(
             column_values.push(value);
         }
     } else {
-        let decrypted = response.ciphertext.decrypt(&state.rlwe_secret_key, delta, p, &ctx);
+        let decrypted = response
+            .ciphertext
+            .decrypt(&state.rlwe_secret_key, delta, p, &ctx);
         let value = apply_tolerance(decrypted.coeff(0));
         for _ in 0..num_columns {
             column_values.push(value);
@@ -247,12 +255,9 @@ pub fn extract_single_coeff(
     let delta = crs.params.delta();
     let ctx = NttContext::new(d, q);
 
-    let decrypted = response.ciphertext.decrypt(
-        &state.rlwe_secret_key,
-        delta,
-        p,
-        &ctx,
-    );
+    let decrypted = response
+        .ciphertext
+        .decrypt(&state.rlwe_secret_key, delta, p, &ctx);
 
     // After homomorphic evaluation, result is in CONSTANT TERM (coefficient 0)
     Ok(decrypted.coeff(0))
@@ -273,12 +278,9 @@ pub fn extract_raw(
     let delta = crs.params.delta();
     let ctx = NttContext::new(d, q);
 
-    let decrypted = response.ciphertext.decrypt(
-        &state.rlwe_secret_key,
-        delta,
-        p,
-        &ctx,
-    );
+    let decrypted = response
+        .ciphertext
+        .decrypt(&state.rlwe_secret_key, delta, p, &ctx);
 
     Ok(decrypted.coeffs().to_vec())
 }
@@ -314,10 +316,18 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) =
+            setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
 
@@ -339,10 +349,18 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) =
+            setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 10u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
 
@@ -361,10 +379,18 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) =
+            setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 5u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
 
@@ -403,10 +429,18 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) =
+            setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 15u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
 

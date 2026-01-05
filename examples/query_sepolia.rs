@@ -15,21 +15,28 @@ fn main() -> eyre::Result<()> {
 
     println!("Loading CRS...");
     let start = Instant::now();
-    let crs: ServerCrs = serde_json::from_reader(BufReader::new(File::open(pir_dir.join("crs.json"))?))?;
+    let crs: ServerCrs =
+        serde_json::from_reader(BufReader::new(File::open(pir_dir.join("crs.json"))?))?;
     println!("  Loaded in {:?}", start.elapsed());
 
     println!("Loading encoded database...");
     let start = Instant::now();
-    let encoded_db: EncodedDatabase = serde_json::from_reader(BufReader::new(File::open(pir_dir.join("encoded_db.json"))?))?;
+    let encoded_db: EncodedDatabase =
+        serde_json::from_reader(BufReader::new(File::open(pir_dir.join("encoded_db.json"))?))?;
     println!("  Loaded in {:?}", start.elapsed());
 
     println!("Loading secret key...");
-    let secret_key: RlweSecretKey = serde_json::from_reader(BufReader::new(File::open(pir_dir.join("secret_key.json"))?))?;
+    let secret_key: RlweSecretKey =
+        serde_json::from_reader(BufReader::new(File::open(pir_dir.join("secret_key.json"))?))?;
 
     let mut sampler = GaussianSampler::new(crs.params.sigma);
 
     println!("\n=== PIR Query Test ===");
-    println!("Database: {} entries across {} shards", encoded_db.config.total_entries, encoded_db.shards.len());
+    println!(
+        "Database: {} entries across {} shards",
+        encoded_db.config.total_entries,
+        encoded_db.shards.len()
+    );
     println!("Ring dimension: {}", crs.params.ring_dim);
     println!();
 
@@ -45,7 +52,13 @@ fn main() -> eyre::Result<()> {
 
         // Generate query
         let query_start = Instant::now();
-        let (state, client_query) = query(&crs, target_idx, &encoded_db.config, &secret_key, &mut sampler)?;
+        let (state, client_query) = query(
+            &crs,
+            target_idx,
+            &encoded_db.config,
+            &secret_key,
+            &mut sampler,
+        )?;
         let query_time = query_start.elapsed();
 
         // Server responds
@@ -58,7 +71,10 @@ fn main() -> eyre::Result<()> {
         let result = extract(&crs, &state, &response, 32)?;
         let extract_time = extract_start.elapsed();
 
-        println!("  Query: {:?}, Respond: {:?}, Extract: {:?}", query_time, respond_time, extract_time);
+        println!(
+            "  Query: {:?}, Respond: {:?}, Extract: {:?}",
+            query_time, respond_time, extract_time
+        );
         println!("  Result (hex): {}", hex::encode(&result));
 
         // Interpret if this is an account (first 3 words)

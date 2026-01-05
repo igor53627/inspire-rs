@@ -204,7 +204,10 @@ fn final_collapse(
 }
 
 /// Apply automorphism to all components of intermediate ciphertext
-fn apply_automorphism_to_intermediate(ct: &IntermediateCiphertext, g: usize) -> IntermediateCiphertext {
+fn apply_automorphism_to_intermediate(
+    ct: &IntermediateCiphertext,
+    g: usize,
+) -> IntermediateCiphertext {
     let a_polys: Vec<Poly> = ct
         .a_polys
         .iter()

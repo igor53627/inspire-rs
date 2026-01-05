@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use inspire_pir::inspiring::{
-    pack_lwes, precompute_inspiring, pack_inspiring_legacy, YConstants, GeneratorPowers,
-    PackParams, OfflinePackingKeys, ClientPackingKeys,
-    packing_offline, packing_online, packing_online_fully_ntt,
+    pack_inspiring_legacy, pack_lwes, packing_offline, packing_online, packing_online_fully_ntt,
+    precompute_inspiring, ClientPackingKeys, GeneratorPowers, OfflinePackingKeys, PackParams,
+    YConstants,
 };
 use inspire_pir::ks::generate_automorphism_ks_matrix;
 use inspire_pir::math::{GaussianSampler, NttContext, Poly};
@@ -51,7 +51,8 @@ fn pack_lwes_benchmark(c: &mut Criterion) {
                 let mut msg_coeffs = vec![0u64; d];
                 msg_coeffs[0] = msg;
                 let msg_poly = Poly::from_coeffs(msg_coeffs, q);
-                let rlwe_ct = inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
+                let rlwe_ct =
+                    inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
                 rlwe_ct.sample_extract_coeff0()
             })
             .collect();
@@ -93,7 +94,8 @@ fn inspiring2_benchmark(c: &mut Criterion) {
                 let mut msg_coeffs = vec![0u64; d];
                 msg_coeffs[0] = msg;
                 let msg_poly = Poly::from_coeffs(msg_coeffs, q);
-                let rlwe_ct = inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
+                let rlwe_ct =
+                    inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
                 rlwe_ct.sample_extract_coeff0()
             })
             .collect();
@@ -145,7 +147,8 @@ fn comparison_benchmark(c: &mut Criterion) {
             let mut msg_coeffs = vec![0u64; d];
             msg_coeffs[0] = msg;
             let msg_poly = Poly::from_coeffs(msg_coeffs, q);
-            let rlwe_ct = inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
+            let rlwe_ct =
+                inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
             rlwe_ct.sample_extract_coeff0()
         })
         .collect();
@@ -196,7 +199,8 @@ fn production_comparison_benchmark(c: &mut Criterion) {
             let mut msg_coeffs = vec![0u64; d];
             msg_coeffs[0] = msg;
             let msg_poly = Poly::from_coeffs(msg_coeffs, q);
-            let rlwe_ct = inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
+            let rlwe_ct =
+                inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
             rlwe_ct.sample_extract_coeff0()
         })
         .collect();
@@ -235,9 +239,7 @@ fn key_material_benchmark(c: &mut Criterion) {
     group.sample_size(10);
 
     group.bench_function("single_ks_matrix", |b| {
-        b.iter(|| {
-            generate_automorphism_ks_matrix(&rlwe_sk, 3, &gadget, &mut sampler, &ctx)
-        });
+        b.iter(|| generate_automorphism_ks_matrix(&rlwe_sk, 3, &gadget, &mut sampler, &ctx));
     });
 
     group.bench_function("generator_powers_d2048", |b| {
@@ -271,9 +273,7 @@ fn canonical_api_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("canonical_api");
 
     for num_lwes in [8, 16, 32] {
-        let a_polys: Vec<Poly> = (0..num_lwes)
-            .map(|_| Poly::random(d, q))
-            .collect();
+        let a_polys: Vec<Poly> = (0..num_lwes).map(|_| Poly::random(d, q)).collect();
 
         let pack_params = PackParams::new(&params, num_lwes);
         let packing_key = OfflinePackingKeys::generate(&pack_params, [0u8; 32]);
@@ -288,8 +288,9 @@ fn canonical_api_benchmark(c: &mut Criterion) {
 
         let mut precomp = packing_offline(&pack_params, &packing_key, &a_polys, &ctx);
         precomp.ensure_ntt_cached(&ctx);
-        
-        let client_keys = ClientPackingKeys::generate(&rlwe_sk, &pack_params, [0u8; 32], &mut sampler);
+
+        let client_keys =
+            ClientPackingKeys::generate(&rlwe_sk, &pack_params, [0u8; 32], &mut sampler);
         let b_poly = Poly::random(d, q);
 
         group.bench_with_input(
@@ -304,7 +305,9 @@ fn canonical_api_benchmark(c: &mut Criterion) {
             BenchmarkId::new("packing_online_fully_ntt", format!("{}_lwes", num_lwes)),
             &num_lwes,
             |b, _| {
-                b.iter(|| packing_online_fully_ntt(&precomp, &client_keys.y_all_ntt, &b_poly, &ctx));
+                b.iter(|| {
+                    packing_online_fully_ntt(&precomp, &client_keys.y_all_ntt, &b_poly, &ctx)
+                });
             },
         );
     }
@@ -323,7 +326,7 @@ fn ntt_automorphism_benchmark(c: &mut Criterion) {
     group.sample_size(50);
 
     let pack_params = PackParams::new(&params, 16);
-    
+
     group.bench_function("automorph_table_generation", |b| {
         b.iter(|| PackParams::new(&params, 16));
     });
@@ -353,9 +356,7 @@ fn production_inspiring2_benchmark(c: &mut Criterion) {
     group.sample_size(20);
 
     for num_lwes in [16, 32, 64, 128] {
-        let a_polys: Vec<Poly> = (0..num_lwes)
-            .map(|_| Poly::random(d, q))
-            .collect();
+        let a_polys: Vec<Poly> = (0..num_lwes).map(|_| Poly::random(d, q)).collect();
 
         let pack_params = PackParams::new(&params, num_lwes);
         let packing_key = OfflinePackingKeys::generate(&pack_params, [0u8; 32]);
@@ -370,14 +371,17 @@ fn production_inspiring2_benchmark(c: &mut Criterion) {
 
         let mut precomp = packing_offline(&pack_params, &packing_key, &a_polys, &ctx);
         precomp.ensure_ntt_cached(&ctx);
-        let client_keys = ClientPackingKeys::generate(&rlwe_sk, &pack_params, [0u8; 32], &mut sampler);
+        let client_keys =
+            ClientPackingKeys::generate(&rlwe_sk, &pack_params, [0u8; 32], &mut sampler);
         let b_poly = Poly::random(d, q);
 
         group.bench_with_input(
             BenchmarkId::new("online_fully_ntt", format!("{}_lwes", num_lwes)),
             &num_lwes,
             |b, _| {
-                b.iter(|| packing_online_fully_ntt(&precomp, &client_keys.y_all_ntt, &b_poly, &ctx));
+                b.iter(|| {
+                    packing_online_fully_ntt(&precomp, &client_keys.y_all_ntt, &b_poly, &ctx)
+                });
             },
         );
     }

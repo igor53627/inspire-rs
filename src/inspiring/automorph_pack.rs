@@ -107,7 +107,7 @@ impl YConstants {
         for ell in 0..log_d {
             // At level ell, step = d / 2^(ell+1)
             let step = d >> (ell + 1);
-            
+
             // y = X^step
             let mut y_coeffs = vec![0u64; d];
             if step < d {
@@ -126,7 +126,10 @@ impl YConstants {
             neg_y_polys.push(neg_y_poly);
         }
 
-        Self { y_polys, neg_y_polys }
+        Self {
+            y_polys,
+            neg_y_polys,
+        }
     }
 
     /// Get y polynomial at level ℓ
@@ -146,7 +149,7 @@ impl YConstants {
 /// where each input's value appears at a distinct coefficient position.
 ///
 /// # Algorithm
-/// 
+///
 /// Base case (ℓ = 0): Return the single ciphertext.
 ///
 /// Recursive case:
@@ -185,8 +188,24 @@ pub fn pack_lwes_inner(
     let odd = start_idx + step;
 
     // Recursive calls for even and odd halves
-    let ct_even = pack_lwes_inner(ell - 1, even, rlwe_cts, automorph_keys, y_constants, ctx, log_n);
-    let ct_odd = pack_lwes_inner(ell - 1, odd, rlwe_cts, automorph_keys, y_constants, ctx, log_n);
+    let ct_even = pack_lwes_inner(
+        ell - 1,
+        even,
+        rlwe_cts,
+        automorph_keys,
+        y_constants,
+        ctx,
+        log_n,
+    );
+    let ct_odd = pack_lwes_inner(
+        ell - 1,
+        odd,
+        rlwe_cts,
+        automorph_keys,
+        y_constants,
+        ctx,
+        log_n,
+    );
 
     // Get y and -y for this level
     // y[ell-1] = X^(d / 2^ell)
@@ -203,7 +222,7 @@ pub fn pack_lwes_inner(
 
     // Automorphism: τ_t where t = 2^ℓ + 1
     let t = (1 << ell) + 1;
-    
+
     // The automorph_keys are indexed by the exponent in t = 2^k + 1
     // For ell = 1, we need t = 3 = 2^1 + 1, so k = 1, index = log_d - 1 - (log_d - 1) = 0?
     // Actually, Google's code uses: pub_params[poly_len_log2 - 1 - (ell - 1)]
@@ -219,9 +238,13 @@ pub fn pack_lwes_inner(
     // We need t = 2^ell + 1. So we need 2^ell = d/2^i, meaning i = log_d - ell
     let log_d = automorph_keys.len();
     let ks_idx = log_d - ell;
-    
+
     if ks_idx >= automorph_keys.len() {
-        panic!("ks_idx {} out of bounds for {} automorph_keys", ks_idx, automorph_keys.len());
+        panic!(
+            "ks_idx {} out of bounds for {} automorph_keys",
+            ks_idx,
+            automorph_keys.len()
+        );
     }
     let ks_matrix = &automorph_keys[ks_idx];
 
@@ -272,7 +295,15 @@ pub fn pack_rlwes_tree(
     let y_constants = YConstants::generate(d, q);
 
     // Run recursive packing with log_n levels
-    pack_lwes_inner(log_n, 0, &padded_cts, automorph_keys, &y_constants, &ctx, log_n)
+    pack_lwes_inner(
+        log_n,
+        0,
+        &padded_cts,
+        automorph_keys,
+        &y_constants,
+        &ctx,
+        log_n,
+    )
 }
 
 /// Single LWE packing using repeated automorphism (simpler algorithm)
@@ -296,7 +327,7 @@ pub fn pack_single_lwe(
 
     // Apply: cur = cur + τ_t(cur) for each level
     for i in 0..log_d {
-        let t = (d >> i) + 1;  // t = d/2^i + 1
+        let t = (d >> i) + 1; // t = d/2^i + 1
         let ks_matrix = &automorph_keys[i];
         let tau_cur = homomorphic_automorph(&cur, t, ks_matrix, &ctx);
         cur = cur.add(&tau_cur);
@@ -341,7 +372,10 @@ fn invert_sample_extract(a_lwe: &[u64]) -> Vec<u64> {
 ///
 /// # Returns
 /// (prepped_rlwes, b_values)
-pub fn prep_pack_lwes(lwe_cts: &[LweCiphertext], params: &InspireParams) -> (Vec<RlweCiphertext>, Vec<u64>) {
+pub fn prep_pack_lwes(
+    lwe_cts: &[LweCiphertext],
+    params: &InspireParams,
+) -> (Vec<RlweCiphertext>, Vec<u64>) {
     let d = params.ring_dim;
     let q = params.q;
 
@@ -420,7 +454,15 @@ pub fn pack_lwes(
     let y_constants = YConstants::generate(d, q);
 
     // Step 2: Run full tree packing on d RLWEs (with b=0)
-    let mut packed = pack_lwes_inner(log_d, 0, &padded_cts, automorph_keys, &y_constants, &ctx, log_d);
+    let mut packed = pack_lwes_inner(
+        log_d,
+        0,
+        &padded_cts,
+        automorph_keys,
+        &y_constants,
+        &ctx,
+        log_d,
+    );
 
     // Step 3: Add b_values * d to result.b coefficients
     // After full tree packing of d elements, each b value gets scaled by d
@@ -528,7 +570,11 @@ mod tests {
         let ct_auto = homomorphic_automorph(&ct, 1, &ks_1, &ctx);
 
         let decrypted = ct_auto.decrypt(&sk, delta, params.p, &ctx);
-        assert_eq!(decrypted.coeff(0), message, "Identity automorphism should preserve message");
+        assert_eq!(
+            decrypted.coeff(0),
+            message,
+            "Identity automorphism should preserve message"
+        );
     }
 
     #[test]
@@ -554,7 +600,11 @@ mod tests {
 
         // Verify original decryption works
         let orig_dec = ct.decrypt(&sk, delta, params.p, &ctx);
-        assert_eq!(orig_dec.coeff(0), message, "Original message should decrypt correctly");
+        assert_eq!(
+            orig_dec.coeff(0),
+            message,
+            "Original message should decrypt correctly"
+        );
 
         // Pack single - verifies the algorithm runs without panic
         let packed = pack_single_lwe(&ct, &automorph_keys, &params);
@@ -564,9 +614,11 @@ mod tests {
         // The automorphisms spread the value to all coefficients
         let expected_coeff0 = (message * (d as u64)) % params.p;
         assert_eq!(
-            decrypted.coeff(0), expected_coeff0,
+            decrypted.coeff(0),
+            expected_coeff0,
             "Coefficient 0 should be message * d mod p: got {}, expected {}",
-            decrypted.coeff(0), expected_coeff0
+            decrypted.coeff(0),
+            expected_coeff0
         );
     }
 
@@ -584,14 +636,17 @@ mod tests {
 
         // Create two ciphertexts with different messages
         let messages = [100u64, 200u64];
-        let cts: Vec<RlweCiphertext> = messages.iter().map(|&msg| {
-            let mut msg_coeffs = vec![0u64; d];
-            msg_coeffs[0] = msg;
-            let msg_poly = Poly::from_coeffs(msg_coeffs.clone(), q);
-            let a = Poly::random(d, q);
-            let error = sample_error_poly(d, q, &mut sampler);
-            RlweCiphertext::encrypt(&sk, &msg_poly, delta, a, &error, &ctx)
-        }).collect();
+        let cts: Vec<RlweCiphertext> = messages
+            .iter()
+            .map(|&msg| {
+                let mut msg_coeffs = vec![0u64; d];
+                msg_coeffs[0] = msg;
+                let msg_poly = Poly::from_coeffs(msg_coeffs.clone(), q);
+                let a = Poly::random(d, q);
+                let error = sample_error_poly(d, q, &mut sampler);
+                RlweCiphertext::encrypt(&sk, &msg_poly, delta, a, &error, &ctx)
+            })
+            .collect();
 
         // Pack two ciphertexts
         let packed = pack_rlwes_tree(&cts, &automorph_keys, &params);
@@ -635,7 +690,11 @@ mod tests {
 
         // Verify LWE decryption works
         let lwe_dec = lwe_ct.decrypt(&lwe_sk, delta, params.p);
-        assert_eq!(lwe_dec, message, "LWE decrypt failed: got {}, expected {}", lwe_dec, message);
+        assert_eq!(
+            lwe_dec, message,
+            "LWE decrypt failed: got {}, expected {}",
+            lwe_dec, message
+        );
 
         // Pack single LWE
         let packed = pack_lwes(&[lwe_ct], &automorph_keys, &params);
@@ -643,8 +702,13 @@ mod tests {
         // Decrypt packed RLWE
         let packed_dec = packed.decrypt(&rlwe_sk, delta, params.p, &ctx);
 
-        assert_eq!(packed_dec.coeff(0), message,
-            "Packed single LWE decrypt failed: got {}, expected {}", packed_dec.coeff(0), message);
+        assert_eq!(
+            packed_dec.coeff(0),
+            message,
+            "Packed single LWE decrypt failed: got {}, expected {}",
+            packed_dec.coeff(0),
+            message
+        );
     }
 
     #[test]
@@ -664,15 +728,18 @@ mod tests {
 
         // Create 2 messages
         let messages = [100u64, 200u64];
-        let lwe_cts: Vec<_> = messages.iter().map(|&msg| {
-            let mut msg_coeffs = vec![0u64; d];
-            msg_coeffs[0] = msg;
-            let msg_poly = Poly::from_coeffs(msg_coeffs, q);
-            let a = Poly::random(d, q);
-            let error = sample_error_poly(d, q, &mut sampler);
-            let rlwe_ct = RlweCiphertext::encrypt(&rlwe_sk, &msg_poly, delta, a, &error, &ctx);
-            rlwe_ct.sample_extract_coeff0()
-        }).collect();
+        let lwe_cts: Vec<_> = messages
+            .iter()
+            .map(|&msg| {
+                let mut msg_coeffs = vec![0u64; d];
+                msg_coeffs[0] = msg;
+                let msg_poly = Poly::from_coeffs(msg_coeffs, q);
+                let a = Poly::random(d, q);
+                let error = sample_error_poly(d, q, &mut sampler);
+                let rlwe_ct = RlweCiphertext::encrypt(&rlwe_sk, &msg_poly, delta, a, &error, &ctx);
+                rlwe_ct.sample_extract_coeff0()
+            })
+            .collect();
 
         // Pack all LWEs
         let packed = pack_lwes(&lwe_cts, &automorph_keys, &params);
@@ -689,8 +756,16 @@ mod tests {
         // coeff[0] = 100 * 256 = 25600 mod p
         // coeff[1] = 200 * 256 = 51200 mod p
         let p = params.p;
-        assert_eq!(packed_dec.coeff(0), (100 * (d as u64)) % p, "coeff[0] should be 100*d mod p");
-        assert_eq!(packed_dec.coeff(1), (200 * (d as u64)) % p, "coeff[1] should be 200*d mod p");
+        assert_eq!(
+            packed_dec.coeff(0),
+            (100 * (d as u64)) % p,
+            "coeff[0] should be 100*d mod p"
+        );
+        assert_eq!(
+            packed_dec.coeff(1),
+            (200 * (d as u64)) % p,
+            "coeff[1] should be 200*d mod p"
+        );
     }
 
     #[test]
@@ -711,11 +786,14 @@ mod tests {
 
         // Create trivial LWEs: a = 0, b = Δ*msg
         let messages = [100u64, 200u64, 300u64, 400u64];
-        let lwe_cts: Vec<_> = messages.iter().map(|&msg| {
-            let a = vec![0u64; d];
-            let b = ModQ::mul(delta, msg, q);
-            LweCiphertext { a, b, q }
-        }).collect();
+        let lwe_cts: Vec<_> = messages
+            .iter()
+            .map(|&msg| {
+                let a = vec![0u64; d];
+                let b = ModQ::mul(delta, msg, q);
+                LweCiphertext { a, b, q }
+            })
+            .collect();
 
         // Pack all LWEs
         let packed = pack_lwes(&lwe_cts, &automorph_keys, &params);
@@ -731,10 +809,26 @@ mod tests {
         // Each b-value gets added to its position, scaled by d
         // Note: results are reduced mod p, so 300*256 = 76800 -> 76800 mod 65536 = 11264
         let p = params.p;
-        assert_eq!(packed_dec.coeff(0), (100 * (d as u64)) % p, "coeff[0] should be 100*d mod p");
-        assert_eq!(packed_dec.coeff(1), (200 * (d as u64)) % p, "coeff[1] should be 200*d mod p");
-        assert_eq!(packed_dec.coeff(2), (300 * (d as u64)) % p, "coeff[2] should be 300*d mod p");
-        assert_eq!(packed_dec.coeff(3), (400 * (d as u64)) % p, "coeff[3] should be 400*d mod p");
+        assert_eq!(
+            packed_dec.coeff(0),
+            (100 * (d as u64)) % p,
+            "coeff[0] should be 100*d mod p"
+        );
+        assert_eq!(
+            packed_dec.coeff(1),
+            (200 * (d as u64)) % p,
+            "coeff[1] should be 200*d mod p"
+        );
+        assert_eq!(
+            packed_dec.coeff(2),
+            (300 * (d as u64)) % p,
+            "coeff[2] should be 300*d mod p"
+        );
+        assert_eq!(
+            packed_dec.coeff(3),
+            (400 * (d as u64)) % p,
+            "coeff[3] should be 400*d mod p"
+        );
     }
 
     #[test]
@@ -755,15 +849,18 @@ mod tests {
 
         // Create 4 real LWEs with encryption
         let messages = [100u64, 200u64, 300u64, 400u64];
-        let lwe_cts: Vec<_> = messages.iter().map(|&msg| {
-            let mut msg_coeffs = vec![0u64; d];
-            msg_coeffs[0] = msg;
-            let msg_poly = Poly::from_coeffs(msg_coeffs, q);
-            let a = Poly::random(d, q);
-            let error = sample_error_poly(d, q, &mut sampler);
-            let rlwe_ct = RlweCiphertext::encrypt(&rlwe_sk, &msg_poly, delta, a, &error, &ctx);
-            rlwe_ct.sample_extract_coeff0()
-        }).collect();
+        let lwe_cts: Vec<_> = messages
+            .iter()
+            .map(|&msg| {
+                let mut msg_coeffs = vec![0u64; d];
+                msg_coeffs[0] = msg;
+                let msg_poly = Poly::from_coeffs(msg_coeffs, q);
+                let a = Poly::random(d, q);
+                let error = sample_error_poly(d, q, &mut sampler);
+                let rlwe_ct = RlweCiphertext::encrypt(&rlwe_sk, &msg_poly, delta, a, &error, &ctx);
+                rlwe_ct.sample_extract_coeff0()
+            })
+            .collect();
 
         // Verify each LWE decrypts correctly
         for (i, lwe) in lwe_cts.iter().enumerate() {

@@ -1,17 +1,54 @@
-//! Modular arithmetic operations
+//! Modular arithmetic operations.
+//!
+//! Provides stateless modular arithmetic functions over Z_q.
+//! These are simpler alternatives to the Montgomery-based `ModQ` type
+//! when performance is not critical.
 
-/// Modular arithmetic operations over Z_q
+/// Stateless modular arithmetic operations over Z_q.
+///
+/// Provides basic modular operations without Montgomery representation.
+/// Use this for simple operations; use `mod_q::ModQ` for performance-critical code.
+///
+/// # Example
+///
+/// ```
+/// use inspire_pir::math::modular::ModQ;
+///
+/// let q = 1152921504606830593u64;
+/// let sum = ModQ::add(100, 200, q);
+/// assert_eq!(sum, 300);
+/// ```
 pub struct ModQ;
 
 impl ModQ {
-    /// Add two values modulo q
+    /// Adds two values modulo q.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First operand
+    /// * `b` - Second operand
+    /// * `q` - The modulus
+    ///
+    /// # Returns
+    ///
+    /// `(a + b) mod q`
     #[inline]
     pub fn add(a: u64, b: u64, q: u64) -> u64 {
         let sum = (a as u128) + (b as u128);
         (sum % (q as u128)) as u64
     }
 
-    /// Subtract two values modulo q
+    /// Subtracts two values modulo q.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First operand (minuend)
+    /// * `b` - Second operand (subtrahend)
+    /// * `q` - The modulus
+    ///
+    /// # Returns
+    ///
+    /// `(a - b) mod q`
     #[inline]
     pub fn sub(a: u64, b: u64, q: u64) -> u64 {
         if a >= b {
@@ -21,14 +58,33 @@ impl ModQ {
         }
     }
 
-    /// Multiply two values modulo q
+    /// Multiplies two values modulo q.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First operand
+    /// * `b` - Second operand
+    /// * `q` - The modulus
+    ///
+    /// # Returns
+    ///
+    /// `(a * b) mod q`
     #[inline]
     pub fn mul(a: u64, b: u64, q: u64) -> u64 {
         let prod = (a as u128) * (b as u128);
         (prod % (q as u128)) as u64
     }
 
-    /// Negate a value modulo q
+    /// Negates a value modulo q.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - The value to negate
+    /// * `q` - The modulus
+    ///
+    /// # Returns
+    ///
+    /// `(-a) mod q = (q - a) mod q`
     #[inline]
     pub fn negate(a: u64, q: u64) -> u64 {
         if a == 0 {
@@ -38,7 +94,18 @@ impl ModQ {
         }
     }
 
-    /// Convert a signed integer to its representation in Z_q
+    /// Converts a signed integer to its representation in Z_q.
+    ///
+    /// Negative values are mapped to their positive equivalents modulo q.
+    ///
+    /// # Arguments
+    ///
+    /// * `val` - The signed value
+    /// * `q` - The modulus
+    ///
+    /// # Returns
+    ///
+    /// The unsigned representation in [0, q).
     #[inline]
     pub fn from_signed(val: i64, q: u64) -> u64 {
         if val >= 0 {
@@ -49,7 +116,18 @@ impl ModQ {
         }
     }
 
-    /// Convert from Z_q to signed representation in [-q/2, q/2)
+    /// Converts from Z_q to signed representation in [-q/2, q/2).
+    ///
+    /// Values in [0, q/2] remain positive; values in (q/2, q) become negative.
+    ///
+    /// # Arguments
+    ///
+    /// * `val` - The unsigned value in [0, q)
+    /// * `q` - The modulus
+    ///
+    /// # Returns
+    ///
+    /// The signed representation in [-q/2, q/2).
     #[inline]
     pub fn to_signed(val: u64, q: u64) -> i64 {
         if val <= q / 2 {
@@ -59,7 +137,16 @@ impl ModQ {
         }
     }
 
-    /// Reduce a value modulo q
+    /// Reduces a value modulo q.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - The value to reduce
+    /// * `q` - The modulus
+    ///
+    /// # Returns
+    ///
+    /// `a mod q`
     #[inline]
     pub fn reduce(a: u64, q: u64) -> u64 {
         a % q

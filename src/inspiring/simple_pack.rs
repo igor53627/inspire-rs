@@ -217,16 +217,16 @@ pub fn pack_lwe_to_rlwe(
 fn negacyclic_perm(a: &[u64], q: u64) -> Vec<u64> {
     let d = a.len();
     let mut out = vec![0u64; d];
-    
+
     // First element stays the same
     out[0] = a[0];
-    
+
     // Rest are negated and reversed: out[i] = -a[d-i] for i > 0
     for i in 1..d {
         let val = a[d - i];
         out[i] = if val == 0 { 0 } else { q - val };
     }
-    
+
     out
 }
 
@@ -340,7 +340,11 @@ mod tests {
         let rlwe_ct = RlweCiphertext::encrypt(&rlwe_sk, &msg_poly, delta, a, &error, &ctx);
 
         let decrypted = rlwe_ct.decrypt(&rlwe_sk, delta, params.p, &ctx);
-        assert_eq!(decrypted.coeff(0), message, "Original RLWE decryption failed");
+        assert_eq!(
+            decrypted.coeff(0),
+            message,
+            "Original RLWE decryption failed"
+        );
 
         let packed = pack_rlwe_coeffs(&[rlwe_ct], &params);
         let packed_decrypted = packed.decrypt(&rlwe_sk, delta, params.p, &ctx);
@@ -414,9 +418,9 @@ mod tests {
 
     #[test]
     fn test_pack_lwe_to_rlwe_single() {
+        use crate::ks::generate_packing_ks_matrix;
         use crate::lwe::LweSecretKey;
         use crate::rgsw::GadgetVector;
-        use crate::ks::generate_packing_ks_matrix;
 
         let params = test_params();
         let d = params.ring_dim;
@@ -452,7 +456,11 @@ mod tests {
 
         // Verify LWE decryption works
         let lwe_dec = lwe_ct.decrypt(&lwe_sk, delta, params.p);
-        assert_eq!(lwe_dec, message, "LWE decrypt failed: got {}, expected {}", lwe_dec, message);
+        assert_eq!(
+            lwe_dec, message,
+            "LWE decrypt failed: got {}, expected {}",
+            lwe_dec, message
+        );
 
         // Pack single LWE into RLWE
         let packed = pack_lwe_to_rlwe(&[lwe_ct], &packing_ks, &params);
@@ -460,12 +468,17 @@ mod tests {
         // Decrypt packed RLWE
         let packed_dec = packed.decrypt(&rlwe_sk, delta, params.p, &ctx);
 
-        assert_eq!(packed_dec.coeff(0), message,
-            "Packed RLWE decrypt failed: got {}, expected {}", packed_dec.coeff(0), message);
+        assert_eq!(
+            packed_dec.coeff(0),
+            message,
+            "Packed RLWE decrypt failed: got {}, expected {}",
+            packed_dec.coeff(0),
+            message
+        );
     }
 
     // NOTE: test_pack_lwe_to_rlwe_multiple is intentionally removed.
-    // 
+    //
     // The simple shift-and-add packing approach (pack_lwe_to_rlwe with multiple LWEs)
     // does NOT work because key-switched RLWEs have noise in ALL coefficients, not just
     // in coefficient 0. When we shift and add, the noise from different coefficients mixes.

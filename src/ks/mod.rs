@@ -37,5 +37,8 @@
 mod setup;
 mod switch;
 
-pub use setup::{generate_automorphism_ks_matrix, generate_ks_matrix, generate_packing_ks_matrix, KeySwitchingMatrix};
+pub use setup::{
+    generate_automorphism_ks_matrix, generate_ks_matrix, generate_packing_ks_matrix,
+    KeySwitchingMatrix,
+};
 pub use switch::key_switch;

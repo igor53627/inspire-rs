@@ -4,8 +4,8 @@
 //! used for generating error terms in lattice-based cryptography.
 
 use rand::Rng;
-use rand_chacha::ChaCha20Rng;
 use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 
 /// Default Gaussian standard deviation
 pub const DEFAULT_SIGMA: f64 = 3.2;
@@ -213,11 +213,7 @@ mod tests {
             ratio
         );
 
-        assert!(
-            zero_count > n / 50,
-            "Zero count {} is too low",
-            zero_count
-        );
+        assert!(zero_count > n / 50, "Zero count {} is too low", zero_count);
     }
 
     #[test]
@@ -228,11 +224,7 @@ mod tests {
         let sum: i64 = (0..n).map(|_| sampler.sample()).sum();
         let mean = sum as f64 / n as f64;
 
-        assert!(
-            mean.abs() < 0.1,
-            "Mean {} is too far from 0",
-            mean
-        );
+        assert!(mean.abs() < 0.1, "Mean {} is too far from 0", mean);
     }
 
     #[test]
@@ -334,13 +326,21 @@ mod tests {
         let small_variance: f64 = {
             let samples: Vec<i64> = (0..n).map(|_| small_sampler.sample()).collect();
             let mean: f64 = samples.iter().map(|&x| x as f64).sum::<f64>() / n as f64;
-            samples.iter().map(|&x| (x as f64 - mean).powi(2)).sum::<f64>() / n as f64
+            samples
+                .iter()
+                .map(|&x| (x as f64 - mean).powi(2))
+                .sum::<f64>()
+                / n as f64
         };
 
         let large_variance: f64 = {
             let samples: Vec<i64> = (0..n).map(|_| large_sampler.sample()).collect();
             let mean: f64 = samples.iter().map(|&x| x as f64).sum::<f64>() / n as f64;
-            samples.iter().map(|&x| (x as f64 - mean).powi(2)).sum::<f64>() / n as f64
+            samples
+                .iter()
+                .map(|&x| (x as f64 - mean).powi(2))
+                .sum::<f64>()
+                / n as f64
         };
 
         assert!(

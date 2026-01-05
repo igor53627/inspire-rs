@@ -55,15 +55,17 @@ mod setup;
 pub use error::Result;
 
 pub use encode_db::{encode_column, encode_database, encode_direct, inverse_monomial};
-pub use extract::{extract, extract_with_variant, extract_inspiring};
+pub use extract::{extract, extract_inspiring, extract_with_variant};
 #[cfg(feature = "server")]
-pub use mmap::{save_shards_binary, load_shard_binary, MmapDatabase};
-pub use query::{query, query_seeded, query_switched, ClientQuery, ClientState, SeededClientQuery, SwitchedClientQuery};
+pub use mmap::{load_shard_binary, save_shards_binary, MmapDatabase};
+pub use query::{
+    query, query_seeded, query_switched, ClientQuery, ClientState, SeededClientQuery,
+    SwitchedClientQuery,
+};
 pub use respond::{
-    respond, respond_sequential, respond_with_variant,
-    respond_seeded, respond_seeded_packed, respond_switched, respond_switched_packed,
-    respond_one_packing, respond_inspiring, respond_seeded_inspiring,
-    ServerResponse,
+    respond, respond_inspiring, respond_one_packing, respond_seeded, respond_seeded_inspiring,
+    respond_seeded_packed, respond_sequential, respond_switched, respond_switched_packed,
+    respond_with_variant, ServerResponse,
 };
 #[cfg(feature = "server")]
 pub use respond::{respond_mmap, respond_mmap_one_packing};

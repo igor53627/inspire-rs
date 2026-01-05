@@ -27,8 +27,8 @@
 //! let result = external_product(&rlwe_ct, &rgsw_ct, &ctx);
 //! ```
 
-mod types;
 mod external_product;
+mod types;
 
-pub use types::{GadgetVector, RgswCiphertext, SeededRgswCiphertext};
 pub use external_product::{external_product, gadget_decompose, gadget_reconstruct};
+pub use types::{GadgetVector, RgswCiphertext, SeededRgswCiphertext};

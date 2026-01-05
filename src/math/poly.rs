@@ -1,23 +1,71 @@
-//! Polynomial operations over R_q = Z_q[X]/(X^d + 1)
+//! Polynomial operations over R_q = Z_q[X]/(X^d + 1).
 //!
 //! Provides polynomial arithmetic using NTT for efficient multiplication.
+//! Polynomials can exist in either coefficient domain or NTT domain.
+//!
+//! # Overview
+//!
+//! The polynomial ring R_q = Z_q[X]/(X^d + 1) is fundamental to lattice-based
+//! cryptography. This module provides:
+//!
+//! - Basic arithmetic: addition, subtraction, negation, scalar multiplication
+//! - NTT-based multiplication for O(n log n) performance
+//! - Domain conversion between coefficient and NTT representations
+//! - Random and Gaussian polynomial sampling
+//!
+//! # Example
+//!
+//! ```
+//! use inspire_pir::math::{Poly, NttContext};
+//! use inspire_pir::math::mod_q::DEFAULT_Q;
+//!
+//! let ctx = NttContext::with_default_q(256);
+//!
+//! // Create polynomials
+//! let a = Poly::random(256, DEFAULT_Q);
+//! let b = Poly::random(256, DEFAULT_Q);
+//!
+//! // Multiply using NTT
+//! let product = a.mul_ntt(&b, &ctx);
+//! ```
 
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use super::mod_q::{ModQ, DEFAULT_Q};
 use super::ntt::NttContext;
 use super::sampler::GaussianSampler;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-/// Polynomial in R_q = Z_q[X]/(X^d + 1)
+/// Polynomial in R_q = Z_q[X]/(X^d + 1).
+///
+/// Represents a polynomial with coefficients in Z_q, reduced modulo X^d + 1.
+/// Polynomials can be in coefficient domain or NTT domain for efficient
+/// multiplication.
+///
+/// # Fields
+///
+/// * `coeffs` - Coefficients in coefficient or NTT domain
+/// * `q` - Modulus q
+/// * `is_ntt` - Whether coefficients are in NTT domain
+///
+/// # Example
+///
+/// ```
+/// use inspire_pir::math::Poly;
+/// use inspire_pir::math::mod_q::DEFAULT_Q;
+///
+/// let poly = Poly::constant(42, 256, DEFAULT_Q);
+/// assert_eq!(poly.coeff(0), 42);
+/// assert_eq!(poly.dimension(), 256);
+/// ```
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct Poly {
-    /// Coefficients in coefficient or NTT domain
+    /// Coefficients in coefficient or NTT domain.
     coeffs: Vec<u64>,
-    /// Modulus q
+    /// Modulus q.
     q: u64,
-    /// Whether coefficients are in NTT domain
+    /// Whether coefficients are in NTT domain.
     is_ntt: bool,
 }
 
@@ -139,18 +187,18 @@ impl Poly {
     pub fn is_ntt(&self) -> bool {
         self.is_ntt
     }
-    
+
     /// Force polynomial to be marked as NTT domain
-    /// 
+    ///
     /// **Warning**: Only use when you know the coefficients are already NTT values.
     /// Used by apply_automorphism_ntt which permutes NTT values directly.
     #[inline]
     pub fn force_ntt_domain(&mut self) {
         self.is_ntt = true;
     }
-    
+
     /// Force polynomial to be marked as coefficient domain
-    /// 
+    ///
     /// **Warning**: Only use when you know the values are already coefficients.
     #[inline]
     pub fn force_coeff_domain(&mut self) {
@@ -248,7 +296,11 @@ impl Poly {
     /// Polynomial multiplication using NTT (negacyclic for X^d + 1)
     pub fn mul_ntt(&self, other: &Self, ctx: &NttContext) -> Self {
         assert_eq!(self.q, other.q, "Moduli must match");
-        assert_eq!(self.coeffs.len(), other.coeffs.len(), "Dimensions must match");
+        assert_eq!(
+            self.coeffs.len(),
+            other.coeffs.len(),
+            "Dimensions must match"
+        );
 
         let mut a = self.clone();
         let mut b = other.clone();
@@ -270,7 +322,10 @@ impl Poly {
 
     /// Polynomial multiplication when both are already in NTT domain
     pub fn mul_ntt_domain(&self, other: &Self, ctx: &NttContext) -> Self {
-        assert!(self.is_ntt && other.is_ntt, "Both polynomials must be in NTT domain");
+        assert!(
+            self.is_ntt && other.is_ntt,
+            "Both polynomials must be in NTT domain"
+        );
         assert_eq!(self.q, other.q, "Moduli must match");
 
         let mut result = vec![0u64; self.coeffs.len()];
@@ -284,12 +339,19 @@ impl Poly {
     }
 
     /// Polynomial addition when both are already in NTT domain
-    /// 
+    ///
     /// **Performance**: O(n) pointwise addition without domain conversion
     pub fn add_ntt_domain(&self, other: &Self) -> Self {
-        assert!(self.is_ntt && other.is_ntt, "Both polynomials must be in NTT domain");
+        assert!(
+            self.is_ntt && other.is_ntt,
+            "Both polynomials must be in NTT domain"
+        );
         assert_eq!(self.q, other.q, "Moduli must match");
-        assert_eq!(self.coeffs.len(), other.coeffs.len(), "Dimensions must match");
+        assert_eq!(
+            self.coeffs.len(),
+            other.coeffs.len(),
+            "Dimensions must match"
+        );
 
         let q = self.q;
         let coeffs: Vec<u64> = self
@@ -298,7 +360,11 @@ impl Poly {
             .zip(other.coeffs.iter())
             .map(|(&a, &b)| {
                 let sum = a + b;
-                if sum >= q { sum - q } else { sum }
+                if sum >= q {
+                    sum - q
+                } else {
+                    sum
+                }
             })
             .collect();
 
@@ -310,12 +376,15 @@ impl Poly {
     }
 
     /// In-place addition when both are in NTT domain
-    /// 
+    ///
     /// **Performance**: Avoids allocation, O(n) pointwise addition
     pub fn add_assign_ntt_domain(&mut self, other: &Self) {
-        assert!(self.is_ntt && other.is_ntt, "Both polynomials must be in NTT domain");
+        assert!(
+            self.is_ntt && other.is_ntt,
+            "Both polynomials must be in NTT domain"
+        );
         assert_eq!(self.q, other.q, "Moduli must match");
-        
+
         let q = self.q;
         for (a, &b) in self.coeffs.iter_mut().zip(other.coeffs.iter()) {
             let sum = *a + b;
@@ -324,13 +393,16 @@ impl Poly {
     }
 
     /// In-place multiply-accumulate in NTT domain: self += a * b
-    /// 
+    ///
     /// **Performance**: Single pass multiply-add without intermediate allocation
     pub fn mul_acc_ntt_domain(&mut self, a: &Self, b: &Self, ctx: &NttContext) {
-        assert!(self.is_ntt && a.is_ntt && b.is_ntt, "All polynomials must be in NTT domain");
+        assert!(
+            self.is_ntt && a.is_ntt && b.is_ntt,
+            "All polynomials must be in NTT domain"
+        );
         assert_eq!(self.q, a.q, "Moduli must match");
         assert_eq!(self.q, b.q, "Moduli must match");
-        
+
         let q = self.q as u128;
         for i in 0..self.coeffs.len() {
             let prod = ctx.pointwise_mul_single(a.coeffs[i], b.coeffs[i]);
@@ -350,13 +422,7 @@ impl Poly {
         assert!(!self.is_ntt, "Cannot compute norm in NTT domain");
         self.coeffs
             .iter()
-            .map(|&c| {
-                if c <= self.q / 2 {
-                    c
-                } else {
-                    self.q - c
-                }
-            })
+            .map(|&c| if c <= self.q / 2 { c } else { self.q - c })
             .max()
             .unwrap_or(0)
     }
@@ -475,13 +541,7 @@ impl Sub for &Poly {
             .coeffs
             .iter()
             .zip(rhs.coeffs.iter())
-            .map(|(&a, &b)| {
-                if a >= b {
-                    a - b
-                } else {
-                    self.q - b + a
-                }
-            })
+            .map(|(&a, &b)| if a >= b { a - b } else { self.q - b + a })
             .collect();
 
         Poly {
@@ -535,7 +595,10 @@ impl Mul for Poly {
 
     fn mul(self, rhs: Self) -> Self::Output {
         assert_eq!(self.is_ntt, rhs.is_ntt, "NTT domains must match");
-        assert!(self.is_ntt, "Use mul_ntt for coefficient domain multiplication");
+        assert!(
+            self.is_ntt,
+            "Use mul_ntt for coefficient domain multiplication"
+        );
 
         let ctx = NttContext::new(self.coeffs.len(), self.q);
         self.mul_ntt_domain(&rhs, &ctx)

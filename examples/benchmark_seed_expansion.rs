@@ -12,15 +12,18 @@ fn main() -> eyre::Result<()> {
 
     // Test with different ring dimensions
     let configs = [
-        ("d=256 (test)", InspireParams {
-            ring_dim: 256,
-            q: 1152921504606830593,
-            p: 65536,
-            sigma: 6.4,
-            gadget_base: 1 << 20,
-            gadget_len: 3,
-            security_level: inspire_pir::params::SecurityLevel::Bits128,
-        }),
+        (
+            "d=256 (test)",
+            InspireParams {
+                ring_dim: 256,
+                q: 1152921504606830593,
+                p: 65536,
+                sigma: 6.4,
+                gadget_base: 1 << 20,
+                gadget_len: 3,
+                security_level: inspire_pir::params::SecurityLevel::Bits128,
+            },
+        ),
         ("d=2048 (production)", InspireParams::secure_128_d2048()),
     ];
 
@@ -28,9 +31,9 @@ fn main() -> eyre::Result<()> {
         println!("Configuration: {}", name);
         println!("  Ring dimension: {}", params.ring_dim);
         println!("  Gadget length: {}", params.gadget_len);
-        
+
         let mut sampler = GaussianSampler::new(params.sigma);
-        
+
         // Create a small test database
         let entry_size = 32;
         let num_entries = params.ring_dim;
@@ -42,8 +45,20 @@ fn main() -> eyre::Result<()> {
 
         // Generate both query types
         let target_index = 42u64;
-        let (_, regular_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler)?;
-        let (_, seeded_query) = query_seeded(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler)?;
+        let (_, regular_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )?;
+        let (_, seeded_query) = query_seeded(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )?;
 
         // Serialize and measure sizes
         let regular_json = serde_json::to_vec(&regular_query)?;
@@ -53,14 +68,25 @@ fn main() -> eyre::Result<()> {
         let seeded_size = seeded_json.len();
         let reduction = 100.0 * (1.0 - (seeded_size as f64 / regular_size as f64));
 
-        println!("  Regular query size: {} bytes ({:.1} KB)", regular_size, regular_size as f64 / 1024.0);
-        println!("  Seeded query size:  {} bytes ({:.1} KB)", seeded_size, seeded_size as f64 / 1024.0);
+        println!(
+            "  Regular query size: {} bytes ({:.1} KB)",
+            regular_size,
+            regular_size as f64 / 1024.0
+        );
+        println!(
+            "  Seeded query size:  {} bytes ({:.1} KB)",
+            seeded_size,
+            seeded_size as f64 / 1024.0
+        );
         println!("  Reduction: {:.1}%", reduction);
 
         // Verify seeded query can be expanded and produces same structure
         let expanded = seeded_query.expand();
         assert_eq!(expanded.shard_id, regular_query.shard_id);
-        assert_eq!(expanded.rgsw_ciphertext.rows.len(), regular_query.rgsw_ciphertext.rows.len());
+        assert_eq!(
+            expanded.rgsw_ciphertext.rows.len(),
+            regular_query.rgsw_ciphertext.rows.len()
+        );
         println!("  [OK] Seeded query expands correctly\n");
     }
 

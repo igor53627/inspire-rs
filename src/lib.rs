@@ -8,30 +8,30 @@
 //! - Homomorphic polynomial evaluation for reduced response size
 //! - CRS model for server-side preprocessing
 
-pub mod params;
-pub mod math;
-pub mod lwe;
-pub mod rlwe;
-pub mod rgsw;
-pub mod ks;
-pub mod inspiring;
-pub mod pir;
 #[cfg(feature = "server")]
 pub mod ethereum_db;
+pub mod inspiring;
+pub mod ks;
+pub mod lwe;
+pub mod math;
 pub mod modulus_switch;
+pub mod params;
+pub mod pir;
+pub mod rgsw;
+pub mod rlwe;
 
 pub use pir::{
-    setup, query, query_seeded, query_switched, 
-    respond, respond_with_variant, respond_one_packing, respond_inspiring,
-    respond_seeded, respond_seeded_packed, respond_switched, respond_switched_packed,
-    respond_seeded_inspiring,
-    extract, extract_with_variant,
-    ServerCrs, InspireCrs, EncodedDatabase, ShardData,
-    ClientQuery, ClientState, SeededClientQuery, SwitchedClientQuery, ServerResponse,
-    encode_column, encode_database, encode_direct, inverse_monomial,
+    encode_column, encode_database, encode_direct, extract, extract_with_variant, inverse_monomial,
+    query, query_seeded, query_switched, respond, respond_inspiring, respond_one_packing,
+    respond_seeded, respond_seeded_inspiring, respond_seeded_packed, respond_switched,
+    respond_switched_packed, respond_with_variant, setup, ClientQuery, ClientState,
+    EncodedDatabase, InspireCrs, SeededClientQuery, ServerCrs, ServerResponse, ShardData,
+    SwitchedClientQuery,
 };
 
 #[cfg(feature = "server")]
-pub use pir::{respond_mmap, respond_mmap_one_packing, MmapDatabase, save_shards_binary, load_shard_binary};
+pub use pir::{
+    load_shard_binary, respond_mmap, respond_mmap_one_packing, save_shards_binary, MmapDatabase,
+};
 
 pub use params::{InspireParams, InspireVariant, SecurityLevel};

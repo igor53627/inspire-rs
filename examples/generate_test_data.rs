@@ -68,7 +68,12 @@ fn generate_database(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     writer.flush()?;
-    println!("Created {} ({} entries x {} bytes)", path.display(), num_entries, entry_size);
+    println!(
+        "Created {} ({} entries x {} bytes)",
+        path.display(),
+        num_entries,
+        entry_size
+    );
 
     Ok(())
 }
@@ -81,17 +86,47 @@ fn generate_account_mapping(dir: &Path) -> Result<(), Box<dyn std::error::Error>
     // 10 test accounts at known indices
     let accounts: Vec<([u8; 20], u64)> = vec![
         // Vitalik's address (example)
-        (hex_to_address("d8dA6BF26964aF9D7eEd9e03E53415D37aA96045"), 0),
+        (
+            hex_to_address("d8dA6BF26964aF9D7eEd9e03E53415D37aA96045"),
+            0,
+        ),
         // Some test addresses
-        (hex_to_address("0000000000000000000000000000000000000001"), 10),
-        (hex_to_address("0000000000000000000000000000000000000002"), 20),
-        (hex_to_address("1111111111111111111111111111111111111111"), 100),
-        (hex_to_address("2222222222222222222222222222222222222222"), 200),
-        (hex_to_address("3333333333333333333333333333333333333333"), 300),
-        (hex_to_address("4444444444444444444444444444444444444444"), 400),
-        (hex_to_address("5555555555555555555555555555555555555555"), 500),
-        (hex_to_address("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"), 777),
-        (hex_to_address("cafebabecafebabecafebabecafebabecafebabe"), 999),
+        (
+            hex_to_address("0000000000000000000000000000000000000001"),
+            10,
+        ),
+        (
+            hex_to_address("0000000000000000000000000000000000000002"),
+            20,
+        ),
+        (
+            hex_to_address("1111111111111111111111111111111111111111"),
+            100,
+        ),
+        (
+            hex_to_address("2222222222222222222222222222222222222222"),
+            200,
+        ),
+        (
+            hex_to_address("3333333333333333333333333333333333333333"),
+            300,
+        ),
+        (
+            hex_to_address("4444444444444444444444444444444444444444"),
+            400,
+        ),
+        (
+            hex_to_address("5555555555555555555555555555555555555555"),
+            500,
+        ),
+        (
+            hex_to_address("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"),
+            777,
+        ),
+        (
+            hex_to_address("cafebabecafebabecafebabecafebabecafebabe"),
+            999,
+        ),
     ];
 
     for (address, index) in &accounts {
@@ -113,30 +148,110 @@ fn generate_storage_mapping(dir: &Path) -> Result<(), Box<dyn std::error::Error>
     // 20 test storage slots
     let slots: Vec<([u8; 20], [u8; 32], u64)> = vec![
         // Contract 1: slots 0-4
-        (hex_to_address("1111111111111111111111111111111111111111"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"), 100),
-        (hex_to_address("1111111111111111111111111111111111111111"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000001"), 101),
-        (hex_to_address("1111111111111111111111111111111111111111"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000002"), 102),
-        (hex_to_address("1111111111111111111111111111111111111111"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000003"), 103),
-        (hex_to_address("1111111111111111111111111111111111111111"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000004"), 104),
+        (
+            hex_to_address("1111111111111111111111111111111111111111"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"),
+            100,
+        ),
+        (
+            hex_to_address("1111111111111111111111111111111111111111"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000001"),
+            101,
+        ),
+        (
+            hex_to_address("1111111111111111111111111111111111111111"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000002"),
+            102,
+        ),
+        (
+            hex_to_address("1111111111111111111111111111111111111111"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000003"),
+            103,
+        ),
+        (
+            hex_to_address("1111111111111111111111111111111111111111"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000004"),
+            104,
+        ),
         // Contract 2: slots 0-4
-        (hex_to_address("2222222222222222222222222222222222222222"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"), 200),
-        (hex_to_address("2222222222222222222222222222222222222222"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000001"), 201),
-        (hex_to_address("2222222222222222222222222222222222222222"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000002"), 202),
-        (hex_to_address("2222222222222222222222222222222222222222"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000003"), 203),
-        (hex_to_address("2222222222222222222222222222222222222222"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000004"), 204),
+        (
+            hex_to_address("2222222222222222222222222222222222222222"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"),
+            200,
+        ),
+        (
+            hex_to_address("2222222222222222222222222222222222222222"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000001"),
+            201,
+        ),
+        (
+            hex_to_address("2222222222222222222222222222222222222222"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000002"),
+            202,
+        ),
+        (
+            hex_to_address("2222222222222222222222222222222222222222"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000003"),
+            203,
+        ),
+        (
+            hex_to_address("2222222222222222222222222222222222222222"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000004"),
+            204,
+        ),
         // Contract 3: various slots
-        (hex_to_address("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"), 777),
-        (hex_to_address("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"), hex_to_slot("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"), 778),
+        (
+            hex_to_address("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"),
+            777,
+        ),
+        (
+            hex_to_address("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"),
+            hex_to_slot("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+            778,
+        ),
         // Some mapping slots (keccak256 style)
-        (hex_to_address("cafebabecafebabecafebabecafebabecafebabe"), hex_to_slot("290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563"), 900),
-        (hex_to_address("cafebabecafebabecafebabecafebabecafebabe"), hex_to_slot("b10e2d527612073b26eecdfd717e6a320cf44b4afac2b0732d9fcbe2b7fa0cf6"), 901),
-        (hex_to_address("cafebabecafebabecafebabecafebabecafebabe"), hex_to_slot("405787fa12a823e0f2b7631cc41b3ba8828b3321ca811111fa75cd3aa3bb5ace"), 902),
+        (
+            hex_to_address("cafebabecafebabecafebabecafebabecafebabe"),
+            hex_to_slot("290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563"),
+            900,
+        ),
+        (
+            hex_to_address("cafebabecafebabecafebabecafebabecafebabe"),
+            hex_to_slot("b10e2d527612073b26eecdfd717e6a320cf44b4afac2b0732d9fcbe2b7fa0cf6"),
+            901,
+        ),
+        (
+            hex_to_address("cafebabecafebabecafebabecafebabecafebabe"),
+            hex_to_slot("405787fa12a823e0f2b7631cc41b3ba8828b3321ca811111fa75cd3aa3bb5ace"),
+            902,
+        ),
         // Additional entries
-        (hex_to_address("3333333333333333333333333333333333333333"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"), 300),
-        (hex_to_address("4444444444444444444444444444444444444444"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"), 400),
-        (hex_to_address("5555555555555555555555555555555555555555"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"), 500),
-        (hex_to_address("6666666666666666666666666666666666666666"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"), 600),
-        (hex_to_address("7777777777777777777777777777777777777777"), hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"), 700),
+        (
+            hex_to_address("3333333333333333333333333333333333333333"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"),
+            300,
+        ),
+        (
+            hex_to_address("4444444444444444444444444444444444444444"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"),
+            400,
+        ),
+        (
+            hex_to_address("5555555555555555555555555555555555555555"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"),
+            500,
+        ),
+        (
+            hex_to_address("6666666666666666666666666666666666666666"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"),
+            600,
+        ),
+        (
+            hex_to_address("7777777777777777777777777777777777777777"),
+            hex_to_slot("0000000000000000000000000000000000000000000000000000000000000000"),
+            700,
+        ),
     ];
 
     for (address, slot, index) in &slots {
