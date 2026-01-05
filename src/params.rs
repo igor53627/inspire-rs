@@ -327,7 +327,7 @@ impl InspireParams {
             return Err("q must be ≡ 1 (mod 2d) for NTT");
         }
 
-        // p must divide q cleanly enough
+        // p must be at most q to allow scaling (Δ = ⌊q/p⌋)
         if self.q < self.p {
             return Err("q must be >= p");
         }

@@ -101,11 +101,12 @@ impl GadgetVector {
 /// Encrypts a small message m (typically 0, 1, or ±X^k).
 /// The structure is:
 /// ```text
-/// [ RLWE(-m·z^0),  RLWE(-m·z^1),  ..., RLWE(-m·z^(ℓ-1)),   <- rows 0..ℓ-1
-///   RLWE(m·s·z^0), RLWE(m·s·z^1), ..., RLWE(m·s·z^(ℓ-1)) ] <- rows ℓ..2ℓ-1
+/// [ Row 0..ℓ-1:   RLWE encryptions that decrypt to m·z^i·s  (message × secret key)
+///   Row ℓ..2ℓ-1: RLWE encryptions that decrypt to m·z^i    (plain message) ]
 /// ```
 ///
-/// where s is the secret key polynomial.
+/// where s is the secret key polynomial and z is the gadget base.
+/// This encoding enables the external product: RLWE(m₀) ⊡ RGSW(m₁) = RLWE(m₀·m₁).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RgswCiphertext {
     /// 2ℓ RLWE ciphertexts arranged as described above
