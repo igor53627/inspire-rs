@@ -160,7 +160,9 @@ mod tests {
         let ks_matrix = generate_ks_matrix(&sk1, &sk2, &gadget, &mut sampler, &ctx);
 
         // Encrypt a message under sk1
-        let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % params.p).collect();
+        let msg_coeffs: Vec<u64> = (0..params.ring_dim)
+            .map(|i| (i as u64) % params.p)
+            .collect();
         let msg = Poly::from_coeffs(msg_coeffs.clone(), params.q);
         let a = Poly::random(params.ring_dim, params.q);
         let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
@@ -169,7 +171,12 @@ mod tests {
         // Verify original decryption under sk1
         let dec1 = ct1.decrypt(&sk1, delta, params.p, &ctx);
         for i in 0..params.ring_dim {
-            assert_eq!(dec1.coeff(i), msg_coeffs[i], "Original decryption failed at {}", i);
+            assert_eq!(
+                dec1.coeff(i),
+                msg_coeffs[i],
+                "Original decryption failed at {}",
+                i
+            );
         }
 
         // Apply key-switching
@@ -302,7 +309,9 @@ mod tests {
 
         // Encrypt two messages under sk1
         let msg1_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % 30).collect();
-        let msg2_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| ((i + 10) as u64) % 30).collect();
+        let msg2_coeffs: Vec<u64> = (0..params.ring_dim)
+            .map(|i| ((i + 10) as u64) % 30)
+            .collect();
 
         let msg1 = Poly::from_coeffs(msg1_coeffs.clone(), params.q);
         let msg2 = Poly::from_coeffs(msg2_coeffs.clone(), params.q);

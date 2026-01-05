@@ -51,9 +51,16 @@ fn benchmark_config(params: &InspireParams) {
     let setup_time = setup_start.elapsed();
 
     let target_idx = params.ring_dim / 2;
-    
+
     let query_start = Instant::now();
-    let (state, client_query) = query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+    let (state, client_query) = query(
+        &crs,
+        target_idx as u64,
+        &encoded_db.config,
+        &rlwe_sk,
+        &mut sampler,
+    )
+    .unwrap();
     let query_time = query_start.elapsed();
 
     let respond_start = Instant::now();
@@ -70,12 +77,29 @@ fn benchmark_config(params: &InspireParams) {
     let query_bytes = bincode::serialize(&client_query).unwrap().len();
     let response_bytes = response.to_binary().unwrap().len();
 
-    println!("Entries: {} x {} bytes = {} KB total", num_entries, entry_size, (num_entries * entry_size) / 1024);
+    println!(
+        "Entries: {} x {} bytes = {} KB total",
+        num_entries,
+        entry_size,
+        (num_entries * entry_size) / 1024
+    );
     println!();
     println!("Communication:");
-    println!("  Query size:    {:>8} bytes ({:.1} KB)", query_bytes, query_bytes as f64 / 1024.0);
-    println!("  Response size: {:>8} bytes ({:.1} KB)", response_bytes, response_bytes as f64 / 1024.0);
-    println!("  Total:         {:>8} bytes ({:.1} KB)", query_bytes + response_bytes, (query_bytes + response_bytes) as f64 / 1024.0);
+    println!(
+        "  Query size:    {:>8} bytes ({:.1} KB)",
+        query_bytes,
+        query_bytes as f64 / 1024.0
+    );
+    println!(
+        "  Response size: {:>8} bytes ({:.1} KB)",
+        response_bytes,
+        response_bytes as f64 / 1024.0
+    );
+    println!(
+        "  Total:         {:>8} bytes ({:.1} KB)",
+        query_bytes + response_bytes,
+        (query_bytes + response_bytes) as f64 / 1024.0
+    );
     println!();
     println!("Timing:");
     println!("  Setup:   {:>8.2} ms", setup_time.as_secs_f64() * 1000.0);

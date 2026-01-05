@@ -38,17 +38,12 @@
 //! let decrypted = ct.decrypt(&sk, params.delta(), params.p);
 //! ```
 
-mod types;
 mod enc;
 mod galois;
+mod types;
 
-pub use types::{RlweCiphertext, RlweSecretKey, SeededRlweCiphertext};
 pub use galois::{
-    apply_automorphism,
-    automorphism_ciphertext,
-    automorphism_order,
-    compose_automorphisms,
-    galois_generators,
-    inverse_automorphism,
-    is_valid_galois_element,
+    apply_automorphism, automorphism_ciphertext, automorphism_order, compose_automorphisms,
+    galois_generators, inverse_automorphism, is_valid_galois_element,
 };
+pub use types::{RlweCiphertext, RlweSecretKey, SeededRlweCiphertext};

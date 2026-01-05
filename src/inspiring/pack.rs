@@ -75,10 +75,7 @@ pub fn partial_pack(
     let gamma = lwe_ciphertexts.len();
     let d = params.ring_dim;
 
-    assert!(
-        gamma <= d / 2,
-        "partial_pack requires γ ≤ d/2 ciphertexts"
-    );
+    assert!(gamma <= d / 2, "partial_pack requires γ ≤ d/2 ciphertexts");
 
     if gamma == 0 {
         return RlweCiphertext::from_parts(Poly::zero(d, params.q), Poly::zero(d, params.q));
@@ -153,11 +150,7 @@ pub fn precompute_packing(
     let n = crs_a_vectors.len();
 
     assert!(!crs_a_vectors.is_empty(), "Must have at least one a vector");
-    assert_eq!(
-        crs_a_vectors[0].len(),
-        d,
-        "a vectors must have dimension d"
-    );
+    assert_eq!(crs_a_vectors[0].len(), d, "a vectors must have dimension d");
 
     // Create dummy LWE ciphertexts with the CRS a vectors and b=0
     // We only care about the a-component transformation
@@ -301,9 +294,8 @@ mod tests {
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(54321);
 
         let gamma = params.ring_dim / 4;
-        let lwe_cts: Vec<LweCiphertext> = (0..gamma)
-            .map(|_| random_lwe(&mut rng, &params))
-            .collect();
+        let lwe_cts: Vec<LweCiphertext> =
+            (0..gamma).map(|_| random_lwe(&mut rng, &params)).collect();
 
         let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
 
@@ -399,9 +391,7 @@ mod tests {
 
         // Create 4 LWE ciphertexts with known structure
         let n = 4;
-        let lwe_cts: Vec<LweCiphertext> = (0..n)
-            .map(|_| random_lwe(&mut rng, &params))
-            .collect();
+        let lwe_cts: Vec<LweCiphertext> = (0..n).map(|_| random_lwe(&mut rng, &params)).collect();
 
         // Transform at slots
         let intermediates: Vec<_> = lwe_cts

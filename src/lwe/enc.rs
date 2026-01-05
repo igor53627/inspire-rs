@@ -1,10 +1,22 @@
-//! LWE encryption and decryption
+//! LWE encryption and decryption.
+//!
+//! Implements LWE encryption, decryption, and homomorphic operations.
 
-use crate::math::{GaussianSampler, ModQ};
 use super::types::{LweCiphertext, LweSecretKey};
+use crate::math::{GaussianSampler, ModQ};
 
 impl LweSecretKey {
-    /// Generate a secret key by sampling from Gaussian distribution
+    /// Generates a secret key by sampling from Gaussian distribution.
+    ///
+    /// # Arguments
+    ///
+    /// * `dim` - Dimension of the secret key vector
+    /// * `q` - Ciphertext modulus
+    /// * `sampler` - Gaussian sampler for generating small coefficients
+    ///
+    /// # Returns
+    ///
+    /// A new `LweSecretKey` with Gaussian-distributed coefficients.
     pub fn generate(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Self {
         let coeffs: Vec<u64> = (0..dim)
             .map(|_| {
@@ -333,9 +345,9 @@ mod tests {
     #[test]
     fn test_lwe_extraction_key_consistency() {
         use crate::math::{GaussianSampler, NttContext, Poly};
-        use crate::rlwe::{RlweCiphertext, RlweSecretKey};
         use crate::params::InspireParams;
-        
+        use crate::rlwe::{RlweCiphertext, RlweSecretKey};
+
         let params = InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
@@ -345,25 +357,25 @@ mod tests {
             gadget_len: 3,
             security_level: crate::params::SecurityLevel::Bits128,
         };
-        
+
         let d = params.ring_dim;
         let q = params.q;
         let delta_val = params.delta();
         let ctx = NttContext::new(d, q);
         let mut sampler = GaussianSampler::new(params.sigma);
-        
+
         // Generate RLWE secret key
         let rlwe_sk = RlweSecretKey::generate(&params, &mut sampler);
-        
+
         // Derive LWE secret key
         let lwe_sk = LweSecretKey::from_rlwe(&rlwe_sk);
-        
+
         // Create a message in coeff 0 only
         let message = 12345u64;
         let mut msg_coeffs = vec![0u64; d];
         msg_coeffs[0] = message;
         let msg_poly = Poly::from_coeffs(msg_coeffs, q);
-        
+
         // Encrypt with RLWE
         let a = Poly::random(d, q);
         let error_coeffs: Vec<u64> = (0..d)
@@ -371,14 +383,17 @@ mod tests {
             .collect();
         let error = Poly::from_coeffs(error_coeffs, q);
         let rlwe_ct = RlweCiphertext::encrypt(&rlwe_sk, &msg_poly, delta_val, a, &error, &ctx);
-        
+
         // Extract LWE from coeff 0
         let lwe_ct = rlwe_ct.sample_extract_coeff0();
-        
+
         // Decrypt LWE
         let lwe_decrypted = lwe_ct.decrypt(&lwe_sk, delta_val, params.p);
-        
-        assert_eq!(lwe_decrypted, message, 
-            "LWE decryption should match: got {}, expected {}", lwe_decrypted, message);
+
+        assert_eq!(
+            lwe_decrypted, message,
+            "LWE decryption should match: got {}, expected {}",
+            lwe_decrypted, message
+        );
     }
 }

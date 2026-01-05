@@ -22,8 +22,8 @@ use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use inspire_pir::pir::{
-    respond_one_packing, respond_mmap_one_packing, respond_inspiring,
-    ClientQuery, EncodedDatabase, InspireCrs, MmapDatabase, ServerResponse,
+    respond_inspiring, respond_mmap_one_packing, respond_one_packing, ClientQuery, EncodedDatabase,
+    InspireCrs, MmapDatabase, ServerResponse,
 };
 
 #[derive(Parser)]
@@ -178,8 +178,8 @@ async fn main() -> Result<()> {
     let crs_file = File::open(&crs_path)
         .with_context(|| format!("Failed to open CRS file: {}", crs_path.display()))?;
     let reader = BufReader::new(crs_file);
-    let crs: InspireCrs = serde_json::from_reader(reader)
-        .with_context(|| "Failed to deserialize CRS")?;
+    let crs: InspireCrs =
+        serde_json::from_reader(reader).with_context(|| "Failed to deserialize CRS")?;
 
     info!("CRS loaded: ring_dim={}", crs.ring_dim());
 
@@ -224,11 +224,7 @@ async fn main() -> Result<()> {
 
     info!("Load time: {:.2?}", load_start.elapsed());
 
-    let state = Arc::new(AppState {
-        crs,
-        db,
-        metadata,
-    });
+    let state = Arc::new(AppState { crs, db, metadata });
 
     let app = Router::new()
         .route("/health", get(health_check))

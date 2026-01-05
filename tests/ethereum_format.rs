@@ -36,9 +36,12 @@ fn test_account_entry_format() {
     let params = test_params();
     let entry_size = 32;
 
-    let nonce = hex_to_bytes_32("0x0000000000000000000000000000000000000000000000000000000000000042");
-    let balance = hex_to_bytes_32("0x00000000000000000000000000000000000000000000000de0b6b3a7640000");
-    let codehash = hex_to_bytes_32("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
+    let nonce =
+        hex_to_bytes_32("0x0000000000000000000000000000000000000000000000000000000000000042");
+    let balance =
+        hex_to_bytes_32("0x00000000000000000000000000000000000000000000000de0b6b3a7640000");
+    let codehash =
+        hex_to_bytes_32("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
 
     let mut database = Vec::new();
     database.extend_from_slice(&nonce);
@@ -51,8 +54,14 @@ fn test_account_entry_format() {
     let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     for target_idx in 0..num_entries {
-        let (state, client_query) =
-            query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_idx as u64,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
         let result = extract(&crs, &state, &response, entry_size).unwrap();
 
@@ -80,8 +89,14 @@ fn test_storage_entry_format() {
     let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     let target_idx = 7;
-    let (state, client_query) =
-        query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+    let (state, client_query) = query(
+        &crs,
+        target_idx as u64,
+        &encoded_db.config,
+        &rlwe_sk,
+        &mut sampler,
+    )
+    .unwrap();
     let response = respond(&crs, &encoded_db, &client_query).unwrap();
     let result = extract(&crs, &state, &response, entry_size).unwrap();
 
@@ -117,7 +132,11 @@ fn test_consecutive_account_words() {
         retrieved_fields.push(result);
     }
 
-    for (idx, (retrieved, original)) in retrieved_fields.iter().zip(account_fields.iter()).enumerate() {
+    for (idx, (retrieved, original)) in retrieved_fields
+        .iter()
+        .zip(account_fields.iter())
+        .enumerate()
+    {
         assert_eq!(
             retrieved.as_slice(),
             original,
@@ -154,8 +173,14 @@ fn test_realistic_ethereum_values() {
     let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     for target_idx in 0..num_entries {
-        let (state, client_query) =
-            query(&crs, target_idx as u64, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_idx as u64,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
         let response = respond(&crs, &encoded_db, &client_query).unwrap();
         let result = extract(&crs, &state, &response, entry_size).unwrap();
 

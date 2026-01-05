@@ -384,7 +384,10 @@ pub fn homomorphic_select(
         current = next;
     }
 
-    current.into_iter().next().unwrap_or_else(|| RlweCiphertext::zero(params))
+    current
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| RlweCiphertext::zero(params))
 }
 
 /// Convert plaintext polynomial to trivial RLWE encryption
@@ -587,7 +590,8 @@ mod tests {
         let poly = Poly::from_coeffs(coeffs, q);
 
         let point_poly = eval_point_to_poly(0, false, d, q);
-        let encrypted_point = RgswCiphertext::encrypt(&sk, &point_poly, &gadget, &mut sampler, &ctx);
+        let encrypted_point =
+            RgswCiphertext::encrypt(&sk, &point_poly, &gadget, &mut sampler, &ctx);
 
         let result = eval_poly_homomorphic(&poly, &encrypted_point, &params);
         let decrypted = result.decrypt(&sk, params.delta(), params.p, &ctx);

@@ -1,8 +1,10 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{extract_with_variant, query, respond, respond_sequential, respond_with_variant, setup};
 use inspire_pir::params::InspireVariant;
+use inspire_pir::pir::{
+    extract_with_variant, query, respond, respond_sequential, respond_with_variant, setup,
+};
 
 fn test_params() -> InspireParams {
     InspireParams {
@@ -33,8 +35,14 @@ fn respond_benchmark(c: &mut Criterion) {
             setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
-        let (_state, client_query) =
-            query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (_state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         group.bench_with_input(
             BenchmarkId::new("parallel", format!("{}_columns", num_columns)),
@@ -81,8 +89,14 @@ fn one_packing_benchmark(c: &mut Criterion) {
             setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
-        let (state, client_query) =
-            query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         // Benchmark NoPacking respond
         group.bench_with_input(
@@ -99,8 +113,13 @@ fn one_packing_benchmark(c: &mut Criterion) {
             &num_columns,
             |b, _| {
                 b.iter(|| {
-                    respond_with_variant(&crs, &encoded_db, &client_query, InspireVariant::OnePacking)
-                        .unwrap()
+                    respond_with_variant(
+                        &crs,
+                        &encoded_db,
+                        &client_query,
+                        InspireVariant::OnePacking,
+                    )
+                    .unwrap()
                 });
             },
         );
@@ -176,8 +195,14 @@ fn response_size_comparison(c: &mut Criterion) {
             setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
-        let (_state, client_query) =
-            query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (_state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         let response_nopack = respond(&crs, &encoded_db, &client_query).unwrap();
         let response_onepack =
@@ -217,5 +242,10 @@ fn response_size_comparison(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, respond_benchmark, one_packing_benchmark, response_size_comparison);
+criterion_group!(
+    benches,
+    respond_benchmark,
+    one_packing_benchmark,
+    response_size_comparison
+);
 criterion_main!(benches);

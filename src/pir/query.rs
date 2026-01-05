@@ -62,7 +62,8 @@ pub struct ClientQuery {
     pub rgsw_ciphertext: RgswCiphertext,
     /// InspiRING client packing keys (optional, for InspiRING packing)
     /// Contains y_all = τ_{g^i}(y_body) where y_body = τ_g(s)·G - s·w_mask + error
-    #[serde(skip)]  // Skip during serialization since it's large - generated on server side if needed
+    #[serde(skip)]
+    // Skip during serialization since it's large - generated on server side if needed
     pub inspiring_packing_keys: Option<ClientPackingKeys>,
 }
 
@@ -123,7 +124,7 @@ impl SwitchedClientQuery {
             inspiring_packing_keys: None,
         }
     }
-    
+
     /// Expand to SeededClientQuery (intermediate step)
     pub fn expand_to_seeded(&self) -> SeededClientQuery {
         SeededClientQuery {
@@ -166,13 +167,8 @@ pub fn query(
     let lwe_sk = rlwe_to_lwe_key(rlwe_sk);
 
     let inv_mono = inverse_monomial(local_index as usize, d, q);
-    let rgsw_ciphertext = RgswCiphertext::encrypt(
-        rlwe_sk,
-        &inv_mono,
-        &crs.rgsw_gadget,
-        sampler,
-        &ctx,
-    );
+    let rgsw_ciphertext =
+        RgswCiphertext::encrypt(rlwe_sk, &inv_mono, &crs.rgsw_gadget, sampler, &ctx);
 
     let state = ClientState {
         secret_key: lwe_sk,
@@ -234,13 +230,8 @@ pub fn query_seeded(
     let lwe_sk = rlwe_to_lwe_key(rlwe_sk);
 
     let inv_mono = inverse_monomial(local_index as usize, d, q);
-    let rgsw_ciphertext = SeededRgswCiphertext::encrypt(
-        rlwe_sk,
-        &inv_mono,
-        &crs.rgsw_gadget,
-        sampler,
-        &ctx,
-    );
+    let rgsw_ciphertext =
+        SeededRgswCiphertext::encrypt(rlwe_sk, &inv_mono, &crs.rgsw_gadget, sampler, &ctx);
 
     let state = ClientState {
         secret_key: lwe_sk,
@@ -303,18 +294,18 @@ pub fn query_switched(
 ) -> Result<(ClientState, SwitchedClientQuery)> {
     // First create the seeded query
     let (state, seeded_query) = query_seeded(crs, global_index, shard_config, rlwe_sk, sampler)?;
-    
+
     // Apply modulus switching for additional compression
     let switched_rgsw = SwitchedSeededRgswCiphertext::from_seeded(
         &seeded_query.rgsw_ciphertext,
         DEFAULT_SWITCHED_Q,
     );
-    
+
     let query = SwitchedClientQuery {
         shard_id: seeded_query.shard_id,
         rgsw_ciphertext: switched_rgsw,
     };
-    
+
     Ok((state, query))
 }
 
@@ -326,8 +317,6 @@ fn rlwe_to_lwe_key(rlwe_sk: &RlweSecretKey) -> LweSecretKey {
     let q = rlwe_sk.modulus();
     LweSecretKey::from_coeffs(coeffs, q)
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -357,10 +346,18 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) =
+            setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         assert_eq!(state.index, target_index);
         assert_eq!(state.shard_id, client_query.shard_id);
@@ -377,10 +374,18 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) =
+            setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = params.ring_dim as u64 + 10;
-        let (state, client_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+        let (state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
 
         assert_eq!(state.shard_id, 1);
         assert_eq!(state.local_index, 10);
@@ -403,7 +408,7 @@ mod tests {
     #[test]
     fn test_query_size_comparison() {
         use crate::params::InspireParams;
-        
+
         // Use production parameters for realistic size comparison
         let params = InspireParams::secure_128_d2048();
         let mut sampler = GaussianSampler::new(params.sigma);
@@ -414,31 +419,80 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+        let (crs, encoded_db, rlwe_sk) =
+            setup(&params, &database, entry_size, &mut sampler).unwrap();
 
         let target_index = 42u64;
-        
+
         // Generate all three query types
-        let (_, full_query) = query(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
-        let (_, seeded_query) = query_seeded(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
-        let (_, switched_query) = query_switched(&crs, target_index, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
-        
+        let (_, full_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
+        let (_, seeded_query) = query_seeded(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
+        let (_, switched_query) = query_switched(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
+
         // Serialize and compare sizes
         let full_size = bincode::serialize(&full_query).unwrap().len();
         let seeded_size = bincode::serialize(&seeded_query).unwrap().len();
         let switched_size = bincode::serialize(&switched_query).unwrap().len();
-        
+
         println!("\n=== Query Size Comparison (d=2048, l=3) ===");
-        println!("Full query:     {:>8} bytes ({:.1} KB)", full_size, full_size as f64 / 1024.0);
-        println!("Seeded query:   {:>8} bytes ({:.1} KB)", seeded_size, seeded_size as f64 / 1024.0);
-        println!("Switched query: {:>8} bytes ({:.1} KB)", switched_size, switched_size as f64 / 1024.0);
+        println!(
+            "Full query:     {:>8} bytes ({:.1} KB)",
+            full_size,
+            full_size as f64 / 1024.0
+        );
+        println!(
+            "Seeded query:   {:>8} bytes ({:.1} KB)",
+            seeded_size,
+            seeded_size as f64 / 1024.0
+        );
+        println!(
+            "Switched query: {:>8} bytes ({:.1} KB)",
+            switched_size,
+            switched_size as f64 / 1024.0
+        );
         println!("\nReductions:");
-        println!("  Seeded vs Full:   {:.1}%", 100.0 * (1.0 - seeded_size as f64 / full_size as f64));
-        println!("  Switched vs Full: {:.1}%", 100.0 * (1.0 - switched_size as f64 / full_size as f64));
-        
+        println!(
+            "  Seeded vs Full:   {:.1}%",
+            100.0 * (1.0 - seeded_size as f64 / full_size as f64)
+        );
+        println!(
+            "  Switched vs Full: {:.1}%",
+            100.0 * (1.0 - switched_size as f64 / full_size as f64)
+        );
+
         // Assertions
-        assert!(seeded_size < full_size, "Seeded should be smaller than full");
-        assert!(switched_size < seeded_size, "Switched should be smaller than seeded");
-        assert!(switched_size < full_size / 2, "Switched should be less than half of full");
+        assert!(
+            seeded_size < full_size,
+            "Seeded should be smaller than full"
+        );
+        assert!(
+            switched_size < seeded_size,
+            "Switched should be smaller than seeded"
+        );
+        assert!(
+            switched_size < full_size / 2,
+            "Switched should be less than half of full"
+        );
     }
 }

@@ -1,11 +1,14 @@
-//! Key-switching matrix generation
+//! Key-switching matrix generation.
+//!
+//! Provides functions for generating key-switching matrices used in
+//! RLWE ciphertext transformations.
 
 use crate::math::{GaussianSampler, ModQ, NttContext, Poly};
 use crate::rgsw::GadgetVector;
 use crate::rlwe::{RlweCiphertext, RlweSecretKey};
 use serde::{Deserialize, Serialize};
 
-/// Sample a polynomial with coefficients from discrete Gaussian
+/// Samples a polynomial with coefficients from discrete Gaussian.
 fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly {
     let coeffs: Vec<u64> = (0..dim)
         .map(|_| {
@@ -16,19 +19,35 @@ fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly 
     Poly::from_coeffs(coeffs, q)
 }
 
-/// Key-switching matrix from secret key s to secret key s'
+/// Key-switching matrix from secret key s to secret key s'.
 ///
 /// The matrix consists of ℓ RLWE ciphertexts encrypting s·z^i under s':
+///
 /// ```text
 /// K[i] = RLWE_{s'}(s·z^i) = (a_i, -a_i·s' + e_i + s·z^i)
 /// ```
 ///
 /// This allows transforming ciphertexts from key s to key s' with controlled noise.
+///
+/// # Fields
+///
+/// * `rows` - ℓ RLWE ciphertexts encoding scaled secret key
+/// * `gadget` - Gadget parameters for decomposition
+///
+/// # Example
+///
+/// ```ignore
+/// use inspire_pir::ks::{KeySwitchingMatrix, generate_ks_matrix};
+/// use inspire_pir::rgsw::GadgetVector;
+///
+/// let gadget = GadgetVector::new(1 << 20, 3, q);
+/// let ks_matrix = generate_ks_matrix(&from_key, &to_key, &gadget, &mut sampler, &ctx);
+/// ```
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeySwitchingMatrix {
-    /// ℓ RLWE ciphertexts
+    /// ℓ RLWE ciphertexts encoding scaled secret key.
     pub rows: Vec<RlweCiphertext>,
-    /// Gadget parameters
+    /// Gadget parameters for decomposition.
     pub gadget: GadgetVector,
 }
 
@@ -176,12 +195,13 @@ pub fn generate_packing_ks_matrix(
     let d = rlwe_sk.ring_dim();
     let q = rlwe_sk.modulus();
 
-    debug_assert_eq!(lwe_sk.dim, d, "LWE key dimension must match RLWE ring dimension");
+    debug_assert_eq!(
+        lwe_sk.dim, d,
+        "LWE key dimension must match RLWE ring dimension"
+    );
     debug_assert_eq!(lwe_sk.q, q, "LWE key modulus must match RLWE modulus");
 
-    let lwe_as_rlwe = RlweSecretKey::from_poly(
-        Poly::from_coeffs(lwe_sk.coeffs.clone(), q)
-    );
+    let lwe_as_rlwe = RlweSecretKey::from_poly(Poly::from_coeffs(lwe_sk.coeffs.clone(), q));
 
     generate_ks_matrix(&lwe_as_rlwe, rlwe_sk, gadget, sampler, ctx)
 }
@@ -297,7 +317,9 @@ mod tests {
                 assert!(
                     centered_diff < delta / 10,
                     "Row {} coefficient {} has large error: {}",
-                    i, j, centered_diff
+                    i,
+                    j,
+                    centered_diff
                 );
             }
         }

@@ -1,16 +1,31 @@
-//! PIR Setup: Server preprocessing and CRS generation
+//! PIR Setup: Server preprocessing and CRS generation.
 //!
-//! Implements PIR.Setup(1^λ, D) → (crs, D', sk)
+//! Implements PIR.Setup(1^λ, D) → (crs, D', sk).
 //!
 //! The setup phase generates:
+//!
 //! - `ServerCrs`: Public parameters (key-switching matrices, gadget, CRS vectors)
 //! - `EncodedDatabase`: Database encoded as polynomials
 //! - `RlweSecretKey`: Client secret key for encryption/decryption
+//!
+//! # Example
+//!
+//! ```ignore
+//! use inspire_pir::pir::setup;
+//! use inspire_pir::params::InspireParams;
+//! use inspire_pir::math::GaussianSampler;
+//!
+//! let params = InspireParams::secure_128_d2048();
+//! let database = vec![0u8; 1024 * 32]; // 1024 entries of 32 bytes
+//! let mut sampler = GaussianSampler::new(params.sigma);
+//!
+//! let (crs, encoded_db, sk) = setup(&params, &database, 32, &mut sampler)?;
+//! ```
 
 use super::error::{pir_err, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::inspiring::{PackParams, PackingKeyBody, PrecompInsPIR, packing_offline};
+use crate::inspiring::{packing_offline, PackParams, PackingKeyBody, PrecompInsPIR};
 use crate::ks::{generate_automorphism_ks_matrix, generate_packing_ks_matrix, KeySwitchingMatrix};
 use crate::lwe::LweSecretKey;
 use crate::math::{GaussianSampler, NttContext, Poly};
@@ -20,7 +35,19 @@ use crate::rlwe::{galois_generators, RlweSecretKey};
 
 use super::encode_db::encode_database;
 
-/// Server Common Reference String containing public parameters only
+/// Server Common Reference String containing public parameters.
+///
+/// Contains all public parameters needed for PIR query processing,
+/// including key-switching matrices, gadget parameters, and CRS vectors.
+///
+/// # Fields
+///
+/// * `params` - System parameters (ring dimension, modulus, etc.)
+/// * `k_g` - Key-switching matrix for cyclic generator automorphism
+/// * `k_h` - Key-switching matrix for conjugation automorphism
+/// * `galois_keys` - Galois keys for tree packing automorphisms
+/// * `rgsw_gadget` - RGSW gadget vector parameters
+/// * `crs_a_vectors` - Fixed random vectors for CRS mode
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServerCrs {
     /// System parameters
@@ -163,22 +190,19 @@ pub fn setup(
     let bytes_per_column = 2usize; // 16-bit columns
     let num_columns = (entry_size + bytes_per_column - 1) / bytes_per_column;
     let num_columns = num_columns.max(1); // At least 1 column
-    
+
     let inspiring_pack_params = PackParams::new(params, num_columns);
-    
+
     // Generate random seeds for InspiRING (shared between client and server)
     let mut inspiring_w_seed = [0u8; 32];
     let mut inspiring_v_seed = [0u8; 32];
     use rand::RngCore;
     rand::thread_rng().fill_bytes(&mut inspiring_w_seed);
     rand::thread_rng().fill_bytes(&mut inspiring_v_seed);
-    
+
     // Generate offline packing keys from w_seed (server-side)
-    let inspiring_packing_key = PackingKeyBody::generate(
-        &inspiring_pack_params,
-        inspiring_w_seed,
-    );
-    
+    let inspiring_packing_key = PackingKeyBody::generate(&inspiring_pack_params, inspiring_w_seed);
+
     // Precompute offline phase using CRS a-vectors (only need num_columns a-vectors)
     let a_polys: Vec<Poly> = crs_a_vectors
         .iter()
@@ -222,7 +246,10 @@ pub fn setup(
 /// Alias for setup() - kept for backward compatibility
 ///
 /// Both `setup` and `setup_with_secret_key` now return the secret key separately.
-#[deprecated(since = "0.2.0", note = "Use setup() directly - both now return the secret key")]
+#[deprecated(
+    since = "0.2.0",
+    note = "Use setup() directly - both now return the secret key"
+)]
 #[allow(dead_code)]
 pub fn setup_with_secret_key(
     params: &InspireParams,

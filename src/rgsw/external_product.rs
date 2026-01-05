@@ -43,7 +43,11 @@ pub fn gadget_decompose(poly: &Poly, gadget: &GadgetVector) -> Vec<Poly> {
 /// p = p₀ + p₁·z + p₂·z² + ... + p_{ℓ-1}·z^{ℓ-1}
 pub fn gadget_reconstruct(decomposed: &[Poly], gadget: &GadgetVector) -> Poly {
     assert!(!decomposed.is_empty(), "Decomposition cannot be empty");
-    assert_eq!(decomposed.len(), gadget.len, "Decomposition length must match gadget length");
+    assert_eq!(
+        decomposed.len(),
+        gadget.len,
+        "Decomposition length must match gadget length"
+    );
 
     let d = decomposed[0].dimension();
     let q = decomposed[0].modulus();
@@ -197,14 +201,17 @@ mod tests {
         let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
 
         // Encrypt a message
-        let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % params.p).collect();
+        let msg_coeffs: Vec<u64> = (0..params.ring_dim)
+            .map(|i| (i as u64) % params.p)
+            .collect();
         let msg = Poly::from_coeffs(msg_coeffs, params.q);
         let a = Poly::random(params.ring_dim, params.q);
         let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
         let rlwe = RlweCiphertext::encrypt(&sk, &msg, delta, a, &e, &ctx);
 
         // RGSW(0)
-        let rgsw_zero = super::super::RgswCiphertext::encrypt_scalar(&sk, 0, &gadget, &mut sampler, &ctx);
+        let rgsw_zero =
+            super::super::RgswCiphertext::encrypt_scalar(&sk, 0, &gadget, &mut sampler, &ctx);
 
         // External product with RGSW(0) should give encryption of 0
         let result = external_product(&rlwe, &rgsw_zero, &ctx);
@@ -234,7 +241,8 @@ mod tests {
         let rlwe = RlweCiphertext::encrypt(&sk, &msg, delta, a, &e, &ctx);
 
         // RGSW(1)
-        let rgsw_one = super::super::RgswCiphertext::encrypt_scalar(&sk, 1, &gadget, &mut sampler, &ctx);
+        let rgsw_one =
+            super::super::RgswCiphertext::encrypt_scalar(&sk, 1, &gadget, &mut sampler, &ctx);
 
         // External product with RGSW(1) should preserve the message
         let result = external_product(&rlwe, &rgsw_one, &ctx);
@@ -269,7 +277,8 @@ mod tests {
 
         // RGSW(3)
         let scalar = 3u64;
-        let rgsw_scalar = super::super::RgswCiphertext::encrypt_scalar(&sk, scalar, &gadget, &mut sampler, &ctx);
+        let rgsw_scalar =
+            super::super::RgswCiphertext::encrypt_scalar(&sk, scalar, &gadget, &mut sampler, &ctx);
 
         // External product should multiply by 3
         let result = external_product(&rlwe, &rgsw_scalar, &ctx);
@@ -310,7 +319,8 @@ mod tests {
         let mut monomial_coeffs = vec![0u64; params.ring_dim];
         monomial_coeffs[1] = 1;
         let monomial = Poly::from_coeffs(monomial_coeffs, params.q);
-        let rgsw_mono = super::super::RgswCiphertext::encrypt(&sk, &monomial, &gadget, &mut sampler, &ctx);
+        let rgsw_mono =
+            super::super::RgswCiphertext::encrypt(&sk, &monomial, &gadget, &mut sampler, &ctx);
 
         // External product: 5 * X = 5X
         let result = external_product(&rlwe, &rgsw_mono, &ctx);

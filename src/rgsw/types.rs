@@ -1,11 +1,13 @@
-//! RGSW ciphertext and gadget types
+//! RGSW ciphertext and gadget types.
+//!
+//! Provides types for RGSW encryption and gadget decomposition.
 
 use crate::math::{GaussianSampler, ModQ, NttContext, Poly};
 use crate::rlwe::{RlweCiphertext, RlweSecretKey, SeededRlweCiphertext};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-/// Sample a polynomial with coefficients from discrete Gaussian
+/// Samples a polynomial with coefficients from discrete Gaussian.
 fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly {
     let coeffs: Vec<u64> = (0..dim)
         .map(|_| {
@@ -16,17 +18,35 @@ fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly 
     Poly::from_coeffs(coeffs, q)
 }
 
-/// Gadget vector g_z = [1, z, z², ..., z^(ℓ-1)]^T
+/// Gadget vector g_z = [1, z, z², ..., z^(ℓ-1)]^T.
 ///
 /// Used for decomposing polynomials into small-norm components,
-/// enabling noise-controlled homomorphic operations.
+/// enabling noise-controlled homomorphic operations. The gadget
+/// decomposition breaks a polynomial into ℓ pieces with coefficients
+/// bounded by z, reducing noise growth in external products.
+///
+/// # Fields
+///
+/// * `base` - Gadget base z (typically 2^20)
+/// * `len` - Number of digits ℓ = ⌈log_z(q)⌉
+/// * `q` - Ciphertext modulus
+///
+/// # Example
+///
+/// ```
+/// use inspire_pir::rgsw::GadgetVector;
+/// use inspire_pir::math::mod_q::DEFAULT_Q;
+///
+/// let gadget = GadgetVector::new(1 << 20, 3, DEFAULT_Q);
+/// assert_eq!(gadget.len, 3);
+/// ```
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GadgetVector {
-    /// Gadget base z (typically 2^20)
+    /// Gadget base z (typically 2^20).
     pub base: u64,
-    /// Number of digits ℓ = ⌈log_z(q)⌉
+    /// Number of digits ℓ = ⌈log_z(q)⌉.
     pub len: usize,
-    /// Ciphertext modulus q
+    /// Ciphertext modulus q.
     pub q: u64,
 }
 
@@ -81,11 +101,12 @@ impl GadgetVector {
 /// Encrypts a small message m (typically 0, 1, or ±X^k).
 /// The structure is:
 /// ```text
-/// [ RLWE(-m·z^0),  RLWE(-m·z^1),  ..., RLWE(-m·z^(ℓ-1)),   <- rows 0..ℓ-1
-///   RLWE(m·s·z^0), RLWE(m·s·z^1), ..., RLWE(m·s·z^(ℓ-1)) ] <- rows ℓ..2ℓ-1
+/// [ Row 0..ℓ-1:   RLWE encryptions that decrypt to m·z^i·s  (message × secret key)
+///   Row ℓ..2ℓ-1: RLWE encryptions that decrypt to m·z^i    (plain message) ]
 /// ```
 ///
-/// where s is the secret key polynomial.
+/// where s is the secret key polynomial and z is the gadget base.
+/// This encoding enables the external product: RLWE(m₀) ⊡ RGSW(m₁) = RLWE(m₀·m₁).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RgswCiphertext {
     /// 2ℓ RLWE ciphertexts arranged as described above
@@ -97,11 +118,7 @@ pub struct RgswCiphertext {
 impl RgswCiphertext {
     /// Create an RGSW ciphertext from component rows
     pub fn from_rows(rows: Vec<RlweCiphertext>, gadget: GadgetVector) -> Self {
-        debug_assert_eq!(
-            rows.len(),
-            2 * gadget.len,
-            "RGSW must have 2ℓ rows"
-        );
+        debug_assert_eq!(rows.len(), 2 * gadget.len, "RGSW must have 2ℓ rows");
         Self { rows, gadget }
     }
 
@@ -246,7 +263,7 @@ impl SeededRgswCiphertext {
         for i in 0..ell {
             let mut seed = [0u8; 32];
             rng.fill_bytes(&mut seed);
-            
+
             let a_rand = Poly::from_seed(&seed, d, q);
             let error = sample_error_poly(d, q, sampler);
 
@@ -267,7 +284,7 @@ impl SeededRgswCiphertext {
         for i in 0..ell {
             let mut seed = [0u8; 32];
             rng.fill_bytes(&mut seed);
-            
+
             let a = Poly::from_seed(&seed, d, q);
             let error = sample_error_poly(d, q, sampler);
 
@@ -355,7 +372,10 @@ mod tests {
         assert_eq!(powers.len(), 3);
         assert_eq!(powers[0], 1);
         assert_eq!(powers[1], base);
-        assert_eq!(powers[2], ((base as u128 * base as u128) % q as u128) as u64);
+        assert_eq!(
+            powers[2],
+            ((base as u128 * base as u128) % q as u128) as u64
+        );
     }
 
     #[test]

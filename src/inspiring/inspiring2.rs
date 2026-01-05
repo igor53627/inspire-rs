@@ -53,7 +53,7 @@ use serde::{Deserialize, Serialize};
 /// Packing parameters for InspiRING algorithm
 ///
 /// Equivalent to Google's `PackParams` struct.
-/// 
+///
 /// **Performance optimizations** (matching Google):
 /// - Monomials stored in NTT form for O(n) multiply
 /// - Automorphism tables for O(n) NTT-domain automorphisms
@@ -97,7 +97,7 @@ impl PackParams {
     /// Generator formula from Google reference:
     /// - If γ < n: gen = 2n/γ + 1
     /// - If γ = n: gen = 5
-    /// 
+    ///
     /// **Performance optimizations** (matching Google):
     /// - Precomputes monomials in both coefficient and NTT form
     /// - Generates automorphism tables for O(n) NTT-domain automorphisms
@@ -124,9 +124,9 @@ impl PackParams {
         }
 
         // Modular inverse of γ (scalar and polynomial forms)
-        let mod_inv_gamma = mod_inverse_u64(num_to_pack as u64, q)
-            .expect("num_to_pack must be invertible mod q");
-        
+        let mod_inv_gamma =
+            mod_inverse_u64(num_to_pack as u64, q).expect("num_to_pack must be invertible mod q");
+
         // mod_inv as constant polynomial in NTT form for fast scalar multiply
         let mut mod_inv_poly_ntt = Poly::constant(mod_inv_gamma, n, q);
         mod_inv_poly_ntt.to_ntt(&ctx);
@@ -136,7 +136,7 @@ impl PackParams {
         let mut neg_monomials = Vec::with_capacity(n);
         let mut monomials_ntt = Vec::with_capacity(n);
         let mut neg_monomials_ntt = Vec::with_capacity(n);
-        
+
         for j in 0..n {
             let mut coeffs = vec![0u64; n];
             coeffs[j] = 1;
@@ -176,16 +176,16 @@ impl PackParams {
             automorph_tables,
         }
     }
-    
+
     /// Get the table index for automorphism τ_t
-    /// 
+    ///
     /// For odd t in [1, 2n), the table index is (t - 1) / 2
     #[inline]
     pub fn table_index(&self, t: usize) -> usize {
         debug_assert!(t % 2 == 1, "Automorphism index must be odd");
         (t - 1) / 2
     }
-    
+
     /// Get the automorphism table for τ_t
     #[inline]
     pub fn get_automorph_table(&self, t: usize) -> &[usize] {
@@ -196,19 +196,19 @@ impl PackParams {
 /// Generate automorphism tables for NTT-domain automorphisms
 ///
 /// Equivalent to Google's `generate_automorph_tables_brute_force`.
-/// 
+///
 /// For each odd automorphism index t in [1, 2n), computes a permutation table
 /// such that: NTT(τ_t(poly))[i] = NTT(poly)[table[i]]
-/// 
+///
 /// This allows O(n) automorphism in NTT domain via index permutation.
 fn generate_automorph_tables(n: usize, q: u64, ctx: &NttContext) -> Vec<Vec<usize>> {
     let two_n = 2 * n;
     let mut tables = Vec::with_capacity(n);
-    
+
     // For each odd t in [1, 2n)
     for t in (1..two_n).step_by(2) {
         let mut table = vec![0usize; n];
-        
+
         // Use brute-force approach like Google: find NTT index mapping
         // by comparing NTT of random poly vs NTT of automorphed poly
         loop {
@@ -216,59 +216,59 @@ fn generate_automorph_tables(n: usize, q: u64, ctx: &NttContext) -> Vec<Vec<usiz
             let poly = Poly::random(n, q);
             let mut poly_ntt = poly.clone();
             poly_ntt.to_ntt(ctx);
-            
+
             // Apply automorphism in coefficient domain
             let poly_auto = apply_automorphism(&poly, t);
             let mut poly_auto_ntt = poly_auto.clone();
             poly_auto_ntt.to_ntt(ctx);
-            
+
             let mut must_redo = false;
-            
+
             // Find the permutation: for each position i in original NTT,
             // find where it maps to in automorphed NTT
             for i in 0..n {
                 let orig_val = poly_ntt.coeffs()[i];
                 let mut found = None;
                 let mut count = 0;
-                
+
                 for j in 0..n {
                     if poly_auto_ntt.coeffs()[j] == orig_val {
                         count += 1;
                         found = Some(j);
                     }
                 }
-                
+
                 if count != 1 {
                     must_redo = true;
                     break;
                 }
-                
+
                 // table[j] = i means: to get automorphed[j], read from original[i]
                 table[found.unwrap()] = i;
             }
-            
+
             if !must_redo {
                 break;
             }
         }
-        
+
         tables.push(table);
     }
-    
+
     tables
 }
 
 /// Apply automorphism τ_t in NTT domain using precomputed tables
 ///
 /// Equivalent to Google's `apply_automorph_ntt_raw`.
-/// 
+///
 /// **Performance**: O(n) index permutation instead of O(n log n) NTT conversion.
-/// 
+///
 /// # Arguments
 /// * `poly_ntt` - Polynomial in NTT domain
 /// * `table` - Precomputed permutation table for τ_t
 /// * `q` - Modulus
-/// 
+///
 /// # Returns
 /// The automorphed polynomial in NTT domain
 #[inline]
@@ -276,15 +276,15 @@ pub fn apply_automorphism_ntt(poly_ntt: &Poly, table: &[usize]) -> Poly {
     debug_assert!(poly_ntt.is_ntt(), "Polynomial must be in NTT domain");
     let n = poly_ntt.dimension();
     let q = poly_ntt.modulus();
-    
+
     let mut result_coeffs = vec![0u64; n];
     let src = poly_ntt.coeffs();
-    
+
     // Apply permutation: result[i] = poly[table[i]]
     for i in 0..n {
         result_coeffs[i] = src[table[i]];
     }
-    
+
     let mut result = Poly::from_coeffs(result_coeffs, q);
     // Mark as NTT domain (from_coeffs sets is_ntt = false)
     result.force_ntt_domain();
@@ -294,17 +294,17 @@ pub fn apply_automorphism_ntt(poly_ntt: &Poly, table: &[usize]) -> Poly {
 /// Apply automorphism τ_t in NTT domain, writing result into output buffer
 ///
 /// Equivalent to Google's `apply_automorph_ntt_raw` with output parameter.
-/// 
+///
 /// **Performance**: O(n) with no allocation when output is pre-allocated.
 #[inline]
 pub fn apply_automorphism_ntt_into(poly_ntt: &Poly, table: &[usize], out: &mut Poly) {
     debug_assert!(poly_ntt.is_ntt(), "Input must be in NTT domain");
     debug_assert!(out.is_ntt(), "Output must be in NTT domain");
-    
+
     let n = poly_ntt.dimension();
     let src = poly_ntt.coeffs();
     let dst = out.coeffs_mut();
-    
+
     // Apply permutation: out[i] = poly[table[i]]
     for i in 0..n {
         dst[i] = src[table[i]];
@@ -314,7 +314,7 @@ pub fn apply_automorphism_ntt_into(poly_ntt: &Poly, table: &[usize], out: &mut P
 /// Apply automorphism τ_t and its conjugate τ_{2n-t} simultaneously
 ///
 /// Equivalent to Google's `apply_automorph_ntt_double`.
-/// 
+///
 /// **Performance**: Single pass over input for both outputs.
 #[inline]
 pub fn apply_automorphism_ntt_double(
@@ -325,28 +325,28 @@ pub fn apply_automorphism_ntt_double(
     debug_assert!(poly_ntt.is_ntt(), "Polynomial must be in NTT domain");
     let n = poly_ntt.dimension();
     let q = poly_ntt.modulus();
-    
+
     let mut result_pos = vec![0u64; n];
     let mut result_neg = vec![0u64; n];
     let src = poly_ntt.coeffs();
-    
+
     for i in 0..n {
         result_pos[i] = src[table_pos[i]];
         result_neg[i] = src[table_neg[i]];
     }
-    
+
     let mut poly_pos = Poly::from_coeffs(result_pos, q);
     let mut poly_neg = Poly::from_coeffs(result_neg, q);
     poly_pos.force_ntt_domain();
     poly_neg.force_ntt_domain();
-    
+
     (poly_pos, poly_neg)
 }
 
 /// Precomputed values from offline phase
 ///
 /// Equivalent to Google's `PrecompInsPIR` struct.
-/// 
+///
 /// Google stores `bold_t_condensed` which packs two CRT components into one u64.
 /// We store bold_t in both coefficient and NTT form for maximum flexibility.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -356,7 +356,7 @@ pub struct PrecompInsPIR {
     /// bold_t: gadget-decomposed R[i+1] values, shape (γ-1) × gadget_len (coefficient form)
     pub bold_t: Vec<Vec<Poly>>,
     /// bold_t in NTT form for O(n) multiply in online phase
-    #[serde(skip)]  // Skip serialization - regenerate from bold_t
+    #[serde(skip)] // Skip serialization - regenerate from bold_t
     pub bold_t_ntt: Vec<Vec<Poly>>,
     /// For full packing: conjugate branch T̄
     pub bold_t_bar: Vec<Vec<Poly>>,
@@ -372,7 +372,7 @@ pub struct PrecompInsPIR {
 
 impl PrecompInsPIR {
     /// Get the total number of polynomial multiplications in online phase
-    /// 
+    ///
     /// Google formula: (γ-1) × gadget_len multiplications
     pub fn online_mult_count(&self) -> usize {
         if self.bold_t.is_empty() {
@@ -381,11 +381,12 @@ impl PrecompInsPIR {
             self.bold_t.len() * self.bold_t[0].len()
         }
     }
-    
+
     /// Ensure bold_t_ntt is populated (regenerate from bold_t if needed)
     pub fn ensure_ntt_cached(&mut self, ctx: &NttContext) {
         if self.bold_t_ntt.is_empty() && !self.bold_t.is_empty() {
-            self.bold_t_ntt = self.bold_t
+            self.bold_t_ntt = self
+                .bold_t
                 .iter()
                 .map(|row| {
                     row.iter()
@@ -407,7 +408,7 @@ impl PrecompInsPIR {
 /// Used in packing_offline() to compute a_hat and bold_t.
 ///
 /// Equivalent to Google's `OfflinePackingKeys` struct.
-/// 
+///
 /// **Performance**: Stores w_all in NTT form for O(n) multiply-accumulate
 /// in the backward recursion phase.
 #[derive(Clone, Debug)]
@@ -436,7 +437,7 @@ impl OfflinePackingKeys {
     /// Generate offline packing keys from a random seed
     ///
     /// For partial packing (γ < n).
-    /// 
+    ///
     /// **Performance optimizations** (matching Google):
     /// - Uses NTT-domain automorphisms via lookup tables: O(n) vs O(n log n)
     /// - Generates w_all directly in NTT form
@@ -446,7 +447,7 @@ impl OfflinePackingKeys {
         let num_to_pack = pack_params.num_to_pack;
         let gadget_len = pack_params.gadget.len;
         let ctx = NttContext::new(n, q);
-        
+
         // Generate w_mask from seed and convert to NTT form
         let w_mask = generate_mask_from_seed(w_seed, n, q, gadget_len);
         let w_mask_ntt: Vec<Poly> = w_mask
@@ -457,22 +458,22 @@ impl OfflinePackingKeys {
                 pn
             })
             .collect();
-        
+
         // Generate rotations using NTT-domain automorphisms: O(n) per rotation
         // w_all[i] = τ_{g^i}(w_mask)
         let mut w_all = Vec::with_capacity(num_to_pack - 1);
         let mut w_all_ntt = Vec::with_capacity(num_to_pack - 1);
-        
+
         for i in 0..(num_to_pack - 1) {
             let g_pow_i = pack_params.gen_pows[i];
             let table = pack_params.get_automorph_table(g_pow_i);
-            
+
             // Apply automorphism in NTT domain: O(n) per polynomial
             let rotated_ntt: Vec<Poly> = w_mask_ntt
                 .iter()
                 .map(|poly_ntt| apply_automorphism_ntt(poly_ntt, table))
                 .collect();
-            
+
             // Also keep coefficient form for gadget decomposition
             let rotated: Vec<Poly> = rotated_ntt
                 .iter()
@@ -482,11 +483,11 @@ impl OfflinePackingKeys {
                     pc
                 })
                 .collect();
-            
+
             w_all.push(rotated);
             w_all_ntt.push(rotated_ntt);
         }
-        
+
         Self {
             w_seed,
             v_seed: [0u8; 32],
@@ -499,9 +500,9 @@ impl OfflinePackingKeys {
             full_key: false,
         }
     }
-    
+
     /// Generate offline packing keys for full packing (γ = n)
-    /// 
+    ///
     /// **Performance optimizations** (matching Google):
     /// - Uses NTT-domain automorphisms via lookup tables: O(n) vs O(n log n)
     /// - Uses apply_automorphism_ntt_double for simultaneous pos/neg rotations
@@ -512,55 +513,67 @@ impl OfflinePackingKeys {
         let two_n = 2 * n;
         let gadget_len = pack_params.gadget.len;
         let ctx = NttContext::new(n, q);
-        
+
         // Generate masks from seeds and convert to NTT
         let w_mask = generate_mask_from_seed(w_seed, n, q, gadget_len);
         let v_mask = generate_mask_from_seed(v_seed, n, q, gadget_len);
-        
+
         let w_mask_ntt: Vec<Poly> = w_mask
             .iter()
-            .map(|p| { let mut pn = p.clone(); pn.to_ntt(&ctx); pn })
+            .map(|p| {
+                let mut pn = p.clone();
+                pn.to_ntt(&ctx);
+                pn
+            })
             .collect();
-        
+
         // Generate both w_all and w_bar_all using NTT-domain double automorphism
         let mut w_all = Vec::with_capacity(num_to_pack_half - 1);
         let mut w_all_ntt = Vec::with_capacity(num_to_pack_half - 1);
         let mut w_bar_all = Vec::with_capacity(num_to_pack_half - 1);
         let mut w_bar_all_ntt = Vec::with_capacity(num_to_pack_half - 1);
-        
+
         for i in 0..(num_to_pack_half - 1) {
             let g_pow_i = pack_params.gen_pows[i];
             let neg_g_pow_i = (two_n - g_pow_i) % two_n;
-            
+
             let table_pos = pack_params.get_automorph_table(g_pow_i);
             let table_neg = pack_params.get_automorph_table(neg_g_pow_i);
-            
+
             // Apply both automorphisms simultaneously in NTT domain
             let mut rotated_ntt = Vec::with_capacity(gadget_len);
             let mut rotated_bar_ntt = Vec::with_capacity(gadget_len);
-            
+
             for poly_ntt in &w_mask_ntt {
                 let (pos, neg) = apply_automorphism_ntt_double(poly_ntt, table_pos, table_neg);
                 rotated_ntt.push(pos);
                 rotated_bar_ntt.push(neg);
             }
-            
+
             // Convert to coefficient form
             let rotated: Vec<Poly> = rotated_ntt
                 .iter()
-                .map(|p| { let mut pc = p.clone(); pc.from_ntt(&ctx); pc })
+                .map(|p| {
+                    let mut pc = p.clone();
+                    pc.from_ntt(&ctx);
+                    pc
+                })
                 .collect();
             let rotated_bar: Vec<Poly> = rotated_bar_ntt
                 .iter()
-                .map(|p| { let mut pc = p.clone(); pc.from_ntt(&ctx); pc })
+                .map(|p| {
+                    let mut pc = p.clone();
+                    pc.from_ntt(&ctx);
+                    pc
+                })
                 .collect();
-            
+
             w_all.push(rotated);
             w_all_ntt.push(rotated_ntt);
             w_bar_all.push(rotated_bar);
             w_bar_all_ntt.push(rotated_bar_ntt);
         }
-        
+
         Self {
             w_seed,
             v_seed,
@@ -581,7 +594,7 @@ impl OfflinePackingKeys {
 /// y_body = τ_g(s)·G - s·w_mask + error
 ///
 /// Equivalent to Google's `PackingKeys` struct.
-/// 
+///
 /// **Performance**: Stores y_all in NTT form for O(n) multiply in online phase.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ClientPackingKeys {
@@ -609,9 +622,9 @@ impl ClientPackingKeys {
     /// Generate client packing keys from secret key and w_seed
     ///
     /// This is called by the client during query generation.
-    /// 
+    ///
     /// Following Google's reference: uses gen_pows[1] (= g^1 = generator) for y_body.
-    /// 
+    ///
     /// **Performance optimizations** (matching Google):
     /// - Uses NTT-domain automorphisms via lookup tables: O(n) vs O(n log n)
     /// - Generates y_all directly in NTT form
@@ -626,51 +639,52 @@ impl ClientPackingKeys {
         let num_to_pack = pack_params.num_to_pack;
         let gadget_len = pack_params.gadget.len;
         let ctx = NttContext::new(n, q);
-        
+
         // Regenerate w_mask from seed (same as server did)
         let w_mask = generate_mask_from_seed(w_seed, n, q, gadget_len);
-        
+
         // Generate y_body = τ_g(s)·G - s·w_mask + error
         // Google uses gen_pows[1] which equals generator (g^1)
         let gen = pack_params.gen_pows[1];
-        let y_body = generate_ksk_body(
-            sk,
-            gen,
-            &pack_params.gadget,
-            &w_mask,
-            sampler,
-            &ctx,
-        );
-        
+        let y_body = generate_ksk_body(sk, gen, &pack_params.gadget, &w_mask, sampler, &ctx);
+
         // Convert y_body to NTT form for fast rotations
         let y_body_ntt: Vec<Poly> = y_body
             .iter()
-            .map(|p| { let mut pn = p.clone(); pn.to_ntt(&ctx); pn })
+            .map(|p| {
+                let mut pn = p.clone();
+                pn.to_ntt(&ctx);
+                pn
+            })
             .collect();
-        
+
         // Generate rotations using NTT-domain automorphisms: O(n) per rotation
         let mut y_all = Vec::with_capacity(num_to_pack - 1);
         let mut y_all_ntt = Vec::with_capacity(num_to_pack - 1);
         for i in 0..(num_to_pack - 1) {
             let g_pow_i = pack_params.gen_pows[i];
             let table = pack_params.get_automorph_table(g_pow_i);
-            
+
             // Apply automorphism in NTT domain: O(n) per polynomial
             let rotated_ntt: Vec<Poly> = y_body_ntt
                 .iter()
                 .map(|poly_ntt| apply_automorphism_ntt(poly_ntt, table))
                 .collect();
-            
+
             // Keep coefficient form for compatibility
             let rotated: Vec<Poly> = rotated_ntt
                 .iter()
-                .map(|p| { let mut pc = p.clone(); pc.from_ntt(&ctx); pc })
+                .map(|p| {
+                    let mut pc = p.clone();
+                    pc.from_ntt(&ctx);
+                    pc
+                })
                 .collect();
-            
+
             y_all.push(rotated);
             y_all_ntt.push(rotated_ntt);
         }
-        
+
         Self {
             y_body,
             z_body: vec![],
@@ -682,11 +696,11 @@ impl ClientPackingKeys {
             num_to_pack,
         }
     }
-    
+
     /// Generate client packing keys for full packing (γ = n)
-    /// 
+    ///
     /// Following Google's reference: uses gen_pows[1] for y_body, (2n-1) for z_body.
-    /// 
+    ///
     /// **Performance**: Precomputes y_all and y_bar_all in both forms.
     pub fn generate_full(
         sk: &RlweSecretKey,
@@ -701,22 +715,15 @@ impl ClientPackingKeys {
         let two_n = 2 * n;
         let gadget_len = pack_params.gadget.len;
         let ctx = NttContext::new(n, q);
-        
+
         // Regenerate masks from seeds
         let w_mask = generate_mask_from_seed(w_seed, n, q, gadget_len);
         let v_mask = generate_mask_from_seed(v_seed, n, q, gadget_len);
-        
+
         // Generate y_body and z_body
         // Google uses gen_pows[1] for y_body, (2*poly_len - 1) for z_body
         let gen = pack_params.gen_pows[1];
-        let y_body = generate_ksk_body(
-            sk,
-            gen,
-            &pack_params.gadget,
-            &w_mask,
-            sampler,
-            &ctx,
-        );
+        let y_body = generate_ksk_body(sk, gen, &pack_params.gadget, &w_mask, sampler, &ctx);
         let z_body = generate_ksk_body(
             sk,
             two_n - 1, // conjugation automorphism τ_{-1}
@@ -725,52 +732,64 @@ impl ClientPackingKeys {
             sampler,
             &ctx,
         );
-        
+
         // Convert y_body to NTT for fast rotations
         let y_body_ntt: Vec<Poly> = y_body
             .iter()
-            .map(|p| { let mut pn = p.clone(); pn.to_ntt(&ctx); pn })
+            .map(|p| {
+                let mut pn = p.clone();
+                pn.to_ntt(&ctx);
+                pn
+            })
             .collect();
-        
+
         // Generate y_all and y_bar_all using NTT-domain double automorphism
         let mut y_all = Vec::with_capacity(num_to_pack_half - 1);
         let mut y_all_ntt = Vec::with_capacity(num_to_pack_half - 1);
         let mut y_bar_all = Vec::with_capacity(num_to_pack_half - 1);
         let mut y_bar_all_ntt = Vec::with_capacity(num_to_pack_half - 1);
-        
+
         for i in 0..(num_to_pack_half - 1) {
             let g_pow_i = pack_params.gen_pows[i];
             let neg_g_pow_i = (two_n - g_pow_i) % two_n;
-            
+
             let table_pos = pack_params.get_automorph_table(g_pow_i);
             let table_neg = pack_params.get_automorph_table(neg_g_pow_i);
-            
+
             // Apply both automorphisms simultaneously in NTT domain
             let mut rotated_ntt = Vec::with_capacity(gadget_len);
             let mut rotated_bar_ntt = Vec::with_capacity(gadget_len);
-            
+
             for poly_ntt in &y_body_ntt {
                 let (pos, neg) = apply_automorphism_ntt_double(poly_ntt, table_pos, table_neg);
                 rotated_ntt.push(pos);
                 rotated_bar_ntt.push(neg);
             }
-            
+
             // Convert to coefficient form
             let rotated: Vec<Poly> = rotated_ntt
                 .iter()
-                .map(|p| { let mut pc = p.clone(); pc.from_ntt(&ctx); pc })
+                .map(|p| {
+                    let mut pc = p.clone();
+                    pc.from_ntt(&ctx);
+                    pc
+                })
                 .collect();
             let rotated_bar: Vec<Poly> = rotated_bar_ntt
                 .iter()
-                .map(|p| { let mut pc = p.clone(); pc.from_ntt(&ctx); pc })
+                .map(|p| {
+                    let mut pc = p.clone();
+                    pc.from_ntt(&ctx);
+                    pc
+                })
                 .collect();
-            
+
             y_all.push(rotated);
             y_all_ntt.push(rotated_ntt);
             y_bar_all.push(rotated_bar);
             y_bar_all_ntt.push(rotated_bar_ntt);
         }
-        
+
         Self {
             y_body,
             z_body,
@@ -788,7 +807,7 @@ impl ClientPackingKeys {
 fn generate_mask_from_seed(seed: [u8; 32], n: usize, q: u64, gadget_len: usize) -> Vec<Poly> {
     let mut rng = ChaCha20Rng::from_seed(seed);
     let mut result = Vec::with_capacity(gadget_len);
-    
+
     for _ in 0..gadget_len {
         let mut coeffs = vec![0u64; n];
         for coeff in coeffs.iter_mut() {
@@ -796,7 +815,7 @@ fn generate_mask_from_seed(seed: [u8; 32], n: usize, q: u64, gadget_len: usize) 
         }
         result.push(Poly::from_coeffs(coeffs, q));
     }
-    
+
     result
 }
 
@@ -805,7 +824,7 @@ fn generate_mask_from_seed(seed: [u8; 32], n: usize, q: u64, gadget_len: usize) 
 /// Computes y_body = τ_g(s)·G - s·w_mask + error
 ///
 /// Equivalent to Google's `generate_ksk_body` function.
-/// 
+///
 /// **Performance optimizations**:
 /// - Accepts shared NttContext to avoid recreation
 /// - Uses NTT-domain multiplication for s·w_mask
@@ -820,22 +839,22 @@ fn generate_ksk_body(
     let s = &sk.poly;
     let n = s.dimension();
     let q = s.modulus();
-    
+
     // τ_g(s) - automorphism of secret key
     let tau_s = apply_automorphism(s, gen);
-    
+
     // Pre-convert s to NTT for efficient multiplication
     let mut s_ntt = s.clone();
     s_ntt.to_ntt(ctx);
-    
+
     let mut result = Vec::with_capacity(gadget.len);
-    
+
     for k in 0..gadget.len {
         let gadget_power = gadget.power(k);
-        
+
         // τ_g(s) · g^k (where g^k is gadget base^k)
         let tau_s_times_g = tau_s.scalar_mul(gadget_power);
-        
+
         // -s · w_mask[k] (using shared NttContext)
         let s_times_mask = if k < w_mask.len() {
             let mut w_k_ntt = w_mask[k].clone();
@@ -847,7 +866,7 @@ fn generate_ksk_body(
             Poly::zero(n, q)
         };
         let neg_s_times_mask = s_times_mask.negate();
-        
+
         // error term (sample Gaussian noise for each coefficient)
         let mut error_coeffs = vec![0u64; n];
         for coeff in error_coeffs.iter_mut() {
@@ -859,12 +878,12 @@ fn generate_ksk_body(
             };
         }
         let error = Poly::from_coeffs(error_coeffs, q);
-        
+
         // y_body[k] = τ_g(s)·g^k - s·w_mask[k] + error
         let result_k = &(&tau_s_times_g + &neg_s_times_mask) + &error;
         result.push(result_k);
     }
-    
+
     result
 }
 
@@ -952,7 +971,7 @@ pub fn packing_offline(
         // Convert R[i+1] to coefficient domain for gadget decomposition
         let mut r_i_plus_1_coeff = r_all[i + 1].clone();
         r_i_plus_1_coeff.from_ntt(ctx);
-        
+
         // T[i] = G^{-1}(R[i+1]) - gadget decomposition in coefficient domain
         let gadget_inv = gadget_decompose(&r_i_plus_1_coeff, &pack_params.gadget);
 
@@ -1111,7 +1130,15 @@ pub fn full_packing_offline(
     // Pre-convert bold_t to NTT form
     let bold_t_ntt: Vec<Vec<Poly>> = bold_t
         .iter()
-        .map(|row| row.iter().map(|p| { let mut pn = p.clone(); pn.to_ntt(ctx); pn }).collect())
+        .map(|row| {
+            row.iter()
+                .map(|p| {
+                    let mut pn = p.clone();
+                    pn.to_ntt(ctx);
+                    pn
+                })
+                .collect()
+        })
         .collect();
 
     PrecompInsPIR {
@@ -1134,7 +1161,7 @@ pub fn full_packing_offline(
 /// * `precomp` - Precomputed a_hat and bold_t from offline phase
 /// * `y_all` - Rotated client key body (from generate_rotations on y_body)
 /// * `b_poly` - Polynomial of b values from LWE ciphertexts
-/// 
+///
 /// **Performance**: Uses coefficient form inputs. For NTT-optimized version,
 /// use `packing_online_ntt` with pre-converted inputs.
 pub fn packing_online(
@@ -1160,7 +1187,7 @@ pub fn packing_online(
                     y_ntt.to_ntt(ctx);
                     let mut t_ntt = t_k.clone();
                     t_ntt.to_ntt(ctx);
-                    
+
                     // Pointwise multiply and accumulate
                     let term = y_ntt.mul_ntt_domain(&t_ntt, ctx);
                     sum_b_ntt = sum_b_ntt.add_ntt_domain(&term);
@@ -1201,7 +1228,7 @@ pub fn packing_online_ntt(
                     // Convert t_k to NTT (bold_t is in coefficient form)
                     let mut t_ntt = t_k.clone();
                     t_ntt.to_ntt(ctx);
-                    
+
                     // y_all_ntt is already in NTT form
                     let term = y_all_ntt[i][k].mul_ntt_domain(&t_ntt, ctx);
                     sum_b_ntt = sum_b_ntt.add_ntt_domain(&term);
@@ -1221,7 +1248,7 @@ pub fn packing_online_ntt(
 ///
 /// **Performance**: O(γ × ℓ × n) - pure pointwise operations, no NTT conversions.
 /// This is the fastest variant, matching Google's optimized implementation.
-/// 
+///
 /// Requires:
 /// - `precomp.bold_t_ntt` pre-computed (from packing_offline)
 /// - `y_all_ntt` pre-computed (from ClientPackingKeys)
@@ -1261,10 +1288,7 @@ pub fn packing_online_fully_ntt(
 /// Generate rotations of key body for online phase
 ///
 /// y_all[i] = τ_{g^i}(y_body) for i in 0..γ-1
-pub fn generate_rotations(
-    pack_params: &PackParams,
-    y_body: &[Poly],
-) -> Vec<Vec<Poly>> {
+pub fn generate_rotations(pack_params: &PackParams, y_body: &[Poly]) -> Vec<Vec<Poly>> {
     let num_to_pack = pack_params.num_to_pack;
     let gen_pows = &pack_params.gen_pows;
 
@@ -1473,7 +1497,11 @@ pub fn precompute_inspiring(
         .iter()
         .map(|row| {
             row.iter()
-                .map(|p| { let mut pn = p.clone(); pn.to_ntt(&ctx); pn })
+                .map(|p| {
+                    let mut pn = p.clone();
+                    pn.to_ntt(&ctx);
+                    pn
+                })
                 .collect()
         })
         .collect();
@@ -1515,7 +1543,10 @@ pub fn pack_inspiring_legacy(
     let n = lwe_ciphertexts.len();
     let ctx = NttContext::new(d, q);
 
-    assert_eq!(n, precomp.num_to_pack, "Number of LWEs must match precomputation");
+    assert_eq!(
+        n, precomp.num_to_pack,
+        "Number of LWEs must match precomputation"
+    );
 
     // Use rotated_k_g as y_all approximation
     let y_all: Vec<Vec<Poly>> = precomp
@@ -1536,9 +1567,13 @@ pub fn pack_inspiring_legacy(
 
     // Build precomp for online phase
     let precomp_new = PrecompInsPIR {
-        a_hat: precomp.r_polys.get(0).cloned().unwrap_or_else(|| Poly::zero(d, q)),
+        a_hat: precomp
+            .r_polys
+            .get(0)
+            .cloned()
+            .unwrap_or_else(|| Poly::zero(d, q)),
         bold_t: precomp.bold_t.clone(),
-        bold_t_ntt: vec![],  // Legacy shim - will be converted on-the-fly
+        bold_t_ntt: vec![], // Legacy shim - will be converted on-the-fly
         bold_t_bar: vec![],
         bold_t_hat: vec![],
         num_to_pack: n,
@@ -1555,10 +1590,7 @@ pub fn pack_inspiring_partial(
     k_g: &crate::ks::KeySwitchingMatrix,
     params: &InspireParams,
 ) -> RlweCiphertext {
-    let crs_a_vectors: Vec<Vec<u64>> = lwe_ciphertexts
-        .iter()
-        .map(|lwe| lwe.a.clone())
-        .collect();
+    let crs_a_vectors: Vec<Vec<u64>> = lwe_ciphertexts.iter().map(|lwe| lwe.a.clone()).collect();
     let precomp = precompute_inspiring(&crs_a_vectors, k_g, params);
     pack_inspiring_legacy(lwe_ciphertexts, &precomp, k_g, params)
 }
@@ -1618,10 +1650,10 @@ fn extended_gcd_i64(a: i64, b: i64) -> (i64, i64, i64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ks::generate_automorphism_ks_matrix;
+    use crate::lwe::LweSecretKey;
     use crate::math::GaussianSampler;
     use crate::rlwe::RlweSecretKey;
-    use crate::lwe::LweSecretKey;
-    use crate::ks::generate_automorphism_ks_matrix;
 
     fn test_params() -> InspireParams {
         InspireParams {
@@ -1654,7 +1686,7 @@ mod tests {
     #[test]
     fn test_mod_inverse() {
         let q = 1152921504606830593u64;
-        
+
         // Test 1/8 mod q
         let inv_8 = mod_inverse_u64(8, q).unwrap();
         assert_eq!((8u128 * inv_8 as u128) % q as u128, 1);
@@ -1737,15 +1769,13 @@ mod tests {
         let num_to_pack = 8;
 
         let pack_params = PackParams::new(&params, num_to_pack);
-        
+
         // Use the new API with w_seed
         let w_seed = [42u8; 32];
         let packing_key = OfflinePackingKeys::generate(&pack_params, w_seed);
 
         // Create test a-polynomials
-        let a_polys: Vec<Poly> = (0..num_to_pack)
-            .map(|_| Poly::random(d, q))
-            .collect();
+        let a_polys: Vec<Poly> = (0..num_to_pack).map(|_| Poly::random(d, q)).collect();
 
         let precomp = packing_offline(&pack_params, &packing_key, &a_polys, &ctx);
 

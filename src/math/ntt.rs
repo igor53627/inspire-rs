@@ -1,31 +1,108 @@
-//! Number-Theoretic Transform (NTT) for fast polynomial multiplication
+//! Number-Theoretic Transform (NTT) for fast polynomial multiplication.
 //!
-//! Implements Cooley-Tukey radix-2 NTT for negacyclic convolution.
-//! Used for multiplying polynomials in R_q = Z_q[X]/(X^d + 1).
+//! Implements Cooley-Tukey radix-2 NTT for negacyclic convolution over
+//! R_q = Z_q[X]/(X^d + 1). The NTT enables O(n log n) polynomial multiplication
+//! instead of O(n²) naive multiplication.
+//!
+//! # Theory
+//!
+//! For negacyclic convolution (multiplication modulo X^n + 1), we use a
+//! primitive 2n-th root of unity ψ where ψ^n = -1. The NTT evaluates a
+//! polynomial at powers of ψ, enabling pointwise multiplication in the
+//! evaluation domain.
+//!
+//! # Requirements
+//!
+//! The modulus q must satisfy q ≡ 1 (mod 2n) for a primitive 2n-th root
+//! of unity to exist. The default modulus `DEFAULT_Q` supports n up to 2048.
+//!
+//! # Example
+//!
+//! ```
+//! use inspire_pir::math::ntt::NttContext;
+//!
+//! let ctx = NttContext::with_default_q(256);
+//!
+//! // Forward NTT
+//! let mut coeffs = vec![1u64; 256];
+//! ctx.forward(&mut coeffs);
+//!
+//! // Inverse NTT recovers original
+//! ctx.inverse(&mut coeffs);
+//! assert_eq!(coeffs[0], 1);
+//! ```
 
 use super::mod_q::DEFAULT_Q;
 
-/// Precomputed NTT context with twiddle factors
+/// Precomputed NTT context with twiddle factors.
+///
+/// Stores precomputed roots of unity and Montgomery constants for efficient
+/// NTT operations. Create once and reuse for all polynomial operations with
+/// the same dimension and modulus.
+///
+/// # Fields
+///
+/// * `n` - Ring dimension (must be a power of two)
+/// * `q` - Modulus (must satisfy q ≡ 1 mod 2n)
+/// * `psi_powers` - Forward twiddle factors (powers of ψ)
+/// * `psi_inv_powers` - Inverse twiddle factors (powers of ψ^(-1))
+/// * `n_inv` - n^(-1) mod q for inverse NTT scaling
+///
+/// # Example
+///
+/// ```
+/// use inspire_pir::math::ntt::NttContext;
+///
+/// let ctx = NttContext::with_default_q(2048);
+/// assert_eq!(ctx.dimension(), 2048);
+/// ```
 #[derive(Clone)]
 pub struct NttContext {
-    /// Ring dimension (power of two)
+    /// Ring dimension (power of two).
     n: usize,
-    /// Modulus q
+    /// Modulus q.
     q: u64,
-    /// Precomputed values for Montgomery arithmetic
+    /// Precomputed values for Montgomery arithmetic.
     q_inv_neg: u64,
     r_squared: u64,
-    /// Forward twiddle factors (powers of ψ where ψ^(2n) = 1 and ψ^n = -1)
+    /// Forward twiddle factors (powers of ψ where ψ^(2n) = 1 and ψ^n = -1).
     psi_powers: Vec<u64>,
-    /// Inverse twiddle factors (powers of ψ^(-1))
+    /// Inverse twiddle factors (powers of ψ^(-1)).
     psi_inv_powers: Vec<u64>,
-    /// n^(-1) mod q in Montgomery form for inverse NTT scaling
+    /// n^(-1) mod q in Montgomery form for inverse NTT scaling.
     n_inv: u64,
 }
 
 impl NttContext {
-    /// Create NTT context for given dimension and modulus
-    /// Requires: q ≡ 1 (mod 2n) for primitive 2n-th root of unity
+    /// Creates an NTT context for the given dimension and modulus.
+    ///
+    /// Precomputes twiddle factors and Montgomery constants for efficient
+    /// NTT operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - Ring dimension (must be a power of two)
+    /// * `q` - Modulus (must satisfy q ≡ 1 mod 2n)
+    ///
+    /// # Returns
+    ///
+    /// A new `NttContext` with precomputed values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if:
+    /// - `n` is not a power of two
+    /// - `q` does not satisfy q ≡ 1 (mod 2n)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use inspire_pir::math::ntt::NttContext;
+    /// use inspire_pir::math::mod_q::DEFAULT_Q;
+    ///
+    /// let ctx = NttContext::new(2048, DEFAULT_Q);
+    /// assert_eq!(ctx.dimension(), 2048);
+    /// ```
     pub fn new(n: usize, q: u64) -> Self {
         assert!(n.is_power_of_two(), "n must be a power of two");
         assert!(q % (2 * n as u64) == 1, "q must be ≡ 1 (mod 2n)");
@@ -43,7 +120,8 @@ impl NttContext {
         // Compute inverse: ψ^(-1) mod q
         let psi_inv = Self::mod_pow(psi, q - 2, q);
         let psi_inv_mont = Self::to_montgomery(psi_inv, q, r_squared, q_inv_neg);
-        let psi_inv_powers = Self::compute_twiddle_factors(n, psi_inv_mont, q, q_inv_neg, r_squared);
+        let psi_inv_powers =
+            Self::compute_twiddle_factors(n, psi_inv_mont, q, q_inv_neg, r_squared);
 
         // Compute n^(-1) mod q
         let n_inv = Self::mod_pow(n as u64, q - 2, q);
@@ -60,24 +138,50 @@ impl NttContext {
         }
     }
 
-    /// Create NTT context with default modulus
+    /// Creates an NTT context with the default modulus.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - Ring dimension (must be a power of two, at most 2048)
+    ///
+    /// # Returns
+    ///
+    /// A new `NttContext` using `DEFAULT_Q` as the modulus.
     pub fn with_default_q(n: usize) -> Self {
         Self::new(n, DEFAULT_Q)
     }
 
-    /// Get the dimension
+    /// Returns the ring dimension.
+    ///
+    /// # Returns
+    ///
+    /// The dimension n of the polynomial ring.
     pub fn dimension(&self) -> usize {
         self.n
     }
 
-    /// Get the modulus
+    /// Returns the modulus q.
+    ///
+    /// # Returns
+    ///
+    /// The modulus used for this NTT context.
     pub fn modulus(&self) -> u64 {
         self.q
     }
 
-    /// Forward NTT (in-place, Cooley-Tukey decimation-in-time)
-    /// Input: polynomial coefficients in standard order
-    /// Output: NTT representation (evaluations at powers of ψ)
+    /// Performs forward NTT in-place using Cooley-Tukey decimation-in-time.
+    ///
+    /// Converts polynomial coefficients to NTT representation (evaluations
+    /// at powers of ψ). Input coefficients are automatically converted to
+    /// Montgomery form.
+    ///
+    /// # Arguments
+    ///
+    /// * `coeffs` - Polynomial coefficients (modified in-place)
+    ///
+    /// # Panics
+    ///
+    /// Panics if `coeffs.len() != n`.
     pub fn forward(&self, coeffs: &mut [u64]) {
         assert_eq!(coeffs.len(), self.n, "Input length must match dimension");
 
@@ -89,7 +193,14 @@ impl NttContext {
         self.forward_inplace(coeffs);
     }
 
-    /// Forward NTT assuming input is already in Montgomery form
+    /// Performs forward NTT assuming input is already in Montgomery form.
+    ///
+    /// Use this when coefficients are already in Montgomery representation
+    /// to avoid redundant conversions.
+    ///
+    /// # Arguments
+    ///
+    /// * `coeffs` - Polynomial coefficients in Montgomery form (modified in-place)
     pub fn forward_inplace(&self, coeffs: &mut [u64]) {
         let n = self.n;
         let q = self.q;
@@ -116,9 +227,18 @@ impl NttContext {
         }
     }
 
-    /// Inverse NTT (in-place, Gentleman-Sande decimation-in-frequency)
-    /// Input: NTT representation
-    /// Output: polynomial coefficients (converted from Montgomery form)
+    /// Performs inverse NTT in-place using Gentleman-Sande decimation-in-frequency.
+    ///
+    /// Converts NTT representation back to polynomial coefficients.
+    /// Output is automatically converted from Montgomery form.
+    ///
+    /// # Arguments
+    ///
+    /// * `coeffs` - NTT representation (modified in-place)
+    ///
+    /// # Panics
+    ///
+    /// Panics if `coeffs.len() != n`.
     pub fn inverse(&self, coeffs: &mut [u64]) {
         assert_eq!(coeffs.len(), self.n, "Input length must match dimension");
 
@@ -130,7 +250,14 @@ impl NttContext {
         }
     }
 
-    /// Inverse NTT, output remains in Montgomery form
+    /// Performs inverse NTT, output remains in Montgomery form.
+    ///
+    /// Use this when you need to continue operations in Montgomery form
+    /// after the inverse NTT.
+    ///
+    /// # Arguments
+    ///
+    /// * `coeffs` - NTT representation in Montgomery form (modified in-place)
     pub fn inverse_inplace(&self, coeffs: &mut [u64]) {
         let n = self.n;
         let q = self.q;
@@ -163,7 +290,19 @@ impl NttContext {
         }
     }
 
-    /// Pointwise multiplication in NTT domain (both inputs in Montgomery form)
+    /// Performs pointwise multiplication in NTT domain.
+    ///
+    /// Both inputs must be in Montgomery form (as produced by `forward`).
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First polynomial in NTT domain
+    /// * `b` - Second polynomial in NTT domain
+    /// * `result` - Output buffer for the product
+    ///
+    /// # Panics
+    ///
+    /// Panics if any array length does not equal n.
     pub fn pointwise_mul(&self, a: &[u64], b: &[u64], result: &mut [u64]) {
         assert_eq!(a.len(), self.n);
         assert_eq!(b.len(), self.n);
@@ -174,18 +313,45 @@ impl NttContext {
         }
     }
 
-    /// Single pointwise multiplication (for fused multiply-add operations)
+    /// Performs a single pointwise multiplication.
+    ///
+    /// Useful for fused multiply-add operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First value in Montgomery form
+    /// * `b` - Second value in Montgomery form
+    ///
+    /// # Returns
+    ///
+    /// The product `(a * b) mod q` in Montgomery form.
     #[inline]
     pub fn pointwise_mul_single(&self, a: u64, b: u64) -> u64 {
         self.montgomery_mul(a, b)
     }
 
-    /// Convert value to Montgomery form
+    /// Converts a value to Montgomery form.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - Value in standard representation
+    ///
+    /// # Returns
+    ///
+    /// The value in Montgomery form.
     pub fn to_mont(&self, a: u64) -> u64 {
         Self::to_montgomery(a, self.q, self.r_squared, self.q_inv_neg)
     }
 
-    /// Convert value from Montgomery form
+    /// Converts a value from Montgomery form.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - Value in Montgomery form
+    ///
+    /// # Returns
+    ///
+    /// The value in standard representation.
     pub fn from_mont(&self, a: u64) -> u64 {
         self.montgomery_mul(a, 1)
     }

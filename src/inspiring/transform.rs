@@ -32,11 +32,7 @@ pub fn transform(lwe: &LweCiphertext, params: &InspireParams) -> IntermediateCip
     //
     // Transform: â_j(X) = a_j (constant polynomial with coefficient a_j at position 0)
     // This gets modified during aggregation with appropriate X^k multipliers.
-    let a_polys: Vec<Poly> = lwe
-        .a
-        .iter()
-        .map(|&a_j| Poly::constant(a_j, d, q))
-        .collect();
+    let a_polys: Vec<Poly> = lwe.a.iter().map(|&a_j| Poly::constant(a_j, d, q)).collect();
 
     // The b-component becomes a constant polynomial
     let b_poly = Poly::constant(lwe.b, d, q);
@@ -156,15 +152,16 @@ pub fn aggregate(
     let q = params.q;
     let n = intermediates.len();
 
-    assert!(!intermediates.is_empty(), "Must have at least one ciphertext");
+    assert!(
+        !intermediates.is_empty(),
+        "Must have at least one ciphertext"
+    );
     assert!(n <= d, "Cannot aggregate more than d ciphertexts");
 
     let num_a_polys = intermediates[0].dimension();
 
     // Initialize aggregated polynomials
-    let mut agg_a_polys: Vec<Poly> = (0..num_a_polys)
-        .map(|_| Poly::zero(d, q))
-        .collect();
+    let mut agg_a_polys: Vec<Poly> = (0..num_a_polys).map(|_| Poly::zero(d, q)).collect();
     let mut agg_b_poly = Poly::zero(d, q);
 
     // Sum all intermediate ciphertexts (already positioned at their slots)
@@ -227,8 +224,8 @@ fn mul_by_monomial(poly: &Poly, k: usize, q: u64) -> Poly {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::SeedableRng;
     use rand::Rng;
+    use rand::SeedableRng;
 
     fn test_params() -> InspireParams {
         InspireParams::secure_128_d2048()
@@ -327,7 +324,10 @@ mod tests {
         assert_eq!(aggregated.dimension(), intermediate.dimension());
         for i in 0..aggregated.dimension() {
             for j in 0..params.ring_dim {
-                assert_eq!(aggregated.a_polys[i].coeff(j), intermediate.a_polys[i].coeff(j));
+                assert_eq!(
+                    aggregated.a_polys[i].coeff(j),
+                    intermediate.a_polys[i].coeff(j)
+                );
             }
         }
     }

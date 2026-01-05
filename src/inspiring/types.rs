@@ -1,15 +1,25 @@
-//! Intermediate types for the InspiRING packing algorithm
+//! Intermediate types for the InspiRING packing algorithm.
+//!
+//! Provides intermediate representations used during the LWE-to-RLWE
+//! packing process.
 
 use crate::math::Poly;
 use serde::{Deserialize, Serialize};
 
-/// Intermediate ciphertext representation during packing
-/// Holds a vector of polynomials (â) and a single polynomial (b̃)
+/// Intermediate ciphertext representation during packing.
+///
+/// Holds a vector of polynomials (â) and a single polynomial (b̃) during
+/// the InspiRING transform and collapse stages.
+///
+/// # Fields
+///
+/// * `a_polys` - Vector of polynomials â ∈ R_q^k
+/// * `b_poly` - Single polynomial b̃ ∈ R_q
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IntermediateCiphertext {
-    /// Vector of polynomials â ∈ R_q^k
+    /// Vector of polynomials â ∈ R_q^k.
     pub a_polys: Vec<Poly>,
-    /// Single polynomial b̃ ∈ R_q
+    /// Single polynomial b̃ ∈ R_q.
     pub b_poly: Poly,
 }
 
