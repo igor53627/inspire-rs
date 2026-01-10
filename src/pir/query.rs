@@ -8,7 +8,6 @@
 //! To retrieve y_k, the client encrypts the inverse monomial X^(-k).
 //! When the server multiplies h(X) · RGSW(X^(-k)), the result has y_k at coefficient 0.
 
-use super::error::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::inspiring::ClientPackingKeys;
@@ -16,11 +15,71 @@ use crate::lwe::LweSecretKey;
 use crate::math::{GaussianSampler, NttContext};
 use crate::modulus_switch::{SwitchedSeededRgswCiphertext, DEFAULT_SWITCHED_Q};
 use crate::params::ShardConfig;
-use crate::rgsw::{RgswCiphertext, SeededRgswCiphertext};
+use crate::rgsw::{
+    switched_gadget_for_params, DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR, GadgetVector,
+    RgswCiphertext, SeededRgswCiphertext,
+};
 use crate::rlwe::RlweSecretKey;
 
 use super::encode_db::inverse_monomial;
 use super::setup::ServerCrs;
+use super::{error::pir_err, error::Result};
+
+/// Build a seeded query using a specific gadget vector.
+fn seeded_query_with_gadget(
+    crs: &ServerCrs,
+    global_index: u64,
+    shard_config: &ShardConfig,
+    rlwe_sk: &RlweSecretKey,
+    sampler: &mut GaussianSampler,
+    gadget: &GadgetVector,
+) -> Result<(ClientState, SeededClientQuery)> {
+    let d = crs.ring_dim();
+    let q = crs.modulus();
+    let ctx = NttContext::new(d, q);
+
+    let (shard_id, local_index) = shard_config.index_to_shard(global_index);
+
+    let lwe_sk = rlwe_to_lwe_key(rlwe_sk);
+
+    let inv_mono = inverse_monomial(local_index as usize, d, q);
+    let rgsw_ciphertext =
+        SeededRgswCiphertext::encrypt(rlwe_sk, &inv_mono, gadget, sampler, &ctx);
+
+    let state = ClientState {
+        secret_key: lwe_sk,
+        rlwe_secret_key: rlwe_sk.clone(),
+        index: global_index,
+        shard_id,
+        local_index,
+    };
+
+    let query = SeededClientQuery {
+        shard_id,
+        rgsw_ciphertext,
+    };
+
+    Ok((state, query))
+}
+
+/// Select a switched-query gadget that keeps modulus-switch noise within bounds.
+fn switched_gadget_for_params_checked(
+    q: u64,
+    p: u64,
+    switched_q: u64,
+) -> Result<GadgetVector> {
+    switched_gadget_for_params(q, p, switched_q).ok_or_else(|| {
+        let min_switched_q =
+            4u64.saturating_mul(p).saturating_mul(DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR as u64);
+        pir_err!(
+            "No switched gadget satisfies q'={} for q={}, p={} (needs q' >= 4*p*safety_factor ≈ {}). Reduce gadget base or increase q'.",
+            switched_q,
+            q,
+            p,
+            min_switched_q
+        )
+    })
+}
 
 /// Client state for extracting response
 ///
@@ -221,32 +280,14 @@ pub fn query_seeded(
     rlwe_sk: &RlweSecretKey,
     sampler: &mut GaussianSampler,
 ) -> Result<(ClientState, SeededClientQuery)> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
-    let ctx = NttContext::new(d, q);
-
-    let (shard_id, local_index) = shard_config.index_to_shard(global_index);
-
-    let lwe_sk = rlwe_to_lwe_key(rlwe_sk);
-
-    let inv_mono = inverse_monomial(local_index as usize, d, q);
-    let rgsw_ciphertext =
-        SeededRgswCiphertext::encrypt(rlwe_sk, &inv_mono, &crs.rgsw_gadget, sampler, &ctx);
-
-    let state = ClientState {
-        secret_key: lwe_sk,
-        rlwe_secret_key: rlwe_sk.clone(),
-        index: global_index,
-        shard_id,
-        local_index,
-    };
-
-    let query = SeededClientQuery {
-        shard_id,
-        rgsw_ciphertext,
-    };
-
-    Ok((state, query))
+    seeded_query_with_gadget(
+        crs,
+        global_index,
+        shard_config,
+        rlwe_sk,
+        sampler,
+        &crs.rgsw_gadget,
+    )
 }
 
 /// PIR.Query with seed expansion AND modulus switching for maximum compression
@@ -257,10 +298,12 @@ pub fn query_seeded(
 ///
 /// Total reduction: ~75% compared to full query
 ///
-/// # Size Comparison (d=2048, ℓ=3)
-/// - Full query: ~196 KB
-/// - Seeded query: ~98 KB  
-/// - Switched query: ~50 KB
+/// # Size Comparison (d=2048)
+/// - Full query (ℓ=3): ~196 KB
+/// - Seeded query (ℓ=3): ~98 KB  
+/// - Switched query size depends on the gadget base chosen to satisfy
+///   the noise bound. With the auto-selected gadget for q'=2^30, size is
+///   closer to ~95–115 KB (ℓ=6–7).
 ///
 /// # Warning: Noise Amplification
 ///
@@ -272,8 +315,9 @@ pub fn query_seeded(
 /// exceeds the decryption threshold.
 ///
 /// **Recommended**: Use `query_seeded()` for reliable operation.
-/// Use this function only with adjusted parameters (smaller gadget base,
-/// higher switched modulus, or both).
+/// This function selects a smaller gadget base (larger ℓ) to keep the
+/// modulus-switching noise within the decryption bound. This increases
+/// query size relative to the idealized ℓ=3 estimate but restores correctness.
 ///
 /// # Arguments
 /// * `crs` - Common reference string (public parameters)
@@ -292,8 +336,21 @@ pub fn query_switched(
     rlwe_sk: &RlweSecretKey,
     sampler: &mut GaussianSampler,
 ) -> Result<(ClientState, SwitchedClientQuery)> {
-    // First create the seeded query
-    let (state, seeded_query) = query_seeded(crs, global_index, shard_config, rlwe_sk, sampler)?;
+    let switched_gadget = switched_gadget_for_params_checked(
+        crs.params.q,
+        crs.params.p,
+        DEFAULT_SWITCHED_Q,
+    )?;
+
+    // First create the seeded query with a switched-safe gadget.
+    let (state, seeded_query) = seeded_query_with_gadget(
+        crs,
+        global_index,
+        shard_config,
+        rlwe_sk,
+        sampler,
+        &switched_gadget,
+    )?;
 
     // Apply modulus switching for additional compression
     let switched_rgsw = SwitchedSeededRgswCiphertext::from_seeded(
@@ -455,7 +512,17 @@ mod tests {
         let seeded_size = bincode::serialize(&seeded_query).unwrap().len();
         let switched_size = bincode::serialize(&switched_query).unwrap().len();
 
-        println!("\n=== Query Size Comparison (d=2048, l=3) ===");
+        let switched_len = crate::rgsw::switched_gadget_params(
+            params.q,
+            params.p,
+            DEFAULT_SWITCHED_Q,
+        )
+        .map(|(_, len)| len)
+        .unwrap_or(params.gadget_len);
+        println!(
+            "\n=== Query Size Comparison (d={}, l_full={}, l_switched={}) ===",
+            params.ring_dim, params.gadget_len, switched_len
+        );
         println!(
             "Full query:     {:>8} bytes ({:.1} KB)",
             full_size,
@@ -487,12 +554,12 @@ mod tests {
             "Seeded should be smaller than full"
         );
         assert!(
-            switched_size < seeded_size,
-            "Switched should be smaller than seeded"
+            switched_size < full_size,
+            "Switched should be smaller than full"
         );
         assert!(
-            switched_size < full_size / 2,
-            "Switched should be less than half of full"
+            switched_size < full_size * 3 / 4,
+            "Switched should provide meaningful compression vs full"
         );
     }
 }

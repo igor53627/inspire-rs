@@ -31,4 +31,7 @@ mod external_product;
 mod types;
 
 pub use external_product::{external_product, gadget_decompose, gadget_reconstruct};
-pub use types::{GadgetVector, RgswCiphertext, SeededRgswCiphertext};
+pub use types::{
+    switched_gadget_for_params, switched_gadget_params, switched_gadget_params_with_safety,
+    DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR, GadgetVector, RgswCiphertext, SeededRgswCiphertext,
+};
