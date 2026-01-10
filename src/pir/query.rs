@@ -16,7 +16,8 @@ use crate::math::{GaussianSampler, NttContext};
 use crate::modulus_switch::{SwitchedSeededRgswCiphertext, DEFAULT_SWITCHED_Q};
 use crate::params::ShardConfig;
 use crate::rgsw::{
-    switched_gadget_for_params, GadgetVector, RgswCiphertext, SeededRgswCiphertext,
+    switched_gadget_for_params, DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR, GadgetVector,
+    RgswCiphertext, SeededRgswCiphertext,
 };
 use crate::rlwe::RlweSecretKey;
 
@@ -68,11 +69,14 @@ fn switched_gadget_for_params_checked(
     switched_q: u64,
 ) -> Result<GadgetVector> {
     switched_gadget_for_params(q, p, switched_q).ok_or_else(|| {
+        let min_switched_q =
+            4u64.saturating_mul(p).saturating_mul(DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR as u64);
         pir_err!(
-            "No switched gadget satisfies q'={} for q={}, p={}. Reduce gadget base or increase q'.",
+            "No switched gadget satisfies q'={} for q={}, p={} (needs q' >= 4*p*safety_factor ≈ {}). Reduce gadget base or increase q'.",
             switched_q,
             q,
-            p
+            p,
+            min_switched_q
         )
     })
 }
