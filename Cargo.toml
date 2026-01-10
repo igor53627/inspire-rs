@@ -6,7 +6,7 @@ description = "InsPIRe: Communication-Efficient PIR with Server-side Preprocessi
 license = "MIT OR Apache-2.0"
 
 [features]
-default = ["server", "cli"]
+default = ["server", "cli", "zstd"]
 server = ["axum", "tokio", "memmap2", "reqwest"]
 cli = ["clap", "eyre", "tracing-subscriber", "indicatif"]
 
@@ -48,7 +48,7 @@ hex = "0.4"
 
 # Bucket index (for setup)
 tiny-keccak = { version = "2.0", features = ["keccak"] }
-zstd = "0.13"
+zstd = { version = "0.13", optional = true }
 
 [dev-dependencies]
 proptest = "1.4"
