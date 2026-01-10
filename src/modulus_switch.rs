@@ -51,76 +51,26 @@ use crate::math::Poly;
 use crate::rgsw::{GadgetVector, SeededRgswCiphertext};
 use crate::rlwe::SeededRlweCiphertext;
 
-/// Default switched modulus (2^30).
-///
-/// This value comfortably fits in u32 with room for overflow during intermediate
-/// operations. Using 2^30 instead of 2^32 provides headroom for additions.
+/// Default switched modulus (2^30 - comfortably fits in u32 with room for overflow during operations)
 pub const DEFAULT_SWITCHED_Q: u64 = 1 << 30;
 
-/// Polynomial with coefficients reduced to a smaller modulus.
+/// Switched polynomial with reduced modulus
 ///
-/// Stores coefficients as `u32` instead of `u64`, halving storage requirements.
-/// The original modulus is preserved for expansion back to full precision.
-///
-/// # Fields
-///
-/// * `coeffs` - Coefficients reduced to q' (stored as u32)
-/// * `original_q` - Original modulus q (for switching back)
-/// * `switched_q` - Switched modulus q'
-///
-/// # Example
-///
-/// ```
-/// use inspire_pir::modulus_switch::SwitchedPoly;
-/// use inspire_pir::math::Poly;
-///
-/// let poly = Poly::random(256, 1152921504606830593);
-/// let switched = SwitchedPoly::from_poly(&poly, 1 << 30);
-///
-/// // Coefficients are now stored as u32
-/// assert_eq!(switched.dimension(), 256);
-/// ```
+/// Stores coefficients as u32 instead of u64, halving storage.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SwitchedPoly {
-    /// Coefficients reduced to q' (stored as u32).
+    /// Coefficients reduced to q' (stored as u32)
     pub coeffs: Vec<u32>,
-    /// Original modulus q (for switching back).
+    /// Original modulus q (for switching back)
     pub original_q: u64,
-    /// Switched modulus q'.
+    /// Switched modulus q'
     pub switched_q: u64,
 }
 
 impl SwitchedPoly {
-    /// Creates a switched polynomial from a full polynomial.
+    /// Create a switched polynomial from a full polynomial
     ///
-    /// Rescales each coefficient from the original modulus q to the switched
-    /// modulus q': `c' = round(c * q' / q)`.
-    ///
-    /// # Arguments
-    ///
-    /// * `poly` - The polynomial to switch (must be in coefficient domain, not NTT)
-    /// * `switched_q` - The target modulus q' (must fit in u32)
-    ///
-    /// # Returns
-    ///
-    /// A new `SwitchedPoly` with coefficients reduced to q'.
-    ///
-    /// # Panics
-    ///
-    /// Panics if:
-    /// - The polynomial is in NTT domain
-    /// - `switched_q` exceeds `u32::MAX`
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use inspire_pir::modulus_switch::SwitchedPoly;
-    /// use inspire_pir::math::Poly;
-    ///
-    /// let poly = Poly::random(256, 1152921504606830593);
-    /// let switched = SwitchedPoly::from_poly(&poly, 1 << 30);
-    /// assert_eq!(switched.dimension(), 256);
-    /// ```
+    /// Rescales each coefficient: c' = round(c * q' / q)
     pub fn from_poly(poly: &Poly, switched_q: u64) -> Self {
         assert!(!poly.is_ntt(), "Cannot switch polynomial in NTT domain");
         assert!(
@@ -142,30 +92,9 @@ impl SwitchedPoly {
         }
     }
 
-    /// Expands back to a full polynomial with the original modulus.
+    /// Expand back to full polynomial with original modulus
     ///
-    /// Rescales each coefficient from q' back to q: `c = round(c' * q / q')`.
-    /// Note that this introduces rounding error bounded by `q / q'`.
-    ///
-    /// # Arguments
-    ///
-    /// * `dim` - The expected dimension (for validation)
-    ///
-    /// # Returns
-    ///
-    /// A `Poly` with coefficients in the original modulus q.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use inspire_pir::modulus_switch::SwitchedPoly;
-    /// use inspire_pir::math::Poly;
-    ///
-    /// let poly = Poly::random(256, 1152921504606830593);
-    /// let switched = SwitchedPoly::from_poly(&poly, 1 << 30);
-    /// let recovered = switched.expand(256);
-    /// assert_eq!(recovered.dimension(), 256);
-    /// ```
+    /// Rescales: c = round(c' * q / q')
     pub fn expand(&self, dim: usize) -> Poly {
         let coeffs: Vec<u64> = self
             .coeffs
@@ -177,65 +106,31 @@ impl SwitchedPoly {
         Poly::from_coeffs(coeffs, self.original_q)
     }
 
-    /// Returns the dimension (number of coefficients) of the polynomial.
-    ///
-    /// # Returns
-    ///
-    /// The number of coefficients in the polynomial.
+    /// Get dimension
     pub fn dimension(&self) -> usize {
         self.coeffs.len()
     }
 }
 
-/// Seeded RLWE ciphertext with modulus-switched b polynomial.
+/// Seeded RLWE ciphertext with modulus-switched b polynomial
 ///
 /// Combines seed expansion (~50% reduction) with modulus switching (~50% reduction)
-/// for maximum compression. The `a` polynomial is regenerated from a 32-byte seed,
-/// while the `b` polynomial is stored with reduced precision.
+/// for maximum compression.
 ///
-/// # Size Comparison (d=2048)
-///
-/// | Format | Size | Reduction |
-/// |--------|------|-----------|
-/// | Full RLWE | 32 KB | - |
-/// | Seeded RLWE | 16 KB | 50% |
-/// | Seeded + Switched | 8 KB | 75% |
-///
-/// # Fields
-///
-/// * `seed` - 32-byte seed for deterministic generation of `a`
-/// * `b` - Modulus-switched `b` polynomial
-///
-/// # Example
-///
-/// ```ignore
-/// use inspire_pir::modulus_switch::{SwitchedSeededRlweCiphertext, DEFAULT_SWITCHED_Q};
-/// use inspire_pir::rlwe::SeededRlweCiphertext;
-///
-/// let switched = SwitchedSeededRlweCiphertext::from_seeded(&seeded_ct, DEFAULT_SWITCHED_Q);
-/// let recovered = switched.expand();
-/// ```
+/// For d=2048:
+/// - Full RLWE: 2 × 2048 × 8 = 32 KB
+/// - Seeded RLWE: 32 + 2048 × 8 = 16 KB  
+/// - Seeded + Switched: 32 + 2048 × 4 = 8 KB (75% reduction!)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SwitchedSeededRlweCiphertext {
-    /// 32-byte seed for deterministic generation of `a`.
+    /// 32-byte seed for deterministic generation of `a`
     pub seed: [u8; 32],
-    /// Modulus-switched `b` polynomial.
+    /// Modulus-switched `b` polynomial
     pub b: SwitchedPoly,
 }
 
 impl SwitchedSeededRlweCiphertext {
-    /// Creates a switched seeded RLWE ciphertext from a seeded RLWE ciphertext.
-    ///
-    /// Applies modulus switching to the `b` polynomial while preserving the seed.
-    ///
-    /// # Arguments
-    ///
-    /// * `ct` - The seeded RLWE ciphertext to switch
-    /// * `switched_q` - The target modulus q' (must fit in u32)
-    ///
-    /// # Returns
-    ///
-    /// A new `SwitchedSeededRlweCiphertext` with reduced storage.
+    /// Create from a seeded RLWE ciphertext
     pub fn from_seeded(ct: &SeededRlweCiphertext, switched_q: u64) -> Self {
         Self {
             seed: ct.seed,
@@ -243,100 +138,49 @@ impl SwitchedSeededRlweCiphertext {
         }
     }
 
-    /// Expands to a full `SeededRlweCiphertext` with the original modulus.
-    ///
-    /// The `b` polynomial is rescaled back to the original modulus q.
-    /// Note that this introduces rounding error bounded by `q / q'`.
-    ///
-    /// # Returns
-    ///
-    /// A `SeededRlweCiphertext` with the original modulus.
+    /// Expand to full SeededRlweCiphertext (with original modulus)
     pub fn expand(&self) -> SeededRlweCiphertext {
         let dim = self.b.dimension();
         SeededRlweCiphertext::new(self.seed, self.b.expand(dim))
     }
 
-    /// Returns the ring dimension.
-    ///
-    /// # Returns
-    ///
-    /// The number of coefficients in the polynomial ring.
+    /// Get ring dimension
     pub fn ring_dim(&self) -> usize {
         self.b.dimension()
     }
 
-    /// Returns the original modulus q.
-    ///
-    /// # Returns
-    ///
-    /// The modulus before switching.
+    /// Get original modulus
     pub fn original_modulus(&self) -> u64 {
         self.b.original_q
     }
 
-    /// Returns the switched modulus q'.
-    ///
-    /// # Returns
-    ///
-    /// The modulus after switching.
+    /// Get switched modulus
     pub fn switched_modulus(&self) -> u64 {
         self.b.switched_q
     }
 }
 
-/// Seeded RGSW ciphertext with modulus-switched polynomials.
+/// Seeded RGSW ciphertext with modulus-switched polynomials
 ///
-/// Provides maximum compression for query transmission by combining seed expansion
-/// with modulus switching. Each row is a switched seeded RLWE ciphertext.
+/// Maximum compression for query transmission:
+/// - Seeded: stores seed instead of full `a` (~50%)
+/// - Switched: reduces `b` coefficient size (~50%)
+/// - Combined: ~75% total reduction
 ///
-/// # Size Comparison (d=2048, ℓ=3)
-///
-/// | Format | Size | Reduction |
-/// |--------|------|-----------|
-/// | Full RGSW | 196 KB | - |
-/// | Seeded RGSW | 98 KB | 50% |
-/// | Seeded + Switched | ~50 KB | 75% |
-///
-/// # Warning
-///
-/// Modulus switching on RGSW ciphertexts used in external products introduces
-/// significant noise. See module documentation for details on noise bounds.
-///
-/// # Fields
-///
-/// * `rows` - 2ℓ switched seeded RLWE ciphertexts
-/// * `gadget` - Gadget parameters for decomposition
-///
-/// # Example
-///
-/// ```ignore
-/// use inspire_pir::modulus_switch::{SwitchedSeededRgswCiphertext, DEFAULT_SWITCHED_Q};
-/// use inspire_pir::rgsw::SeededRgswCiphertext;
-///
-/// let switched = SwitchedSeededRgswCiphertext::from_seeded(&seeded_rgsw, DEFAULT_SWITCHED_Q);
-/// let recovered = switched.expand();
-/// ```
+/// For d=2048, ℓ=3:
+/// - Full RGSW: 2×3 × 2 × 2048 × 8 = 196 KB
+/// - Seeded RGSW: 2×3 × (32 + 2048×8) = 98 KB
+/// - Seeded + Switched: 2×3 × (32 + 2048×4) = ~50 KB
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SwitchedSeededRgswCiphertext {
-    /// 2ℓ switched seeded RLWE ciphertexts.
+    /// 2ℓ switched seeded RLWE ciphertexts
     pub rows: Vec<SwitchedSeededRlweCiphertext>,
-    /// Gadget parameters for decomposition.
+    /// Gadget parameters
     pub gadget: GadgetVector,
 }
 
 impl SwitchedSeededRgswCiphertext {
-    /// Creates a switched seeded RGSW ciphertext from a seeded RGSW ciphertext.
-    ///
-    /// Applies modulus switching to all row polynomials while preserving seeds.
-    ///
-    /// # Arguments
-    ///
-    /// * `ct` - The seeded RGSW ciphertext to switch
-    /// * `switched_q` - The target modulus q' (must fit in u32)
-    ///
-    /// # Returns
-    ///
-    /// A new `SwitchedSeededRgswCiphertext` with reduced storage.
+    /// Create from a seeded RGSW ciphertext
     pub fn from_seeded(ct: &SeededRgswCiphertext, switched_q: u64) -> Self {
         let rows = ct
             .rows
@@ -350,14 +194,7 @@ impl SwitchedSeededRgswCiphertext {
         }
     }
 
-    /// Expands to a full `SeededRgswCiphertext` with the original modulus.
-    ///
-    /// All row polynomials are rescaled back to the original modulus q.
-    /// Note that this introduces rounding error bounded by `q / q'`.
-    ///
-    /// # Returns
-    ///
-    /// A `SeededRgswCiphertext` with the original modulus.
+    /// Expand to full SeededRgswCiphertext (with original modulus)
     pub fn expand(&self) -> SeededRgswCiphertext {
         let rows = self.rows.iter().map(|r| r.expand()).collect();
         SeededRgswCiphertext {
@@ -366,15 +203,7 @@ impl SwitchedSeededRgswCiphertext {
         }
     }
 
-    /// Returns the ring dimension.
-    ///
-    /// # Returns
-    ///
-    /// The number of coefficients in the polynomial ring.
-    ///
-    /// # Panics
-    ///
-    /// Debug-asserts if the ciphertext has no rows.
+    /// Get ring dimension
     pub fn ring_dim(&self) -> usize {
         debug_assert!(
             !self.rows.is_empty(),
@@ -383,15 +212,7 @@ impl SwitchedSeededRgswCiphertext {
         self.rows[0].ring_dim()
     }
 
-    /// Returns the original modulus q.
-    ///
-    /// # Returns
-    ///
-    /// The modulus before switching.
-    ///
-    /// # Panics
-    ///
-    /// Debug-asserts if the ciphertext has no rows.
+    /// Get original modulus
     pub fn original_modulus(&self) -> u64 {
         debug_assert!(
             !self.rows.is_empty(),
@@ -400,15 +221,7 @@ impl SwitchedSeededRgswCiphertext {
         self.rows[0].original_modulus()
     }
 
-    /// Returns the switched modulus q'.
-    ///
-    /// # Returns
-    ///
-    /// The modulus after switching.
-    ///
-    /// # Panics
-    ///
-    /// Debug-asserts if the ciphertext has no rows.
+    /// Get switched modulus
     pub fn switched_modulus(&self) -> u64 {
         debug_assert!(
             !self.rows.is_empty(),
@@ -417,11 +230,7 @@ impl SwitchedSeededRgswCiphertext {
         self.rows[0].switched_modulus()
     }
 
-    /// Returns the gadget length ℓ.
-    ///
-    /// # Returns
-    ///
-    /// The number of gadget digits used in decomposition.
+    /// Get gadget length ℓ
     pub fn gadget_len(&self) -> usize {
         self.gadget.len
     }
