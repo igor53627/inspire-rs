@@ -20,7 +20,7 @@ Optimizations:
 - **Seed expansion**: 50% query reduction (seeds replace `a` polynomials)
 - **Binary (bincode)**: ~60% reduction vs JSON (no text overhead)
 
-Note: Modulus switching would reduce query to 48 KB, but exceeds noise budget with current parameters. See [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs).
+Note: Modulus switching with ℓ=3 would reduce query to ~48 KB, but exceeds the noise budget. The switched-safe gadget (smaller base, larger ℓ) yields ~112 KB queries with q'=2^30. See [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs).
 
 ### Protocol Variant Comparison
 
@@ -32,9 +32,9 @@ The table above shows **InsPIRe^0 (NoPacking)** costs. With packing enabled, res
 | **InsPIRe^0 seeded** | 96 KB | 544 KB | 640 KB | Seed expansion only |
 | **InsPIRe^1** | 192 KB | 32 KB | 224 KB | Tree-packed response (1 RLWE) |
 | **InsPIRe^2** | 96 KB | 32 KB | **128 KB** | Seeded + packed |
-| **InsPIRe^2+*** | 48 KB | 32 KB | 80 KB | + Modulus switching |
+| **InsPIRe^2+*** | 112 KB | 32 KB | 144 KB | + Modulus switching |
 
-*InsPIRe^2+ currently exceeds noise budget with default parameters (see [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs)).
+*InsPIRe^2+ uses a smaller gadget base (larger ℓ) to satisfy the noise bound; size depends on parameters (see [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs)).
 
 **Key insight**: Packing reduces response from 544 KB → 32 KB (17x reduction) by combining all column values into a single RLWE ciphertext using Galois automorphisms.
 

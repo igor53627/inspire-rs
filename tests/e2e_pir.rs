@@ -285,19 +285,10 @@ fn test_e2e_seeded_query() {
 
 /// Test switched query compression.
 ///
-/// Note: This test is ignored by default because modulus switching on RGSW
-/// ciphertexts introduces noise that exceeds decryption thresholds with
-/// current parameters (q ≈ 2^60, q' = 2^30, B = 2^20, ℓ = 3).
-///
-/// The noise amplification formula: added_error ≈ ℓ × B × (q / q') ≈ 3×2^50
-/// exceeds the safe margin q/(2p) ≈ 2^43.
-///
-/// To make this work, either:
-/// - Use q' ≳ 2^38 (doesn't fit in u32)
-/// - Use smaller gadget base (increases RGSW size)
-/// - Use modulus switching only for RLWE responses (not queries)
+/// The switched-query path auto-selects a smaller gadget base to keep the
+/// modulus-switching noise within the decryption bound. This increases ℓ
+/// (and query size) relative to the ℓ=3 estimate but restores correctness.
 #[test]
-#[ignore = "modulus switching exceeds noise budget with current parameters"]
 fn test_e2e_switched_query() {
     let params = test_params();
 

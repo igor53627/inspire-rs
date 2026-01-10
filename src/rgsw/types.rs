@@ -96,6 +96,63 @@ impl GadgetVector {
     }
 }
 
+/// Default safety factor for switched gadget selection.
+///
+/// Leaves headroom for non-modulus-switch noise (encryption, key switching).
+pub const DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR: u128 = 2;
+
+/// Compute switched gadget parameters that keep modulus-switch noise within bounds.
+///
+/// Returns `(base, len)` for a gadget vector or `None` if no configuration fits.
+pub fn switched_gadget_params_with_safety(
+    q: u64,
+    p: u64,
+    switched_q: u64,
+    noise_safety_factor: u128,
+) -> Option<(u64, usize)> {
+    if q < 2 || p == 0 {
+        return None;
+    }
+
+    let max_product = (switched_q as u128) / (2u128 * p as u128 * noise_safety_factor);
+    if max_product < 2 {
+        return None;
+    }
+
+    let q_bits = 64 - (q - 1).leading_zeros();
+    let max_b = std::cmp::min(31, q_bits as u32) as u32;
+
+    for b in (1..=max_b).rev() {
+        let base = 1u64 << b;
+        if base <= 1 || base > q {
+            continue;
+        }
+
+        let len = ((q_bits + b - 1) / b) as usize;
+        let product = (len as u128) * (base as u128);
+        if product <= max_product {
+            return Some((base, len));
+        }
+    }
+
+    None
+}
+
+/// Compute switched gadget parameters using the default safety factor.
+pub fn switched_gadget_params(q: u64, p: u64, switched_q: u64) -> Option<(u64, usize)> {
+    switched_gadget_params_with_safety(
+        q,
+        p,
+        switched_q,
+        DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR,
+    )
+}
+
+/// Build a switched gadget vector using the default safety factor.
+pub fn switched_gadget_for_params(q: u64, p: u64, switched_q: u64) -> Option<GadgetVector> {
+    switched_gadget_params(q, p, switched_q).map(|(base, len)| GadgetVector::new(base, len, q))
+}
+
 /// RGSW ciphertext: 2ℓ × 2 matrix of ring elements
 ///
 /// Encrypts a small message m (typically 0, 1, or ±X^k).
