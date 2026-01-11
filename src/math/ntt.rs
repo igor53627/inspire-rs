@@ -60,17 +60,17 @@ use super::mod_q::DEFAULT_Q;
 pub struct NttContext {
     /// Ring dimension (power of two).
     n: usize,
-    /// Modulus q.
-    q: u64,
-    /// Precomputed values for Montgomery arithmetic.
-    q_inv_neg: u64,
-    r_squared: u64,
+    /// CRT moduli (length 1 for single-modulus mode).
+    moduli: Vec<u64>,
+    /// Precomputed values for Montgomery arithmetic (per modulus).
+    q_inv_neg: Vec<u64>,
+    r_squared: Vec<u64>,
     /// Forward twiddle factors (powers of ψ where ψ^(2n) = 1 and ψ^n = -1).
-    psi_powers: Vec<u64>,
+    psi_powers: Vec<Vec<u64>>,
     /// Inverse twiddle factors (powers of ψ^(-1)).
-    psi_inv_powers: Vec<u64>,
+    psi_inv_powers: Vec<Vec<u64>>,
     /// n^(-1) mod q in Montgomery form for inverse NTT scaling.
-    n_inv: u64,
+    n_inv: Vec<u64>,
 }
 
 impl NttContext {
@@ -104,32 +104,57 @@ impl NttContext {
     /// assert_eq!(ctx.dimension(), 2048);
     /// ```
     pub fn new(n: usize, q: u64) -> Self {
+        Self::with_moduli(n, &[q])
+    }
+
+    /// Creates an NTT context for multiple CRT moduli.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - Ring dimension (power of two)
+    /// * `moduli` - CRT moduli (each must satisfy q ≡ 1 (mod 2n))
+    pub fn with_moduli(n: usize, moduli: &[u64]) -> Self {
         assert!(n.is_power_of_two(), "n must be a power of two");
-        assert!(q % (2 * n as u64) == 1, "q must be ≡ 1 (mod 2n)");
+        assert!(!moduli.is_empty(), "moduli must be non-empty");
 
-        let q_inv_neg = Self::compute_q_inv_neg(q);
-        let r_squared = Self::compute_r_squared(q);
+        let mut q_inv_neg = Vec::with_capacity(moduli.len());
+        let mut r_squared = Vec::with_capacity(moduli.len());
+        let mut psi_powers = Vec::with_capacity(moduli.len());
+        let mut psi_inv_powers = Vec::with_capacity(moduli.len());
+        let mut n_inv = Vec::with_capacity(moduli.len());
 
-        // Find primitive 2n-th root of unity ψ
-        let psi = Self::find_primitive_root(2 * n as u64, q);
-        let psi_mont = Self::to_montgomery(psi, q, r_squared, q_inv_neg);
+        for &q in moduli {
+            assert!(q % (2 * n as u64) == 1, "q must be ≡ 1 (mod 2n)");
 
-        // Precompute forward twiddle factors in bit-reversed order
-        let psi_powers = Self::compute_twiddle_factors(n, psi_mont, q, q_inv_neg, r_squared);
+            let q_inv = Self::compute_q_inv_neg(q);
+            let r2 = Self::compute_r_squared(q);
 
-        // Compute inverse: ψ^(-1) mod q
-        let psi_inv = Self::mod_pow(psi, q - 2, q);
-        let psi_inv_mont = Self::to_montgomery(psi_inv, q, r_squared, q_inv_neg);
-        let psi_inv_powers =
-            Self::compute_twiddle_factors(n, psi_inv_mont, q, q_inv_neg, r_squared);
+            // Find primitive 2n-th root of unity ψ
+            let psi = Self::find_primitive_root(2 * n as u64, q);
+            let psi_mont = Self::to_montgomery(psi, q, r2, q_inv);
 
-        // Compute n^(-1) mod q
-        let n_inv = Self::mod_pow(n as u64, q - 2, q);
-        let n_inv = Self::to_montgomery(n_inv, q, r_squared, q_inv_neg);
+            // Precompute forward twiddle factors in bit-reversed order
+            let psi_pow = Self::compute_twiddle_factors(n, psi_mont, q, q_inv, r2);
+
+            // Compute inverse: ψ^(-1) mod q
+            let psi_inv = Self::mod_pow(psi, q - 2, q);
+            let psi_inv_mont = Self::to_montgomery(psi_inv, q, r2, q_inv);
+            let psi_inv_pow = Self::compute_twiddle_factors(n, psi_inv_mont, q, q_inv, r2);
+
+            // Compute n^(-1) mod q
+            let n_inv_val = Self::mod_pow(n as u64, q - 2, q);
+            let n_inv_mont = Self::to_montgomery(n_inv_val, q, r2, q_inv);
+
+            q_inv_neg.push(q_inv);
+            r_squared.push(r2);
+            psi_powers.push(psi_pow);
+            psi_inv_powers.push(psi_inv_pow);
+            n_inv.push(n_inv_mont);
+        }
 
         Self {
             n,
-            q,
+            moduli: moduli.to_vec(),
             q_inv_neg,
             r_squared,
             psi_powers,
@@ -166,7 +191,20 @@ impl NttContext {
     ///
     /// The modulus used for this NTT context.
     pub fn modulus(&self) -> u64 {
-        self.q
+        self.moduli
+            .iter()
+            .copied()
+            .fold(1u64, |acc, m| acc.saturating_mul(m))
+    }
+
+    /// Returns the CRT moduli.
+    pub fn moduli(&self) -> &[u64] {
+        &self.moduli
+    }
+
+    /// Number of CRT moduli.
+    pub fn crt_count(&self) -> usize {
+        self.moduli.len()
     }
 
     /// Performs forward NTT in-place using Cooley-Tukey decimation-in-time.
@@ -181,16 +219,30 @@ impl NttContext {
     ///
     /// # Panics
     ///
-    /// Panics if `coeffs.len() != n`.
+    /// Panics if `coeffs.len() != n * crt_count`.
     pub fn forward(&self, coeffs: &mut [u64]) {
-        assert_eq!(coeffs.len(), self.n, "Input length must match dimension");
+        assert_eq!(
+            coeffs.len(),
+            self.n * self.crt_count(),
+            "Input length must match dimension * crt_count"
+        );
 
-        // Convert to Montgomery form
-        for c in coeffs.iter_mut() {
-            *c = Self::to_montgomery(*c, self.q, self.r_squared, self.q_inv_neg);
+        for (idx, _) in self.moduli.iter().enumerate() {
+            let start = idx * self.n;
+            let end = start + self.n;
+
+            // Convert to Montgomery form
+            for c in coeffs[start..end].iter_mut() {
+                *c = Self::to_montgomery_at(
+                    *c,
+                    self.moduli[idx],
+                    self.r_squared[idx],
+                    self.q_inv_neg[idx],
+                );
+            }
+
+            self.forward_inplace_at(&mut coeffs[start..end], idx);
         }
-
-        self.forward_inplace(coeffs);
     }
 
     /// Performs forward NTT assuming input is already in Montgomery form.
@@ -202,8 +254,22 @@ impl NttContext {
     ///
     /// * `coeffs` - Polynomial coefficients in Montgomery form (modified in-place)
     pub fn forward_inplace(&self, coeffs: &mut [u64]) {
+        assert_eq!(
+            coeffs.len(),
+            self.n * self.crt_count(),
+            "Input length must match dimension * crt_count"
+        );
+        for (idx, _) in self.moduli.iter().enumerate() {
+            let start = idx * self.n;
+            let end = start + self.n;
+            self.forward_inplace_at(&mut coeffs[start..end], idx);
+        }
+    }
+
+    fn forward_inplace_at(&self, coeffs: &mut [u64], idx: usize) {
         let n = self.n;
-        let q = self.q;
+        let q = self.moduli[idx];
+        let psi_powers = &self.psi_powers[idx];
 
         let mut t = n;
         let mut m = 1;
@@ -213,11 +279,11 @@ impl NttContext {
             for i in 0..m {
                 let j1 = 2 * i * t;
                 let j2 = j1 + t;
-                let w = self.psi_powers[m + i];
+                let w = psi_powers[m + i];
 
                 for j in j1..j2 {
                     let u = coeffs[j];
-                    let v = self.montgomery_mul(coeffs[j + t], w);
+                    let v = self.montgomery_mul_at(coeffs[j + t], w, idx);
 
                     coeffs[j] = if u + v >= q { u + v - q } else { u + v };
                     coeffs[j + t] = if u >= v { u - v } else { q - v + u };
@@ -238,15 +304,23 @@ impl NttContext {
     ///
     /// # Panics
     ///
-    /// Panics if `coeffs.len() != n`.
+    /// Panics if `coeffs.len() != n * crt_count`.
     pub fn inverse(&self, coeffs: &mut [u64]) {
-        assert_eq!(coeffs.len(), self.n, "Input length must match dimension");
+        assert_eq!(
+            coeffs.len(),
+            self.n * self.crt_count(),
+            "Input length must match dimension * crt_count"
+        );
 
         self.inverse_inplace(coeffs);
 
         // Convert from Montgomery form
-        for c in coeffs.iter_mut() {
-            *c = self.montgomery_mul(*c, 1);
+        for (idx, _) in self.moduli.iter().enumerate() {
+            let start = idx * self.n;
+            let end = start + self.n;
+            for c in coeffs[start..end].iter_mut() {
+                *c = self.montgomery_mul_at(*c, 1, idx);
+            }
         }
     }
 
@@ -259,8 +333,22 @@ impl NttContext {
     ///
     /// * `coeffs` - NTT representation in Montgomery form (modified in-place)
     pub fn inverse_inplace(&self, coeffs: &mut [u64]) {
+        assert_eq!(
+            coeffs.len(),
+            self.n * self.crt_count(),
+            "Input length must match dimension * crt_count"
+        );
+        for (idx, _) in self.moduli.iter().enumerate() {
+            let start = idx * self.n;
+            let end = start + self.n;
+            self.inverse_inplace_at(&mut coeffs[start..end], idx);
+        }
+    }
+
+    fn inverse_inplace_at(&self, coeffs: &mut [u64], idx: usize) {
         let n = self.n;
-        let q = self.q;
+        let q = self.moduli[idx];
+        let psi_inv_powers = &self.psi_inv_powers[idx];
 
         let mut t = 1;
         let mut m = n;
@@ -270,7 +358,7 @@ impl NttContext {
             let j1 = 0;
             for i in 0..m {
                 let j2 = j1 + i * 2 * t;
-                let w = self.psi_inv_powers[m + i];
+                let w = psi_inv_powers[m + i];
 
                 for j in j2..(j2 + t) {
                     let u = coeffs[j];
@@ -278,7 +366,7 @@ impl NttContext {
 
                     coeffs[j] = if u + v >= q { u + v - q } else { u + v };
                     let diff = if u >= v { u - v } else { q - v + u };
-                    coeffs[j + t] = self.montgomery_mul(diff, w);
+                    coeffs[j + t] = self.montgomery_mul_at(diff, w, idx);
                 }
             }
             t <<= 1;
@@ -286,7 +374,7 @@ impl NttContext {
 
         // Scale by n^(-1)
         for c in coeffs.iter_mut() {
-            *c = self.montgomery_mul(*c, self.n_inv);
+            *c = self.montgomery_mul_at(*c, self.n_inv[idx], idx);
         }
     }
 
@@ -302,14 +390,30 @@ impl NttContext {
     ///
     /// # Panics
     ///
-    /// Panics if any array length does not equal n.
+    /// Panics if any array length does not equal n * crt_count.
     pub fn pointwise_mul(&self, a: &[u64], b: &[u64], result: &mut [u64]) {
-        assert_eq!(a.len(), self.n);
-        assert_eq!(b.len(), self.n);
-        assert_eq!(result.len(), self.n);
+        assert_eq!(
+            a.len(),
+            self.n * self.crt_count(),
+            "Input length must match dimension * crt_count"
+        );
+        assert_eq!(
+            b.len(),
+            self.n * self.crt_count(),
+            "Input length must match dimension * crt_count"
+        );
+        assert_eq!(
+            result.len(),
+            self.n * self.crt_count(),
+            "Input length must match dimension * crt_count"
+        );
 
-        for i in 0..self.n {
-            result[i] = self.montgomery_mul(a[i], b[i]);
+        for idx in 0..self.crt_count() {
+            let start = idx * self.n;
+            for i in 0..self.n {
+                result[start + i] =
+                    self.montgomery_mul_at(a[start + i], b[start + i], idx);
+            }
         }
     }
 
@@ -327,7 +431,13 @@ impl NttContext {
     /// The product `(a * b) mod q` in Montgomery form.
     #[inline]
     pub fn pointwise_mul_single(&self, a: u64, b: u64) -> u64 {
-        self.montgomery_mul(a, b)
+        self.montgomery_mul_at(a, b, 0)
+    }
+
+    /// Performs a single pointwise multiplication for a specific CRT modulus.
+    #[inline]
+    pub fn pointwise_mul_single_at(&self, a: u64, b: u64, idx: usize) -> u64 {
+        self.montgomery_mul_at(a, b, idx)
     }
 
     /// Converts a value to Montgomery form.
@@ -340,7 +450,7 @@ impl NttContext {
     ///
     /// The value in Montgomery form.
     pub fn to_mont(&self, a: u64) -> u64 {
-        Self::to_montgomery(a, self.q, self.r_squared, self.q_inv_neg)
+        Self::to_montgomery(a, self.moduli[0], self.r_squared[0], self.q_inv_neg[0])
     }
 
     /// Converts a value from Montgomery form.
@@ -353,15 +463,17 @@ impl NttContext {
     ///
     /// The value in standard representation.
     pub fn from_mont(&self, a: u64) -> u64 {
-        self.montgomery_mul(a, 1)
+        self.montgomery_mul_at(a, 1, 0)
     }
 
-    fn montgomery_mul(&self, a: u64, b: u64) -> u64 {
+    fn montgomery_mul_at(&self, a: u64, b: u64, idx: usize) -> u64 {
+        let q = self.moduli[idx];
+        let q_inv_neg = self.q_inv_neg[idx];
         let ab = (a as u128) * (b as u128);
-        let m = ((ab as u64).wrapping_mul(self.q_inv_neg)) as u128;
-        let t = ((ab + m * (self.q as u128)) >> 64) as u64;
-        if t >= self.q {
-            t - self.q
+        let m = ((ab as u64).wrapping_mul(q_inv_neg)) as u128;
+        let t = ((ab + m * (q as u128)) >> 64) as u64;
+        if t >= q {
+            t - q
         } else {
             t
         }
@@ -376,6 +488,11 @@ impl NttContext {
         } else {
             t
         }
+    }
+
+    #[inline]
+    fn to_montgomery_at(a: u64, q: u64, r_squared: u64, q_inv_neg: u64) -> u64 {
+        Self::to_montgomery(a, q, r_squared, q_inv_neg)
     }
 
     fn compute_q_inv_neg(q: u64) -> u64 {

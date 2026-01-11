@@ -74,6 +74,10 @@ impl SwitchedPoly {
     pub fn from_poly(poly: &Poly, switched_q: u64) -> Self {
         assert!(!poly.is_ntt(), "Cannot switch polynomial in NTT domain");
         assert!(
+            poly.crt_count() == 1,
+            "Modulus switching is only supported for single-modulus polynomials"
+        );
+        assert!(
             switched_q <= u32::MAX as u64,
             "Switched modulus must fit in u32"
         );
@@ -255,7 +259,7 @@ fn rescale(c: u64, q_old: u64, q_new: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::math::{GaussianSampler, NttContext, Poly};
+    use crate::math::{GaussianSampler, Poly};
     use crate::params::InspireParams;
     use crate::rgsw::SeededRgswCiphertext;
     use crate::rlwe::{RlweSecretKey, SeededRlweCiphertext};
@@ -264,6 +268,7 @@ mod tests {
         InspireParams {
             ring_dim: 256,
             q: 1152921504606830593, // ~2^60
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -367,14 +372,14 @@ mod tests {
     fn test_switched_seeded_rgsw_roundtrip() {
         let params = test_params();
         let mut sampler = GaussianSampler::new(params.sigma);
-        let ctx = NttContext::new(params.ring_dim, params.q);
+        let ctx = params.ntt_context();
 
         let sk = RlweSecretKey::generate(&params, &mut sampler);
         let gadget =
             crate::rgsw::GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
 
         // Create seeded RGSW
-        let msg = Poly::constant(1, params.ring_dim, params.q);
+        let msg = Poly::constant_moduli(1, params.ring_dim, params.moduli());
         let seeded = SeededRgswCiphertext::encrypt(&sk, &msg, &gadget, &mut sampler, &ctx);
 
         // Switch modulus
@@ -392,7 +397,7 @@ mod tests {
     fn test_switched_rgsw_size_reduction() {
         let params = test_params();
         let mut sampler = GaussianSampler::new(params.sigma);
-        let ctx = NttContext::new(params.ring_dim, params.q);
+        let ctx = params.ntt_context();
 
         let sk = RlweSecretKey::generate(&params, &mut sampler);
         let gadget =

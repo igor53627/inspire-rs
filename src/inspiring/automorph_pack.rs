@@ -48,7 +48,7 @@ pub fn homomorphic_automorph(
     ctx: &NttContext,
 ) -> RlweCiphertext {
     let d = ct.ring_dim();
-    let q = ct.modulus();
+    let moduli = ct.a.moduli();
 
     // Step 1: Apply automorphism τ_t to both components
     let ct_auto = automorphism_ciphertext(ct, t);
@@ -61,7 +61,7 @@ pub fn homomorphic_automorph(
 
     // Step 3: Key-switch
     // Result: (a', b') = (0, τ_t(b)) + Σᵢ decomp_i · K[i]
-    let mut result_a = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, moduli);
     let mut result_b = ct_auto.b.clone();
 
     for (i, digit_poly) in a_decomp.iter().enumerate() {
@@ -99,7 +99,7 @@ impl YConstants {
     /// - Level 2: y = X^32 (step = 32)
     /// - ...
     /// - Level 7: y = X^1 (step = 1)
-    pub fn generate(d: usize, q: u64) -> Self {
+    pub fn generate(d: usize, q: u64, moduli: &[u64]) -> Self {
         let log_d = (d as f64).log2() as usize;
         let mut y_polys = Vec::with_capacity(log_d);
         let mut neg_y_polys = Vec::with_capacity(log_d);
@@ -113,14 +113,14 @@ impl YConstants {
             if step < d {
                 y_coeffs[step] = 1;
             }
-            let y_poly = Poly::from_coeffs(y_coeffs, q);
+            let y_poly = Poly::from_coeffs_moduli(y_coeffs, moduli);
 
             // -y = -X^step
             let mut neg_y_coeffs = vec![0u64; d];
             if step < d {
                 neg_y_coeffs[step] = q - 1;
             }
-            let neg_y_poly = Poly::from_coeffs(neg_y_coeffs, q);
+            let neg_y_poly = Poly::from_coeffs_moduli(neg_y_coeffs, moduli);
 
             y_polys.push(y_poly);
             neg_y_polys.push(neg_y_poly);
@@ -271,10 +271,13 @@ pub fn pack_rlwes_tree(
 ) -> RlweCiphertext {
     let d = params.ring_dim;
     let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
 
     if rlwe_cts.is_empty() {
-        return RlweCiphertext::from_parts(Poly::zero(d, q), Poly::zero(d, q));
+        return RlweCiphertext::from_parts(
+            Poly::zero_moduli(d, params.moduli()),
+            Poly::zero_moduli(d, params.moduli()),
+        );
     }
 
     if rlwe_cts.len() == 1 {
@@ -292,7 +295,7 @@ pub fn pack_rlwes_tree(
     }
 
     // Generate y constants
-    let y_constants = YConstants::generate(d, q);
+    let y_constants = YConstants::generate(d, q, params.moduli());
 
     // Run recursive packing with log_n levels
     pack_lwes_inner(
@@ -319,8 +322,7 @@ pub fn pack_single_lwe(
     params: &InspireParams,
 ) -> RlweCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
     let log_d = (d as f64).log2() as usize;
 
     let mut cur = ct.clone();
@@ -377,7 +379,7 @@ pub fn prep_pack_lwes(
     params: &InspireParams,
 ) -> (Vec<RlweCiphertext>, Vec<u64>) {
     let d = params.ring_dim;
-    let q = params.q;
+    let moduli = params.moduli();
 
     let mut prepped_rlwes = Vec::with_capacity(lwe_cts.len());
     let mut b_values = Vec::with_capacity(lwe_cts.len());
@@ -386,10 +388,10 @@ pub fn prep_pack_lwes(
         // Invert sample_extract_coeff0 to get a-polynomial
         // coeff_0(a_poly * s_rlwe) = <a_lwe, s_lwe>
         let a_coeffs = invert_sample_extract(&lwe.a);
-        let a_poly = Poly::from_coeffs(a_coeffs, q);
+        let a_poly = Poly::from_coeffs_moduli(a_coeffs, moduli);
 
         // b' = 0 (b values handled separately)
-        let b_poly = Poly::zero(d, q);
+        let b_poly = Poly::zero_moduli(d, moduli);
 
         prepped_rlwes.push(RlweCiphertext::from_parts(a_poly, b_poly));
         b_values.push(lwe.b);
@@ -420,10 +422,14 @@ pub fn pack_lwes(
 ) -> RlweCiphertext {
     let d = params.ring_dim;
     let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
+    let moduli = params.moduli();
 
     if lwe_cts.is_empty() {
-        return RlweCiphertext::from_parts(Poly::zero(d, q), Poly::zero(d, q));
+        return RlweCiphertext::from_parts(
+            Poly::zero_moduli(d, moduli),
+            Poly::zero_moduli(d, moduli),
+        );
     }
 
     // Step 1: Prep LWEs - create RLWE forms with a = negacyclic_perm(lwe.a), b = 0
@@ -435,7 +441,7 @@ pub fn pack_lwes(
         // No scaling needed for single element
         let mut b_coeffs = vec![0u64; d];
         b_coeffs[0] = b_values[0];
-        let b_poly = Poly::from_coeffs(b_coeffs, q);
+        let b_poly = Poly::from_coeffs_moduli(b_coeffs, moduli);
         return RlweCiphertext::from_parts(prepped_rlwes[0].a.clone(), b_poly);
     }
 
@@ -451,7 +457,7 @@ pub fn pack_lwes(
     }
 
     // Generate y constants
-    let y_constants = YConstants::generate(d, q);
+    let y_constants = YConstants::generate(d, q, moduli);
 
     // Step 2: Run full tree packing on d RLWEs (with b=0)
     let mut packed = pack_lwes_inner(
@@ -475,7 +481,7 @@ pub fn pack_lwes(
             b_coeffs[z] = ModQ::add(b_coeffs[z], scaled, q);
         }
     }
-    packed.b = Poly::from_coeffs(b_coeffs, q);
+    packed.b = Poly::from_coeffs_moduli(b_coeffs, moduli);
 
     packed
 }
@@ -492,6 +498,7 @@ mod tests {
         InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -514,7 +521,7 @@ mod tests {
     ) -> Vec<KeySwitchingMatrix> {
         let d = params.ring_dim;
         let q = params.q;
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, q);
         let log_d = (d as f64).log2() as usize;
 
@@ -531,7 +538,7 @@ mod tests {
     fn test_y_constants_generation() {
         let d = 256;
         let q = 1152921504606830593u64;
-        let y_consts = YConstants::generate(d, q);
+        let y_consts = YConstants::generate(d, q, &[q]);
 
         // Level 0: y = X^128
         assert_eq!(y_consts.y(0).coeff(128), 1);
@@ -550,7 +557,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         let sk = RlweSecretKey::generate(&params, &mut sampler);
@@ -583,7 +590,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         let sk = RlweSecretKey::generate(&params, &mut sampler);
@@ -628,7 +635,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         let sk = RlweSecretKey::generate(&params, &mut sampler);
@@ -668,7 +675,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         // Generate keys
@@ -713,13 +720,11 @@ mod tests {
 
     #[test]
     fn test_pack_lwes_two() {
-        use crate::lwe::LweSecretKey;
-
         let params = test_params();
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         // Generate keys
@@ -777,7 +782,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         // Generate keys
@@ -839,7 +844,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         // Generate keys

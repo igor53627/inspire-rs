@@ -51,7 +51,7 @@ pub fn apply_automorphism(poly: &Poly, g: usize) -> Poly {
         }
     }
 
-    Poly::from_coeffs(result_coeffs, q)
+    Poly::from_coeffs_moduli(result_coeffs, poly.moduli())
 }
 
 /// Apply automorphism to RLWE ciphertext
@@ -186,7 +186,7 @@ mod tests {
 
         // τ_1 should be identity
         let coeffs: Vec<u64> = (0..d).map(|i| i as u64).collect();
-        let poly = Poly::from_coeffs(coeffs.clone(), params.q);
+        let poly = Poly::from_coeffs_moduli(coeffs.clone(), params.moduli());
 
         let result = apply_automorphism(&poly, 1);
 
@@ -204,7 +204,7 @@ mod tests {
         let (g1, g2) = galois_generators(d);
 
         let coeffs: Vec<u64> = (0..d).map(|i| ((i * 17 + 5) as u64) % params.p).collect();
-        let poly = Poly::from_coeffs(coeffs, params.q);
+        let poly = Poly::from_coeffs_moduli(coeffs, params.moduli());
 
         // Apply τ_g1 then τ_g2
         let step1 = apply_automorphism(&poly, g1);
@@ -231,7 +231,7 @@ mod tests {
         let (g1, _) = galois_generators(d);
 
         let coeffs: Vec<u64> = (0..d).map(|i| ((i * 13 + 7) as u64) % params.p).collect();
-        let poly = Poly::from_coeffs(coeffs.clone(), params.q);
+        let poly = Poly::from_coeffs_moduli(coeffs.clone(), params.moduli());
 
         // Apply τ_g then τ_{g^{-1}} should give identity
         let g_inv = inverse_automorphism(g1, d);
@@ -287,7 +287,7 @@ mod tests {
         // Create polynomial p(X) = X
         let mut coeffs = vec![0u64; d];
         coeffs[1] = 1;
-        let poly = Poly::from_coeffs(coeffs, params.q);
+        let poly = Poly::from_coeffs_moduli(coeffs, params.moduli());
 
         let result = apply_automorphism(&poly, g2);
 
@@ -326,8 +326,8 @@ mod tests {
         let a_coeffs: Vec<u64> = (0..d).map(|i| (i as u64 * 3) % params.q).collect();
         let b_coeffs: Vec<u64> = (0..d).map(|i| (i as u64 * 7 + 1) % params.q).collect();
 
-        let a = Poly::from_coeffs(a_coeffs, params.q);
-        let b = Poly::from_coeffs(b_coeffs, params.q);
+        let a = Poly::from_coeffs_moduli(a_coeffs, params.moduli());
+        let b = Poly::from_coeffs_moduli(b_coeffs, params.moduli());
         let ct = RlweCiphertext::from_parts(a.clone(), b.clone());
 
         // Apply automorphism to ciphertext
@@ -353,8 +353,8 @@ mod tests {
         let p1_coeffs: Vec<u64> = (0..d).map(|i| (i as u64 * 11) % params.p).collect();
         let p2_coeffs: Vec<u64> = (0..d).map(|i| (i as u64 * 13 + 3) % params.p).collect();
 
-        let p1 = Poly::from_coeffs(p1_coeffs, params.q);
-        let p2 = Poly::from_coeffs(p2_coeffs, params.q);
+        let p1 = Poly::from_coeffs_moduli(p1_coeffs, params.moduli());
+        let p2 = Poly::from_coeffs_moduli(p2_coeffs, params.moduli());
 
         let sum = &p1 + &p2;
         let auto_sum = apply_automorphism(&sum, g1);

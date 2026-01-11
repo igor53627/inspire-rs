@@ -41,7 +41,7 @@ pub fn collapse_one(
 
     let d = params.ring_dim;
     let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
     let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, q);
 
     if k == 1 {
@@ -64,7 +64,7 @@ pub fn collapse_one(
     // This is the correct algorithm from ks/switch.rs:
     //   (a', b') = (0, b) + Σᵢ decomposed_i · K[i]
     // where K[i] = (ks_row.a, ks_row.b)
-    let mut result_a = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, params.moduli());
     let mut result_b = b.clone();
 
     for (i, digit_poly) in decomposed.iter().enumerate() {
@@ -108,12 +108,11 @@ fn key_switch_component(
     gadget: &GadgetVector,
 ) -> (Poly, Poly) {
     let d = a_component.dimension();
-    let q = a_component.modulus();
 
     let decomposed = rgsw_gadget_decompose(a_component, gadget);
 
     // Initialize: (a', b') = (0, b)
-    let mut result_a = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, a_component.moduli());
     let mut result_b = b.clone();
 
     // Accumulate: Σᵢ decomposed_i · K[i]
@@ -157,16 +156,16 @@ mod tests {
         InspireParams::secure_128_d2048()
     }
 
-    fn random_poly<R: Rng>(rng: &mut R, d: usize, q: u64) -> Poly {
+    fn random_poly<R: Rng>(rng: &mut R, d: usize, q: u64, moduli: &[u64]) -> Poly {
         let coeffs: Vec<u64> = (0..d).map(|_| rng.gen_range(0..q)).collect();
-        Poly::from_coeffs(coeffs, q)
+        Poly::from_coeffs_moduli(coeffs, moduli)
     }
 
     #[test]
     fn test_gadget_decompose() {
         let params = test_params();
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(12345);
-        let poly = random_poly(&mut rng, params.ring_dim, params.q);
+        let poly = random_poly(&mut rng, params.ring_dim, params.q, params.moduli());
 
         let decomposed = gadget_decompose(&poly, &params);
         assert_eq!(decomposed.len(), params.gadget_len);
@@ -181,15 +180,16 @@ mod tests {
     fn test_collapse_one_reduces_dimension() {
         let params = test_params();
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(11111);
+        let moduli = params.moduli();
 
         let k = 4;
         let a: Vec<Poly> = (0..k)
-            .map(|_| random_poly(&mut rng, params.ring_dim, params.q))
+            .map(|_| random_poly(&mut rng, params.ring_dim, params.q, moduli))
             .collect();
-        let b = random_poly(&mut rng, params.ring_dim, params.q);
+        let b = random_poly(&mut rng, params.ring_dim, params.q, moduli);
 
         // Create a dummy key-switching matrix
-        let ks_matrix = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
+        let ks_matrix = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
 
         let (new_a, _new_b) = collapse_one(&a, &b, &ks_matrix, &params);
 

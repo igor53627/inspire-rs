@@ -192,8 +192,7 @@ impl SeededRlweCiphertext {
     /// A full `RlweCiphertext` with `a` regenerated from the seed.
     pub fn expand(&self) -> RlweCiphertext {
         let dim = self.b.dimension();
-        let q = self.b.modulus();
-        let a = Poly::from_seed(&self.seed, dim, q);
+        let a = Poly::from_seed_moduli(&self.seed, dim, self.b.moduli());
         RlweCiphertext::from_parts(a, self.b.clone())
     }
 

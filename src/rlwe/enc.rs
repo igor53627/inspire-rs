@@ -4,7 +4,7 @@
 //! where Δ = ⌊q/p⌋ is the scaling factor.
 
 use crate::lwe::LweCiphertext;
-use crate::math::{GaussianSampler, ModQ, NttContext, Poly};
+use crate::math::{GaussianSampler, NttContext, Poly};
 use crate::params::InspireParams;
 
 use super::types::{RlweCiphertext, RlweSecretKey};
@@ -12,13 +12,7 @@ use super::types::{RlweCiphertext, RlweSecretKey};
 impl RlweSecretKey {
     /// Generate a secret key from Gaussian distribution
     pub fn generate(params: &InspireParams, sampler: &mut GaussianSampler) -> Self {
-        let coeffs: Vec<u64> = (0..params.ring_dim)
-            .map(|_| {
-                let sample = sampler.sample();
-                ModQ::from_signed(sample, params.q)
-            })
-            .collect();
-        let poly = Poly::from_coeffs(coeffs, params.q);
+        let poly = Poly::sample_gaussian_moduli(params.ring_dim, params.moduli(), sampler);
         Self { poly }
     }
 }
@@ -162,8 +156,8 @@ impl RlweCiphertext {
     /// This creates (0, 0) which decrypts to 0.
     /// Useful as an identity element for homomorphic addition.
     pub fn zero(params: &InspireParams) -> RlweCiphertext {
-        let a = Poly::zero(params.ring_dim, params.q);
-        let b = Poly::zero(params.ring_dim, params.q);
+        let a = Poly::zero_moduli(params.ring_dim, params.moduli());
+        let b = Poly::zero_moduli(params.ring_dim, params.moduli());
         RlweCiphertext { a, b }
     }
 
@@ -182,7 +176,7 @@ impl RlweCiphertext {
         delta: u64,
         params: &InspireParams,
     ) -> RlweCiphertext {
-        let a = Poly::zero(params.ring_dim, params.q);
+        let a = Poly::zero_moduli(params.ring_dim, params.moduli());
         let b = message_poly.scalar_mul(delta);
         RlweCiphertext { a, b }
     }
@@ -217,30 +211,22 @@ impl RlweCiphertext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
 
     fn test_params() -> InspireParams {
         InspireParams::secure_128_d2048()
     }
 
     fn make_ctx(params: &InspireParams) -> NttContext {
-        NttContext::new(params.ring_dim, params.q)
+        params.ntt_context()
     }
 
-    fn random_poly(dim: usize, q: u64) -> Poly {
+    fn random_poly(params: &InspireParams) -> Poly {
         let mut rng = rand::thread_rng();
-        let coeffs: Vec<u64> = (0..dim).map(|_| rng.gen_range(0..q)).collect();
-        Poly::from_coeffs(coeffs, q)
+        Poly::random_with_rng_moduli(params.ring_dim, params.moduli(), &mut rng)
     }
 
-    fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly {
-        let coeffs: Vec<u64> = (0..dim)
-            .map(|_| {
-                let sample = sampler.sample();
-                ModQ::from_signed(sample, q)
-            })
-            .collect();
-        Poly::from_coeffs(coeffs, q)
+    fn sample_error_poly(params: &InspireParams, sampler: &mut GaussianSampler) -> Poly {
+        Poly::sample_gaussian_moduli(params.ring_dim, params.moduli(), sampler)
     }
 
     #[test]
@@ -257,11 +243,11 @@ mod tests {
         let msg_coeffs: Vec<u64> = (0..params.ring_dim)
             .map(|i| (i as u64) % params.p)
             .collect();
-        let message = Poly::from_coeffs(msg_coeffs.clone(), params.q);
+        let message = Poly::from_coeffs_moduli(msg_coeffs.clone(), params.moduli());
 
         // Generate random a and error
-        let a_random = random_poly(params.ring_dim, params.q);
-        let error = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let a_random = random_poly(&params);
+        let error = sample_error_poly(&params, &mut sampler);
 
         // Encrypt
         let ct = RlweCiphertext::encrypt(&sk, &message, delta, a_random, &error, &ctx);
@@ -290,9 +276,9 @@ mod tests {
         let sk = RlweSecretKey::generate(&params, &mut sampler);
 
         // Encrypt zero message
-        let message = Poly::zero(params.ring_dim, params.q);
-        let a_random = random_poly(params.ring_dim, params.q);
-        let error = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let message = Poly::zero_moduli(params.ring_dim, params.moduli());
+        let a_random = random_poly(&params);
+        let error = sample_error_poly(&params, &mut sampler);
 
         let ct = RlweCiphertext::encrypt(&sk, &message, delta, a_random, &error, &ctx);
         let decrypted = ct.decrypt(&sk, delta, params.p, &ctx);
@@ -317,16 +303,16 @@ mod tests {
             .map(|i| ((i + 50) as u64) % 100)
             .collect();
 
-        let msg1 = Poly::from_coeffs(msg1_coeffs.clone(), params.q);
-        let msg2 = Poly::from_coeffs(msg2_coeffs.clone(), params.q);
+        let msg1 = Poly::from_coeffs_moduli(msg1_coeffs.clone(), params.moduli());
+        let msg2 = Poly::from_coeffs_moduli(msg2_coeffs.clone(), params.moduli());
 
         // Encrypt both
-        let a1 = random_poly(params.ring_dim, params.q);
-        let e1 = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let a1 = random_poly(&params);
+        let e1 = sample_error_poly(&params, &mut sampler);
         let ct1 = RlweCiphertext::encrypt(&sk, &msg1, delta, a1, &e1, &ctx);
 
-        let a2 = random_poly(params.ring_dim, params.q);
-        let e2 = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let a2 = random_poly(&params);
+        let e2 = sample_error_poly(&params, &mut sampler);
         let ct2 = RlweCiphertext::encrypt(&sk, &msg2, delta, a2, &e2, &ctx);
 
         // Homomorphic add
@@ -359,15 +345,15 @@ mod tests {
             .collect();
         let msg2_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % 100).collect();
 
-        let msg1 = Poly::from_coeffs(msg1_coeffs.clone(), params.q);
-        let msg2 = Poly::from_coeffs(msg2_coeffs.clone(), params.q);
+        let msg1 = Poly::from_coeffs_moduli(msg1_coeffs.clone(), params.moduli());
+        let msg2 = Poly::from_coeffs_moduli(msg2_coeffs.clone(), params.moduli());
 
-        let a1 = random_poly(params.ring_dim, params.q);
-        let e1 = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let a1 = random_poly(&params);
+        let e1 = sample_error_poly(&params, &mut sampler);
         let ct1 = RlweCiphertext::encrypt(&sk, &msg1, delta, a1, &e1, &ctx);
 
-        let a2 = random_poly(params.ring_dim, params.q);
-        let e2 = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let a2 = random_poly(&params);
+        let e2 = sample_error_poly(&params, &mut sampler);
         let ct2 = RlweCiphertext::encrypt(&sk, &msg2, delta, a2, &e2, &ctx);
 
         let ct_diff = ct1.sub(&ct2);
@@ -394,10 +380,10 @@ mod tests {
         let sk = RlweSecretKey::generate(&params, &mut sampler);
 
         let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % 50).collect();
-        let message = Poly::from_coeffs(msg_coeffs.clone(), params.q);
+        let message = Poly::from_coeffs_moduli(msg_coeffs.clone(), params.moduli());
 
-        let a = random_poly(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let a = random_poly(&params);
+        let e = sample_error_poly(&params, &mut sampler);
         let ct = RlweCiphertext::encrypt(&sk, &message, delta, a, &e, &ctx);
 
         let scalar = 3u64;
@@ -442,13 +428,13 @@ mod tests {
         let sk = RlweSecretKey::generate(&params, &mut sampler);
 
         // Simulate CRS: a publicly known random polynomial
-        let crs_a = random_poly(params.ring_dim, params.q);
+        let crs_a = random_poly(&params);
 
         let msg_coeffs: Vec<u64> = (0..params.ring_dim)
             .map(|i| (i as u64) % params.p)
             .collect();
-        let message = Poly::from_coeffs(msg_coeffs.clone(), params.q);
-        let error = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let message = Poly::from_coeffs_moduli(msg_coeffs.clone(), params.moduli());
+        let error = sample_error_poly(&params, &mut sampler);
 
         let ct = RlweCiphertext::encrypt_with_crs(&sk, &message, delta, &crs_a, &error, &ctx);
         let decrypted = ct.decrypt(&sk, delta, params.p, &ctx);

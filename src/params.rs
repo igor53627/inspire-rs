@@ -25,6 +25,10 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
+use crate::math::NttContext;
+
+/// Default CRT moduli from the InsPIRe reference implementation.
+pub const DEFAULT_CRT_MODULI: [u64; 2] = [268_369_921, 249_561_089];
 
 /// Security level for parameter selection.
 ///
@@ -142,6 +146,13 @@ pub struct InspireParams {
     /// Typical value: 2^60 - 2^14 + 1 = 1152921504606830593.
     pub q: u64,
 
+    /// CRT moduli for ciphertext representation.
+    ///
+    /// When length is 1, the scheme uses a single modulus equal to `q`.
+    /// When length is 2, coefficients are represented in CRT with these primes
+    /// and `q` is their product.
+    pub crt_moduli: Vec<u64>,
+
     /// Plaintext modulus p.
     ///
     /// Messages are encoded in Z_p before scaling by Δ = ⌊q/p⌋.
@@ -184,7 +195,7 @@ impl InspireParams {
     ///
     /// A new `InspireParams` instance with:
     /// - `ring_dim`: 2048
-    /// - `q`: 2^60 - 2^14 + 1 (NTT-friendly prime)
+    /// - `q`: product of CRT moduli (~2^56, NTT-friendly per modulus)
     /// - `p`: 65537 (Fermat prime F4)
     /// - `sigma`: 6.4
     /// - `gadget_base`: 2^20
@@ -200,15 +211,16 @@ impl InspireParams {
     /// assert!(params.validate().is_ok());
     /// ```
     pub fn secure_128_d2048() -> Self {
-        // NTT-friendly prime: q ≡ 1 (mod 4096)
-        // q = 2^60 - 2^14 + 1 = 1152921504606830593
-        let q: u64 = 1152921504606830593;
+        // CRT moduli from InsPIRe reference (each ≡ 1 mod 4096)
+        let crt_moduli = DEFAULT_CRT_MODULI.to_vec();
+        let q: u64 = crt_moduli.iter().product();
         let gadget_base: u64 = 1 << 20; // 2^20
         let gadget_len = ((q as f64).log2() / 20.0).ceil() as usize; // 3
 
         Self {
             ring_dim: 2048,
             q,
+            crt_moduli,
             p: 65537, // Fermat prime F4, coprime with any power-of-2 ring dimension
             sigma: 6.4,
             gadget_base,
@@ -227,7 +239,7 @@ impl InspireParams {
     ///
     /// A new `InspireParams` instance with:
     /// - `ring_dim`: 4096
-    /// - `q`: 2^60 - 2^14 + 1 (NTT-friendly prime)
+    /// - `q`: product of CRT moduli (~2^56, NTT-friendly per modulus)
     /// - `p`: 65537 (Fermat prime F4)
     /// - `sigma`: 6.4
     /// - `gadget_base`: 2^20
@@ -243,14 +255,16 @@ impl InspireParams {
     /// assert!(params.validate().is_ok());
     /// ```
     pub fn secure_128_d4096() -> Self {
-        // NTT-friendly prime: q ≡ 1 (mod 8192)
-        let q: u64 = 1152921504606830593;
+        // CRT moduli from InsPIRe reference (each ≡ 1 mod 8192)
+        let crt_moduli = DEFAULT_CRT_MODULI.to_vec();
+        let q: u64 = crt_moduli.iter().product();
         let gadget_base: u64 = 1 << 20;
-        let gadget_len = 3;
+        let gadget_len = ((q as f64).log2() / 20.0).ceil() as usize;
 
         Self {
             ring_dim: 4096,
             q,
+            crt_moduli,
             p: 65537, // Fermat prime F4, coprime with any power-of-2 ring dimension
             sigma: 6.4,
             gadget_base,
@@ -281,6 +295,21 @@ impl InspireParams {
     /// ```
     pub fn delta(&self) -> u64 {
         self.q / self.p
+    }
+
+    /// Returns the CRT moduli slice.
+    pub fn moduli(&self) -> &[u64] {
+        &self.crt_moduli
+    }
+
+    /// Number of CRT moduli.
+    pub fn crt_count(&self) -> usize {
+        self.crt_moduli.len()
+    }
+
+    /// Create an NTT context for these parameters.
+    pub fn ntt_context(&self) -> NttContext {
+        NttContext::with_moduli(self.ring_dim, self.moduli())
     }
 
     /// Validates that the parameters satisfy required constraints.
@@ -322,9 +351,31 @@ impl InspireParams {
             return Err("ring_dim must be a power of two");
         }
 
-        // q must be NTT-friendly: q ≡ 1 (mod 2d)
-        if self.q % (2 * self.ring_dim as u64) != 1 {
-            return Err("q must be ≡ 1 (mod 2d) for NTT");
+        // CRT modulus checks
+        if self.crt_moduli.is_empty() {
+            return Err("crt_moduli must be non-empty");
+        }
+        if self.crt_moduli.len() > 2 {
+            return Err("crt_moduli length > 2 is not supported");
+        }
+
+        let two_n = 2 * self.ring_dim as u64;
+        for &m in &self.crt_moduli {
+            if m % two_n != 1 {
+                return Err("CRT moduli must be ≡ 1 (mod 2d) for NTT");
+            }
+        }
+
+        let crt_product: u64 = self.crt_moduli.iter().product();
+        if self.q != crt_product {
+            return Err("q must equal product of CRT moduli");
+        }
+        if self.crt_moduli.len() == 2 {
+            let a = self.crt_moduli[0];
+            let b = self.crt_moduli[1];
+            if gcd_u64(a, b) != 1 {
+                return Err("CRT moduli must be coprime");
+            }
         }
 
         // p must be at most q to allow scaling (Δ = ⌊q/p⌋)
@@ -334,6 +385,15 @@ impl InspireParams {
 
         Ok(())
     }
+}
+
+fn gcd_u64(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    a
 }
 
 impl Default for InspireParams {
@@ -541,9 +601,9 @@ mod tests {
     fn test_delta_calculation() {
         let params = InspireParams::secure_128_d2048();
         let delta = params.delta();
-        // delta = q / p ≈ 2^60 / 2^16 = 2^44
+        // delta = q / p (CRT q for secure_128_d2048)
         assert!(delta > 0);
-        assert!(delta > (1 << 40)); // Should be large
+        assert!(delta > (1 << 39)); // Should be large
     }
 
     #[test]

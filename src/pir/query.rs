@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::inspiring::ClientPackingKeys;
 use crate::lwe::LweSecretKey;
-use crate::math::{GaussianSampler, NttContext};
+use crate::math::GaussianSampler;
 use crate::modulus_switch::{SwitchedSeededRgswCiphertext, DEFAULT_SWITCHED_Q};
 use crate::params::ShardConfig;
 use crate::rgsw::{
@@ -36,13 +36,13 @@ fn seeded_query_with_gadget(
 ) -> Result<(ClientState, SeededClientQuery)> {
     let d = crs.ring_dim();
     let q = crs.modulus();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let (shard_id, local_index) = shard_config.index_to_shard(global_index);
 
     let lwe_sk = rlwe_to_lwe_key(rlwe_sk);
 
-    let inv_mono = inverse_monomial(local_index as usize, d, q);
+    let inv_mono = inverse_monomial(local_index as usize, d, q, crs.params.moduli());
     let rgsw_ciphertext =
         SeededRgswCiphertext::encrypt(rlwe_sk, &inv_mono, gadget, sampler, &ctx);
 
@@ -219,13 +219,13 @@ pub fn query(
 ) -> Result<(ClientState, ClientQuery)> {
     let d = crs.ring_dim();
     let q = crs.modulus();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let (shard_id, local_index) = shard_config.index_to_shard(global_index);
 
     let lwe_sk = rlwe_to_lwe_key(rlwe_sk);
 
-    let inv_mono = inverse_monomial(local_index as usize, d, q);
+    let inv_mono = inverse_monomial(local_index as usize, d, q, crs.params.moduli());
     let rgsw_ciphertext =
         RgswCiphertext::encrypt(rlwe_sk, &inv_mono, &crs.rgsw_gadget, sampler, &ctx);
 
@@ -370,7 +370,11 @@ pub fn query_switched(
 ///
 /// The LWE key is the coefficient vector of the RLWE key polynomial.
 fn rlwe_to_lwe_key(rlwe_sk: &RlweSecretKey) -> LweSecretKey {
-    let coeffs = rlwe_sk.poly.coeffs().to_vec();
+    let d = rlwe_sk.ring_dim();
+    let mut coeffs = Vec::with_capacity(d);
+    for i in 0..d {
+        coeffs.push(rlwe_sk.poly.coeff(i));
+    }
     let q = rlwe_sk.modulus();
     LweSecretKey::from_coeffs(coeffs, q)
 }
@@ -384,6 +388,7 @@ mod tests {
         crate::params::InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -464,10 +469,17 @@ mod tests {
 
     #[test]
     fn test_query_size_comparison() {
-        use crate::params::InspireParams;
-
         // Use production parameters for realistic size comparison
-        let params = InspireParams::secure_128_d2048();
+        let params = crate::params::InspireParams {
+            ring_dim: 2048,
+            q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
+            p: 65536,
+            sigma: 6.4,
+            gadget_base: 1 << 20,
+            gadget_len: 3,
+            security_level: crate::params::SecurityLevel::Bits128,
+        };
         let mut sampler = GaussianSampler::new(params.sigma);
 
         let entry_size = 32;

@@ -30,10 +30,13 @@ pub fn save_shards_binary(shards: &[ShardData], dir: &Path) -> Result<()> {
 
         if let Some(first_poly) = shard.polynomials.first() {
             writer.write_u32::<LittleEndian>(first_poly.dimension() as u32)?;
-            writer.write_u64::<LittleEndian>(first_poly.modulus())?;
+            writer.write_u32::<LittleEndian>(first_poly.crt_count() as u32)?;
+            for &modulus in first_poly.moduli() {
+                writer.write_u64::<LittleEndian>(modulus)?;
+            }
         } else {
             writer.write_u32::<LittleEndian>(0)?;
-            writer.write_u64::<LittleEndian>(0)?;
+            writer.write_u32::<LittleEndian>(0)?;
         }
 
         // Polynomials
@@ -60,15 +63,19 @@ pub fn load_shard_binary(path: &Path) -> Result<ShardData> {
     let id = cursor.read_u32::<LittleEndian>()?;
     let num_polys = cursor.read_u32::<LittleEndian>()? as usize;
     let ring_dim = cursor.read_u32::<LittleEndian>()? as usize;
-    let modulus = cursor.read_u64::<LittleEndian>()?;
+    let crt_count = cursor.read_u32::<LittleEndian>()? as usize;
+    let mut moduli = Vec::with_capacity(crt_count);
+    for _ in 0..crt_count {
+        moduli.push(cursor.read_u64::<LittleEndian>()?);
+    }
 
     let mut polynomials = Vec::with_capacity(num_polys);
     for _ in 0..num_polys {
-        let mut coeffs = Vec::with_capacity(ring_dim);
-        for _ in 0..ring_dim {
+        let mut coeffs = Vec::with_capacity(ring_dim * crt_count);
+        for _ in 0..(ring_dim * crt_count) {
             coeffs.push(cursor.read_u64::<LittleEndian>()?);
         }
-        polynomials.push(Poly::from_coeffs(coeffs, modulus));
+        polynomials.push(Poly::from_crt_coeffs(coeffs, &moduli));
     }
 
     Ok(ShardData { id, polynomials })
@@ -123,8 +130,8 @@ mod tests {
     fn test_shard_roundtrip() {
         let dir = tempdir().unwrap();
 
-        let poly1 = Poly::from_coeffs(vec![1, 2, 3, 4], 100);
-        let poly2 = Poly::from_coeffs(vec![5, 6, 7, 8], 100);
+        let poly1 = Poly::from_coeffs_moduli(vec![1, 2, 3, 4], &[100]);
+        let poly2 = Poly::from_coeffs_moduli(vec![5, 6, 7, 8], &[100]);
         let shard = ShardData {
             id: 0,
             polynomials: vec![poly1, poly2],
@@ -147,7 +154,7 @@ mod tests {
         let shards: Vec<ShardData> = (0..3)
             .map(|i| ShardData {
                 id: i,
-                polynomials: vec![Poly::from_coeffs(vec![i as u64; 4], 100)],
+                polynomials: vec![Poly::from_coeffs_moduli(vec![i as u64; 4], &[100])],
             })
             .collect();
 

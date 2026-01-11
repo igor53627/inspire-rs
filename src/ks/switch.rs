@@ -31,7 +31,7 @@ pub fn key_switch(
     ctx: &NttContext,
 ) -> RlweCiphertext {
     let d = ct.ring_dim();
-    let q = ct.modulus();
+    let moduli = ct.a.moduli();
     let gadget = &ks_matrix.gadget;
     let ell = gadget.len;
 
@@ -39,7 +39,7 @@ pub fn key_switch(
     let a_decomp = gadget_decompose(&ct.a, gadget);
 
     // Initialize result: (0, b)
-    let mut result_a = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, moduli);
     let mut result_b = ct.b.clone();
 
     // Accumulate: Σᵢ aᵢ · K[i]
@@ -62,13 +62,14 @@ pub fn key_switch(
 ///
 /// This is an optimized version when the key-switching matrix rows
 /// are already in NTT domain.
+#[allow(dead_code)]
 pub fn key_switch_ntt(
     ct: &RlweCiphertext,
     ks_matrix: &KeySwitchingMatrix,
     ctx: &NttContext,
 ) -> RlweCiphertext {
     let d = ct.ring_dim();
-    let q = ct.modulus();
+    let moduli = ct.a.moduli();
     let gadget = &ks_matrix.gadget;
     let ell = gadget.len;
 
@@ -85,7 +86,7 @@ pub fn key_switch_ntt(
         .collect();
 
     // Initialize result: (0, b)
-    let mut result_a = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, moduli);
     result_a.to_ntt(ctx);
 
     let mut result_b = ct.b.clone();
@@ -121,7 +122,7 @@ pub fn key_switch_ntt(
 mod tests {
     use super::*;
     use crate::ks::generate_ks_matrix;
-    use crate::math::{GaussianSampler, ModQ};
+    use crate::math::GaussianSampler;
     use crate::params::InspireParams;
     use crate::rgsw::GadgetVector;
     use crate::rlwe::RlweSecretKey;
@@ -131,17 +132,11 @@ mod tests {
     }
 
     fn make_ctx(params: &InspireParams) -> NttContext {
-        NttContext::new(params.ring_dim, params.q)
+        params.ntt_context()
     }
 
-    fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly {
-        let coeffs: Vec<u64> = (0..dim)
-            .map(|_| {
-                let sample = sampler.sample();
-                ModQ::from_signed(sample, q)
-            })
-            .collect();
-        Poly::from_coeffs(coeffs, q)
+    fn sample_error_poly(dim: usize, moduli: &[u64], sampler: &mut GaussianSampler) -> Poly {
+        Poly::sample_gaussian_moduli(dim, moduli, sampler)
     }
 
     #[test]
@@ -163,9 +158,9 @@ mod tests {
         let msg_coeffs: Vec<u64> = (0..params.ring_dim)
             .map(|i| (i as u64) % params.p)
             .collect();
-        let msg = Poly::from_coeffs(msg_coeffs.clone(), params.q);
-        let a = Poly::random(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let msg = Poly::from_coeffs_moduli(msg_coeffs.clone(), params.moduli());
+        let a = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let ct1 = RlweCiphertext::encrypt(&sk1, &msg, delta, a, &e, &ctx);
 
         // Verify original decryption under sk1
@@ -208,9 +203,9 @@ mod tests {
         let ks_matrix = generate_ks_matrix(&sk1, &sk2, &gadget, &mut sampler, &ctx);
 
         // Encrypt zero under sk1
-        let msg = Poly::zero(params.ring_dim, params.q);
-        let a = Poly::random(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let msg = Poly::zero_moduli(params.ring_dim, params.moduli());
+        let a = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let ct1 = RlweCiphertext::encrypt(&sk1, &msg, delta, a, &e, &ctx);
 
         // Key-switch
@@ -239,9 +234,9 @@ mod tests {
 
         // Encrypt a message
         let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % 100).collect();
-        let msg = Poly::from_coeffs(msg_coeffs.clone(), params.q);
-        let a = Poly::random(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let msg = Poly::from_coeffs_moduli(msg_coeffs.clone(), params.moduli());
+        let a = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let ct = RlweCiphertext::encrypt(&sk, &msg, delta, a, &e, &ctx);
 
         // Key-switch (to same key)
@@ -275,9 +270,9 @@ mod tests {
 
         // Encrypt message under sk1
         let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % 50).collect();
-        let msg = Poly::from_coeffs(msg_coeffs.clone(), params.q);
-        let a = Poly::random(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let msg = Poly::from_coeffs_moduli(msg_coeffs.clone(), params.moduli());
+        let a = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let ct = RlweCiphertext::encrypt(&sk1, &msg, delta, a, &e, &ctx);
 
         // Both methods should produce equivalent results
@@ -313,15 +308,15 @@ mod tests {
             .map(|i| ((i + 10) as u64) % 30)
             .collect();
 
-        let msg1 = Poly::from_coeffs(msg1_coeffs.clone(), params.q);
-        let msg2 = Poly::from_coeffs(msg2_coeffs.clone(), params.q);
+        let msg1 = Poly::from_coeffs_moduli(msg1_coeffs.clone(), params.moduli());
+        let msg2 = Poly::from_coeffs_moduli(msg2_coeffs.clone(), params.moduli());
 
-        let a1 = Poly::random(params.ring_dim, params.q);
-        let e1 = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let a1 = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e1 = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let ct1 = RlweCiphertext::encrypt(&sk1, &msg1, delta, a1, &e1, &ctx);
 
-        let a2 = Poly::random(params.ring_dim, params.q);
-        let e2 = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let a2 = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e2 = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let ct2 = RlweCiphertext::encrypt(&sk1, &msg2, delta, a2, &e2, &ctx);
 
         // Homomorphic add

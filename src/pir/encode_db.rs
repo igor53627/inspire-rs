@@ -36,10 +36,10 @@ pub fn encode_column(column: &[u64], params: &InspireParams) -> Poly {
     let q = params.q;
 
     if column.is_empty() {
-        return Poly::zero(d, q);
+        return Poly::zero_moduli(d, params.moduli());
     }
 
-    encode_direct(column, d, q)
+    encode_direct(column, d, q, params.moduli())
 }
 
 /// Direct coefficient encoding: store values as polynomial coefficients
@@ -53,14 +53,14 @@ pub fn encode_column(column: &[u64], params: &InspireParams) -> Poly {
 ///
 /// # Returns
 /// Polynomial with values stored as coefficients
-pub fn encode_direct(values: &[u64], d: usize, q: u64) -> Poly {
+pub fn encode_direct(values: &[u64], d: usize, q: u64, moduli: &[u64]) -> Poly {
     let mut coeffs = vec![0u64; d];
     for (i, &val) in values.iter().enumerate() {
         if i < d {
             coeffs[i] = val % q;
         }
     }
-    Poly::from_coeffs(coeffs, q)
+    Poly::from_coeffs_moduli(coeffs, moduli)
 }
 
 /// Create inverse monomial X^(-k) mod (X^d + 1)
@@ -77,7 +77,7 @@ pub fn encode_direct(values: &[u64], d: usize, q: u64) -> Poly {
 ///
 /// # Returns
 /// Polynomial representing X^(-k) = -X^(d-k) for k > 0, or 1 for k = 0
-pub fn inverse_monomial(k: usize, d: usize, q: u64) -> Poly {
+pub fn inverse_monomial(k: usize, d: usize, q: u64, moduli: &[u64]) -> Poly {
     let mut coeffs = vec![0u64; d];
 
     if k == 0 {
@@ -87,7 +87,7 @@ pub fn inverse_monomial(k: usize, d: usize, q: u64) -> Poly {
         coeffs[pos] = q - 1; // -1 mod q
     }
 
-    Poly::from_coeffs(coeffs, q)
+    Poly::from_coeffs_moduli(coeffs, moduli)
 }
 
 /// Encode full database into polynomial representation
@@ -213,7 +213,7 @@ pub fn reconstruct_entry(column_values: &[u64], entry_size: usize) -> Vec<u8> {
 /// # Returns
 /// Vector of polynomials representing z_k = X^(2d*k/t)
 #[allow(dead_code)]
-pub fn generate_eval_points_poly(t: usize, d: usize, q: u64) -> Vec<Poly> {
+pub fn generate_eval_points_poly(t: usize, d: usize, q: u64, moduli: &[u64]) -> Vec<Poly> {
     if t == 0 {
         return vec![];
     }
@@ -223,7 +223,7 @@ pub fn generate_eval_points_poly(t: usize, d: usize, q: u64) -> Vec<Poly> {
 
     for k in 0..t {
         let power = (k * step) % (2 * d);
-        let poly = monomial(power, d, q);
+        let poly = monomial(power, d, q, moduli);
         points.push(poly);
     }
 
@@ -234,7 +234,7 @@ pub fn generate_eval_points_poly(t: usize, d: usize, q: u64) -> Vec<Poly> {
 ///
 /// X^d = -1, so X^(d+k) = -X^k
 #[allow(dead_code)]
-fn monomial(power: usize, d: usize, q: u64) -> Poly {
+fn monomial(power: usize, d: usize, q: u64, moduli: &[u64]) -> Poly {
     let mut coeffs = vec![0u64; d];
 
     if power < d {
@@ -244,7 +244,7 @@ fn monomial(power: usize, d: usize, q: u64) -> Poly {
         coeffs[reduced_power] = q - 1;
     }
 
-    Poly::from_coeffs(coeffs, q)
+    Poly::from_coeffs_moduli(coeffs, moduli)
 }
 
 #[cfg(test)]
@@ -256,6 +256,7 @@ mod tests {
         InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -284,7 +285,7 @@ mod tests {
         let q = 1152921504606830593u64;
         let values: Vec<u64> = (0..16).map(|i| (i * 7 + 3) as u64).collect();
 
-        let poly = encode_direct(&values, d, q);
+        let poly = encode_direct(&values, d, q, &[q]);
 
         for (i, &val) in values.iter().enumerate() {
             assert_eq!(poly.coeff(i), val, "Coefficient {} should be {}", i, val);
@@ -299,7 +300,7 @@ mod tests {
         let d = 256;
         let q = 1152921504606830593u64;
 
-        let poly = encode_direct(&[], d, q);
+        let poly = encode_direct(&[], d, q, &[q]);
 
         assert!(poly.is_zero());
     }
@@ -317,8 +318,9 @@ mod tests {
     fn test_inverse_monomial_zero() {
         let d = 256;
         let q = 1152921504606830593u64;
+        let moduli = [q];
 
-        let inv_m0 = inverse_monomial(0, d, q);
+        let inv_m0 = inverse_monomial(0, d, q, &moduli);
 
         assert_eq!(inv_m0.coeff(0), 1);
         for i in 1..d {
@@ -330,8 +332,9 @@ mod tests {
     fn test_inverse_monomial_one() {
         let d = 256;
         let q = 1152921504606830593u64;
+        let moduli = [q];
 
-        let inv_m1 = inverse_monomial(1, d, q);
+        let inv_m1 = inverse_monomial(1, d, q, &moduli);
 
         assert_eq!(inv_m1.coeff(d - 1), q - 1);
         for i in 0..(d - 1) {
@@ -343,13 +346,14 @@ mod tests {
     fn test_inverse_monomial_rotation() {
         let d = 256;
         let q = 1152921504606830593u64;
-        let ctx = NttContext::new(d, q);
+        let moduli = [q];
+        let ctx = NttContext::with_moduli(d, &moduli);
 
         let values: Vec<u64> = (0..d).map(|i| (i + 1) as u64).collect();
-        let h = encode_direct(&values, d, q);
+        let h = encode_direct(&values, d, q, &moduli);
 
         for k in 0..16 {
-            let inv_mono = inverse_monomial(k, d, q);
+            let inv_mono = inverse_monomial(k, d, q, &moduli);
             let rotated = h.mul_ntt(&inv_mono, &ctx);
 
             let expected = values[k];
@@ -383,18 +387,19 @@ mod tests {
     fn test_monomial_in_ring() {
         let d = 256;
         let q = 1152921504606830593u64;
+        let moduli = [q];
 
-        let m0 = monomial(0, d, q);
+        let m0 = monomial(0, d, q, &moduli);
         assert_eq!(m0.coeff(0), 1);
         for i in 1..d {
             assert_eq!(m0.coeff(i), 0);
         }
 
-        let m1 = monomial(1, d, q);
+        let m1 = monomial(1, d, q, &moduli);
         assert_eq!(m1.coeff(0), 0);
         assert_eq!(m1.coeff(1), 1);
 
-        let m_d = monomial(d, d, q);
+        let m_d = monomial(d, d, q, &moduli);
         assert_eq!(m_d.coeff(0), q - 1);
         for i in 1..d {
             assert_eq!(m_d.coeff(i), 0);
@@ -407,7 +412,7 @@ mod tests {
         let q = 1152921504606830593u64;
 
         for t in [1, 2, 4, 8, 16, 32] {
-            let points = generate_eval_points_poly(t, d, q);
+            let points = generate_eval_points_poly(t, d, q, &[q]);
             assert_eq!(points.len(), t);
         }
     }
@@ -418,7 +423,7 @@ mod tests {
         let q = 1152921504606830593u64;
         let t = 8;
 
-        let points = generate_eval_points_poly(t, d, q);
+        let points = generate_eval_points_poly(t, d, q, &[q]);
 
         assert_eq!(points[0].coeff(0), 1);
         for i in 1..d {

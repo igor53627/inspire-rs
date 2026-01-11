@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use crate::inspiring::{packing_offline, PackParams, PackingKeyBody, PrecompInsPIR};
 use crate::ks::{generate_automorphism_ks_matrix, generate_packing_ks_matrix, KeySwitchingMatrix};
 use crate::lwe::LweSecretKey;
-use crate::math::{GaussianSampler, NttContext, Poly};
+use crate::math::{GaussianSampler, Poly};
 use crate::params::{InspireParams, ShardConfig};
 use crate::rgsw::GadgetVector;
 use crate::rlwe::{galois_generators, RlweSecretKey};
@@ -143,7 +143,7 @@ pub fn setup(
 
     let d = params.ring_dim;
     let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
 
     let total_entries = database.len() / entry_size;
     let shard_config = ShardConfig {
@@ -174,7 +174,7 @@ pub fn setup(
 
     let crs_a_vectors: Vec<Vec<u64>> = (0..d)
         .map(|_| {
-            let poly = Poly::random(d, q);
+            let poly = Poly::random_moduli(d, params.moduli());
             poly.coeffs().to_vec()
         })
         .collect();
@@ -207,7 +207,7 @@ pub fn setup(
     let a_polys: Vec<Poly> = crs_a_vectors
         .iter()
         .take(num_columns) // Only use first num_columns a-vectors
-        .map(|a| Poly::from_coeffs(a.clone(), q))
+        .map(|a| Poly::from_crt_coeffs(a.clone(), params.moduli()))
         .collect();
     let inspiring_precomp = packing_offline(
         &inspiring_pack_params,
@@ -268,6 +268,7 @@ mod tests {
         InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -312,7 +313,7 @@ mod tests {
             .map(|i| (i % 256) as u8)
             .collect();
 
-        let result = setup_with_secret_key(&params, &database, entry_size, &mut sampler);
+        let result = setup(&params, &database, entry_size, &mut sampler);
         assert!(result.is_ok());
 
         let (crs, encoded_db, sk) = result.unwrap();

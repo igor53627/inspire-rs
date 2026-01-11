@@ -344,13 +344,14 @@ mod tests {
 
     #[test]
     fn test_lwe_extraction_key_consistency() {
-        use crate::math::{GaussianSampler, NttContext, Poly};
+        use crate::math::{GaussianSampler, Poly};
         use crate::params::InspireParams;
         use crate::rlwe::{RlweCiphertext, RlweSecretKey};
 
         let params = InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -361,7 +362,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta_val = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         // Generate RLWE secret key

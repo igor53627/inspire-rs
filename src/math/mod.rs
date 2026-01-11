@@ -27,6 +27,7 @@
 //! ```
 
 pub mod gaussian;
+pub mod crt;
 pub mod mod_q;
 pub mod modular;
 pub mod ntt;
@@ -35,6 +36,7 @@ pub mod sampler;
 pub mod sampling;
 
 pub use gaussian::GaussianSampler;
+pub use crt::{crt_compose_2, crt_decompose_2, crt_modulus, mod_inverse};
 pub use mod_q::DEFAULT_Q;
 pub use modular::ModQ;
 pub use ntt::NttContext;
