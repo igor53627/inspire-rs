@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_DIR: /tmp/sccache
     steps:
       - uses: actions/checkout@v4
 
@@ -15,18 +19,11 @@ jobs:
         with:
           components: clippy
 
+      - uses: mozilla-actions/sccache-action@v0.0.6
+
       - uses: Swatinem/rust-cache@v2
         with:
           cache-targets: true
-
-      - name: Install sccache
-        run: |
-          cargo install sccache --locked
-
-      - name: Configure sccache
-        run: |
-          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
-          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
 
       - name: Build
         run: cargo build --all-targets
@@ -39,4 +36,5 @@ jobs:
 
       - name: sccache stats
         if: always()
-        run: sccache --show-stats
+        continue-on-error: true
+        run: command -v sccache >/dev/null && sccache --show-stats || true

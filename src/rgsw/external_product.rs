@@ -50,6 +50,18 @@ pub fn gadget_reconstruct(decomposed: &[Poly], gadget: &GadgetVector) -> Poly {
 
     let d = decomposed[0].dimension();
     let moduli = decomposed[0].moduli();
+    for (idx, poly) in decomposed.iter().enumerate() {
+        debug_assert_eq!(
+            poly.dimension(),
+            d,
+            "Decomposed poly[{idx}] has mismatched dimension"
+        );
+        debug_assert_eq!(
+            poly.moduli(),
+            moduli,
+            "Decomposed poly[{idx}] has mismatched moduli"
+        );
+    }
     let powers = gadget.powers();
 
     let mut result = Poly::zero_moduli(d, moduli);
@@ -82,6 +94,30 @@ pub fn external_product(
     let moduli = rlwe.a.moduli();
     let gadget = &rgsw.gadget;
     let ell = gadget.len;
+    debug_assert_eq!(rlwe.b.moduli(), moduli, "RLWE components must share moduli");
+    debug_assert_eq!(ctx.moduli(), moduli, "NTT context moduli must match ciphertext moduli");
+    debug_assert_eq!(
+        rgsw.rows.len(),
+        2 * ell,
+        "RGSW must have 2ℓ rows"
+    );
+    for (idx, row) in rgsw.rows.iter().enumerate() {
+        debug_assert_eq!(
+            row.ring_dim(),
+            d,
+            "RGSW row[{idx}] has mismatched ring dimension"
+        );
+        debug_assert_eq!(
+            row.a.moduli(),
+            moduli,
+            "RGSW row[{idx}] moduli mismatch in a component"
+        );
+        debug_assert_eq!(
+            row.b.moduli(),
+            moduli,
+            "RGSW row[{idx}] moduli mismatch in b component"
+        );
+    }
 
     // Decompose both components of the RLWE ciphertext
     let a_decomp = gadget_decompose(&rlwe.a, gadget);
