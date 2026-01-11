@@ -18,6 +18,7 @@ use crate::inspiring::packing_online;
 use crate::math::{NttContext, Poly};
 use crate::params::InspireVariant;
 use crate::rgsw::external_product;
+use crate::rgsw::DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR;
 use crate::rlwe::RlweCiphertext;
 
 use super::error::{pir_err, Result};
@@ -34,6 +35,44 @@ pub struct ServerResponse {
     pub ciphertext: RlweCiphertext,
     /// Per-column ciphertexts (for proper multi-column extraction)
     pub column_ciphertexts: Vec<RlweCiphertext>,
+}
+
+fn validate_switched_query(crs: &ServerCrs, query: &SwitchedClientQuery) -> Result<()> {
+    let gadget = &query.rgsw_ciphertext.gadget;
+
+    if gadget.q != crs.params.q {
+        return Err(pir_err!(
+            "Switched query gadget modulus mismatch: gadget.q={} crs.q={}",
+            gadget.q,
+            crs.params.q
+        ));
+    }
+
+    let switched_q = query.rgsw_ciphertext.switched_modulus();
+    if switched_q > u32::MAX as u64 {
+        return Err(pir_err!(
+            "Switched modulus q'={} exceeds u32; unsupported by switched query format",
+            switched_q
+        ));
+    }
+
+    let p = crs.params.p;
+    let max_product =
+        (switched_q as u128) / (2u128 * p as u128 * DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR);
+    let product = gadget.base as u128 * gadget.len as u128;
+
+    if max_product < 2 || product > max_product {
+        return Err(pir_err!(
+            "Switched query gadget base/len too large for q'={} (base={} len={} p={} safety_factor={}); require base*len <= q'/(2*p*safety_factor)",
+            switched_q,
+            gadget.base,
+            gadget.len,
+            p,
+            DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR
+        ));
+    }
+
+    Ok(())
 }
 
 impl ServerResponse {
@@ -388,15 +427,17 @@ pub fn respond_seeded_packed(
 /// Modulus switching on RGSW ciphertexts may introduce too much noise.
 /// See `query_switched` documentation for details.
 ///
-/// # Query Size Comparison (d=2048, ℓ=3)
-/// - Full query: ~196 KB
-/// - Seeded query: ~98 KB  
-/// - Switched+seeded query: ~50 KB (75% reduction)
+/// # Query Size Comparison (d=2048)
+/// - Full query (ℓ=3): ~196 KB
+/// - Seeded query (ℓ=3): ~98 KB
+/// - Switched+seeded query depends on gadget selection; with the safe gadget
+///   for q'=2^30 it's typically ~95–115 KB.
 pub fn respond_switched(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
     query: &SwitchedClientQuery,
 ) -> Result<ServerResponse> {
+    validate_switched_query(crs, query)?;
     let expanded = query.expand();
     respond(crs, encoded_db, &expanded)
 }
@@ -409,6 +450,7 @@ pub fn respond_switched_packed(
     encoded_db: &EncodedDatabase,
     query: &SwitchedClientQuery,
 ) -> Result<ServerResponse> {
+    validate_switched_query(crs, query)?;
     let expanded = query.expand();
     respond_one_packing(crs, encoded_db, &expanded)
 }
