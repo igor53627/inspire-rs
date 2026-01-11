@@ -442,6 +442,10 @@ pub fn respond_switched(
 /// PIR.Respond with switched+seeded query using OnePacking
 ///
 /// Maximum compression variant: 75% query reduction + 16x response reduction.
+///
+/// NOTE: With current default parameters, switched+OnePacking is not
+/// correctness-safe due to noise amplification. Prefer `respond_switched`
+/// (no packing) until parameters are updated.
 pub fn respond_switched_packed(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
