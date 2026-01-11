@@ -15,13 +15,12 @@ use super::types::{GadgetVector, RgswCiphertext};
 /// The digits are in [0, z) range for simplicity.
 pub fn gadget_decompose(poly: &Poly, gadget: &GadgetVector) -> Vec<Poly> {
     let d = poly.dimension();
-    let q = poly.modulus();
     let base = gadget.base;
     let ell = gadget.len;
 
     let mut result = Vec::with_capacity(ell);
     for _ in 0..ell {
-        result.push(Poly::zero(d, q));
+        result.push(Poly::zero_moduli(d, poly.moduli()));
     }
 
     for j in 0..d {
@@ -50,10 +49,22 @@ pub fn gadget_reconstruct(decomposed: &[Poly], gadget: &GadgetVector) -> Poly {
     );
 
     let d = decomposed[0].dimension();
-    let q = decomposed[0].modulus();
+    let moduli = decomposed[0].moduli();
+    for (idx, poly) in decomposed.iter().enumerate() {
+        assert_eq!(
+            poly.dimension(),
+            d,
+            "Decomposed poly[{idx}] has mismatched dimension"
+        );
+        assert_eq!(
+            poly.moduli(),
+            moduli,
+            "Decomposed poly[{idx}] has mismatched moduli"
+        );
+    }
     let powers = gadget.powers();
 
-    let mut result = Poly::zero(d, q);
+    let mut result = Poly::zero_moduli(d, moduli);
 
     for (i, poly) in decomposed.iter().enumerate() {
         let scaled = poly.scalar_mul(powers[i]);
@@ -80,17 +91,41 @@ pub fn external_product(
     ctx: &NttContext,
 ) -> RlweCiphertext {
     let d = rlwe.ring_dim();
-    let q = rlwe.modulus();
+    let moduli = rlwe.a.moduli();
     let gadget = &rgsw.gadget;
     let ell = gadget.len;
+    assert_eq!(rlwe.b.moduli(), moduli, "RLWE components must share moduli");
+    assert_eq!(ctx.moduli(), moduli, "NTT context moduli must match ciphertext moduli");
+    assert_eq!(
+        rgsw.rows.len(),
+        2 * ell,
+        "RGSW must have 2ℓ rows"
+    );
+    for (idx, row) in rgsw.rows.iter().enumerate() {
+        assert_eq!(
+            row.ring_dim(),
+            d,
+            "RGSW row[{idx}] has mismatched ring dimension"
+        );
+        assert_eq!(
+            row.a.moduli(),
+            moduli,
+            "RGSW row[{idx}] moduli mismatch in a component"
+        );
+        assert_eq!(
+            row.b.moduli(),
+            moduli,
+            "RGSW row[{idx}] moduli mismatch in b component"
+        );
+    }
 
     // Decompose both components of the RLWE ciphertext
     let a_decomp = gadget_decompose(&rlwe.a, gadget);
     let b_decomp = gadget_decompose(&rlwe.b, gadget);
 
     // Initialize result as zero
-    let mut result_a = Poly::zero(d, q);
-    let mut result_b = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, moduli);
+    let mut result_b = Poly::zero_moduli(d, moduli);
 
     // Sum over decomposition digits
     for i in 0..ell {
@@ -117,7 +152,7 @@ pub fn external_product(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::math::{GaussianSampler, ModQ};
+    use crate::math::GaussianSampler;
     use crate::params::InspireParams;
     use crate::rlwe::RlweSecretKey;
 
@@ -126,17 +161,11 @@ mod tests {
     }
 
     fn make_ctx(params: &InspireParams) -> NttContext {
-        NttContext::new(params.ring_dim, params.q)
+        params.ntt_context()
     }
 
-    fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly {
-        let coeffs: Vec<u64> = (0..dim)
-            .map(|_| {
-                let sample = sampler.sample();
-                ModQ::from_signed(sample, q)
-            })
-            .collect();
-        Poly::from_coeffs(coeffs, q)
+    fn sample_error_poly(dim: usize, moduli: &[u64], sampler: &mut GaussianSampler) -> Poly {
+        Poly::sample_gaussian_moduli(dim, moduli, sampler)
     }
 
     #[test]
@@ -145,7 +174,7 @@ mod tests {
         let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
 
         // Random polynomial
-        let poly = Poly::random(params.ring_dim, params.q);
+        let poly = Poly::random_moduli(params.ring_dim, params.moduli());
 
         // Decompose and reconstruct
         let decomposed = gadget_decompose(&poly, &gadget);
@@ -160,7 +189,7 @@ mod tests {
         let params = test_params();
         let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
 
-        let poly = Poly::random(params.ring_dim, params.q);
+        let poly = Poly::random_moduli(params.ring_dim, params.moduli());
         let decomposed = gadget_decompose(&poly, &gadget);
 
         // Each digit should be in [0, base) range
@@ -182,7 +211,7 @@ mod tests {
         let params = test_params();
         let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
 
-        let zero = Poly::zero(params.ring_dim, params.q);
+        let zero = Poly::zero_moduli(params.ring_dim, params.moduli());
         let decomposed = gadget_decompose(&zero, &gadget);
 
         for digit_poly in &decomposed {
@@ -204,9 +233,9 @@ mod tests {
         let msg_coeffs: Vec<u64> = (0..params.ring_dim)
             .map(|i| (i as u64) % params.p)
             .collect();
-        let msg = Poly::from_coeffs(msg_coeffs, params.q);
-        let a = Poly::random(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let msg = Poly::from_coeffs_moduli(msg_coeffs, params.moduli());
+        let a = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let rlwe = RlweCiphertext::encrypt(&sk, &msg, delta, a, &e, &ctx);
 
         // RGSW(0)
@@ -234,10 +263,12 @@ mod tests {
         let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, params.q);
 
         // Encrypt a message
-        let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % 100).collect();
-        let msg = Poly::from_coeffs(msg_coeffs.clone(), params.q);
-        let a = Poly::random(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let msg_coeffs: Vec<u64> = (0..params.ring_dim)
+            .map(|i| (i as u64) % params.p)
+            .collect();
+        let msg = Poly::from_coeffs_moduli(msg_coeffs.clone(), params.moduli());
+        let a = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let rlwe = RlweCiphertext::encrypt(&sk, &msg, delta, a, &e, &ctx);
 
         // RGSW(1)
@@ -270,9 +301,9 @@ mod tests {
 
         // Encrypt message with small values
         let msg_coeffs: Vec<u64> = (0..params.ring_dim).map(|i| (i as u64) % 10).collect();
-        let msg = Poly::from_coeffs(msg_coeffs.clone(), params.q);
-        let a = Poly::random(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let msg = Poly::from_coeffs_moduli(msg_coeffs.clone(), params.moduli());
+        let a = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let rlwe = RlweCiphertext::encrypt(&sk, &msg, delta, a, &e, &ctx);
 
         // RGSW(3)
@@ -310,15 +341,15 @@ mod tests {
         // Encrypt constant message
         let mut msg_coeffs = vec![0u64; params.ring_dim];
         msg_coeffs[0] = 5;
-        let msg = Poly::from_coeffs(msg_coeffs, params.q);
-        let a = Poly::random(params.ring_dim, params.q);
-        let e = sample_error_poly(params.ring_dim, params.q, &mut sampler);
+        let msg = Poly::from_coeffs_moduli(msg_coeffs, params.moduli());
+        let a = Poly::random_moduli(params.ring_dim, params.moduli());
+        let e = sample_error_poly(params.ring_dim, params.moduli(), &mut sampler);
         let rlwe = RlweCiphertext::encrypt(&sk, &msg, delta, a, &e, &ctx);
 
         // RGSW(X) - monomial
         let mut monomial_coeffs = vec![0u64; params.ring_dim];
         monomial_coeffs[1] = 1;
-        let monomial = Poly::from_coeffs(monomial_coeffs, params.q);
+        let monomial = Poly::from_coeffs_moduli(monomial_coeffs, params.moduli());
         let rgsw_mono =
             super::super::RgswCiphertext::encrypt(&sk, &monomial, &gadget, &mut sampler, &ctx);
 

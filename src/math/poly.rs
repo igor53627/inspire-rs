@@ -29,9 +29,10 @@
 //! let product = a.mul_ntt(&b, &ctx);
 //! ```
 
+use super::crt::{crt_compose_2, crt_decompose_2, crt_modulus, mod_inverse};
 use super::mod_q::{ModQ, DEFAULT_Q};
 use super::ntt::NttContext;
-use super::sampler::GaussianSampler;
+use super::gaussian::GaussianSampler;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -63,18 +64,49 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 pub struct Poly {
     /// Coefficients in coefficient or NTT domain.
     coeffs: Vec<u64>,
-    /// Modulus q.
+    /// CRT moduli (length 1 for single-modulus).
+    moduli: Vec<u64>,
+    /// Composite modulus q (product of CRT moduli).
     q: u64,
+    /// Ring dimension (number of coefficients per modulus).
+    dim: usize,
+    /// Cached inverse of moduli[0] modulo moduli[1] (for CRT compose).
+    crt_q0_inv_mod_q1: u64,
     /// Whether coefficients are in NTT domain.
     is_ntt: bool,
 }
 
 impl Poly {
+    fn init_moduli(moduli: &[u64]) -> (Vec<u64>, u64, u64) {
+        assert!(!moduli.is_empty(), "moduli must be non-empty");
+        if moduli.len() > 2 {
+            panic!("CRT with more than 2 moduli not supported");
+        }
+        let moduli_vec = moduli.to_vec();
+        let q = crt_modulus(&moduli_vec);
+        let inv = if moduli_vec.len() == 2 {
+            mod_inverse(moduli_vec[0], moduli_vec[1])
+        } else {
+            0
+        };
+        (moduli_vec, q, inv)
+    }
+
     /// Create zero polynomial with given dimension and modulus
     pub fn zero(dim: usize, q: u64) -> Self {
+        Self::zero_moduli(dim, &[q])
+    }
+
+    /// Create zero polynomial with CRT moduli.
+    pub fn zero_moduli(dim: usize, moduli: &[u64]) -> Self {
+        let (moduli_vec, q, inv) = Self::init_moduli(moduli);
+        let crt_count = moduli_vec.len();
         Self {
-            coeffs: vec![0; dim],
+            coeffs: vec![0; dim * crt_count],
+            moduli: moduli_vec,
             q,
+            dim,
+            crt_q0_inv_mod_q1: inv,
             is_ntt: false,
         }
     }
@@ -86,9 +118,64 @@ impl Poly {
 
     /// Create polynomial from coefficient vector
     pub fn from_coeffs(coeffs: Vec<u64>, q: u64) -> Self {
+        Self::from_coeffs_moduli(coeffs, &[q])
+    }
+
+    /// Create polynomial from coefficients with CRT moduli.
+    ///
+    /// `coeffs` are interpreted modulo the composite modulus and split into residues.
+    pub fn from_coeffs_moduli(coeffs: Vec<u64>, moduli: &[u64]) -> Self {
+        let dim = coeffs.len();
+        let (moduli_vec, q, inv) = Self::init_moduli(moduli);
+        let crt_count = moduli_vec.len();
+        let mut crt_coeffs = vec![0u64; dim * crt_count];
+
+        if crt_count == 1 {
+            for (i, &c) in coeffs.iter().enumerate() {
+                crt_coeffs[i] = c % moduli_vec[0];
+            }
+        } else if crt_count == 2 {
+            let q0 = moduli_vec[0];
+            let q1 = moduli_vec[1];
+            for (i, &c) in coeffs.iter().enumerate() {
+                let (c0, c1) = crt_decompose_2(c, q0, q1);
+                crt_coeffs[i] = c0;
+                crt_coeffs[i + dim] = c1;
+            }
+        } else {
+            panic!("CRT with more than 2 moduli not supported");
+        }
+
+        let mut p = Self {
+            coeffs: crt_coeffs,
+            moduli: moduli_vec,
+            q,
+            dim,
+            crt_q0_inv_mod_q1: inv,
+            is_ntt: false,
+        };
+        p.reduce();
+        p
+    }
+
+    /// Create polynomial from CRT-residue coefficients.
+    ///
+    /// `coeffs` must be length `dim * crt_count` with residues concatenated
+    /// by modulus: [mod0_coeffs..., mod1_coeffs..., ...].
+    pub fn from_crt_coeffs(coeffs: Vec<u64>, moduli: &[u64]) -> Self {
+        let (moduli_vec, q, inv) = Self::init_moduli(moduli);
+        let crt_count = moduli_vec.len();
+        assert!(
+            coeffs.len() % crt_count == 0,
+            "CRT coeffs length must be a multiple of crt_count"
+        );
+        let dim = coeffs.len() / crt_count;
         let mut p = Self {
             coeffs,
+            moduli: moduli_vec,
             q,
+            dim,
+            crt_q0_inv_mod_q1: inv,
             is_ntt: false,
         };
         p.reduce();
@@ -102,42 +189,80 @@ impl Poly {
 
     /// Create polynomial with a single coefficient (constant polynomial)
     pub fn constant(value: u64, dim: usize, q: u64) -> Self {
-        let mut coeffs = vec![0; dim];
-        coeffs[0] = value % q;
-        Self {
-            coeffs,
-            q,
-            is_ntt: false,
-        }
+        Self::constant_moduli(value, dim, &[q])
+    }
+
+    /// Create constant polynomial with CRT moduli.
+    pub fn constant_moduli(value: u64, dim: usize, moduli: &[u64]) -> Self {
+        let mut coeffs = vec![0u64; dim];
+        coeffs[0] = value;
+        Self::from_coeffs_moduli(coeffs, moduli)
     }
 
     /// Sample polynomial with coefficients from discrete Gaussian distribution
     pub fn sample_gaussian(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Self {
-        let coeffs = sampler.sample_vec_centered(dim, q);
+        Self::sample_gaussian_moduli(dim, &[q], sampler)
+    }
+
+    /// Sample polynomial with CRT moduli.
+    pub fn sample_gaussian_moduli(
+        dim: usize,
+        moduli: &[u64],
+        sampler: &mut GaussianSampler,
+    ) -> Self {
+        let (moduli_vec, q, inv) = Self::init_moduli(moduli);
+        let crt_count = moduli_vec.len();
+        let mut coeffs = vec![0u64; dim * crt_count];
+        let samples = sampler.sample_vec(dim);
+        for (m, &modulus) in moduli_vec.iter().enumerate() {
+            let offset = m * dim;
+            for i in 0..dim {
+                coeffs[offset + i] = crate::math::ModQ::from_signed(samples[i], modulus);
+            }
+        }
+
         Self {
             coeffs,
+            moduli: moduli_vec,
             q,
+            dim,
+            crt_q0_inv_mod_q1: inv,
             is_ntt: false,
         }
     }
 
     /// Generate a uniformly random polynomial
     pub fn random(dim: usize, q: u64) -> Self {
+        Self::random_moduli(dim, &[q])
+    }
+
+    /// Generate a uniformly random polynomial with CRT moduli.
+    pub fn random_moduli(dim: usize, moduli: &[u64]) -> Self {
         let mut rng = rand::thread_rng();
-        let coeffs: Vec<u64> = (0..dim).map(|_| rng.gen_range(0..q)).collect();
-        Self {
-            coeffs,
-            q,
-            is_ntt: false,
-        }
+        Self::random_with_rng_moduli(dim, moduli, &mut rng)
     }
 
     /// Generate a uniformly random polynomial with given RNG
     pub fn random_with_rng<R: Rng>(dim: usize, q: u64, rng: &mut R) -> Self {
-        let coeffs: Vec<u64> = (0..dim).map(|_| rng.gen_range(0..q)).collect();
+        Self::random_with_rng_moduli(dim, &[q], rng)
+    }
+
+    /// Generate a uniformly random polynomial with CRT moduli and given RNG.
+    pub fn random_with_rng_moduli<R: Rng>(dim: usize, moduli: &[u64], rng: &mut R) -> Self {
+        let (moduli_vec, q, inv) = Self::init_moduli(moduli);
+        let crt_count = moduli_vec.len();
+        let mut coeffs = vec![0u64; dim * crt_count];
+        for (m, &modulus) in moduli_vec.iter().enumerate() {
+            for i in 0..dim {
+                coeffs[m * dim + i] = rng.gen_range(0..modulus);
+            }
+        }
         Self {
             coeffs,
+            moduli: moduli_vec,
             q,
+            dim,
+            crt_q0_inv_mod_q1: inv,
             is_ntt: false,
         }
     }
@@ -146,8 +271,13 @@ impl Poly {
     ///
     /// Uses ChaCha20 for expansion. The same seed always produces the same polynomial.
     pub fn from_seed(seed: &[u8; 32], dim: usize, q: u64) -> Self {
+        Self::from_seed_moduli(seed, dim, &[q])
+    }
+
+    /// Generate a deterministic random polynomial from a 32-byte seed and CRT moduli.
+    pub fn from_seed_moduli(seed: &[u8; 32], dim: usize, moduli: &[u64]) -> Self {
         let mut rng = ChaCha20Rng::from_seed(*seed);
-        Self::random_with_rng(dim, q, &mut rng)
+        Self::random_with_rng_moduli(dim, moduli, &mut rng)
     }
 
     /// Generate a deterministic random polynomial from seed and index
@@ -155,32 +285,52 @@ impl Poly {
     /// Derives a unique seed by XORing the base seed with the index.
     /// Useful for generating multiple independent polynomials from one seed.
     pub fn from_seed_indexed(seed: &[u8; 32], index: usize, dim: usize, q: u64) -> Self {
+        Self::from_seed_indexed_moduli(seed, index, dim, &[q])
+    }
+
+    /// Generate a deterministic random polynomial from seed and index for CRT moduli.
+    pub fn from_seed_indexed_moduli(
+        seed: &[u8; 32],
+        index: usize,
+        dim: usize,
+        moduli: &[u64],
+    ) -> Self {
         let mut derived_seed = *seed;
         let idx_bytes = (index as u64).to_le_bytes();
         for i in 0..8 {
             derived_seed[i] ^= idx_bytes[i];
         }
-        Self::from_seed(&derived_seed, dim, q)
+        Self::from_seed_moduli(&derived_seed, dim, moduli)
     }
 
     /// Get polynomial dimension
     pub fn dimension(&self) -> usize {
-        self.coeffs.len()
+        self.dim
     }
 
     /// Get polynomial length (alias for dimension)
     pub fn len(&self) -> usize {
-        self.coeffs.len()
+        self.dim
     }
 
     /// Check if polynomial has zero length
     pub fn is_empty(&self) -> bool {
-        self.coeffs.is_empty()
+        self.dim == 0
     }
 
     /// Get modulus
     pub fn modulus(&self) -> u64 {
         self.q
+    }
+
+    /// Returns CRT moduli.
+    pub fn moduli(&self) -> &[u64] {
+        &self.moduli
+    }
+
+    /// Number of CRT moduli.
+    pub fn crt_count(&self) -> usize {
+        self.moduli.len()
     }
 
     /// Check if in NTT domain
@@ -208,13 +358,33 @@ impl Poly {
     /// Get coefficient at index (only valid if not in NTT domain)
     pub fn coeff(&self, i: usize) -> u64 {
         assert!(!self.is_ntt, "Cannot access coefficients in NTT domain");
-        self.coeffs[i]
+        match self.moduli.len() {
+            1 => self.coeffs[i],
+            2 => {
+                let q0 = self.moduli[0];
+                let q1 = self.moduli[1];
+                let a0 = self.coeffs[i];
+                let a1 = self.coeffs[i + self.dim];
+                crt_compose_2(a0, a1, q0, q1, self.crt_q0_inv_mod_q1) % self.q
+            }
+            _ => panic!("CRT with more than 2 moduli not supported"),
+        }
     }
 
     /// Set coefficient at index (only valid if not in NTT domain)
     pub fn set_coeff(&mut self, i: usize, value: u64) {
         assert!(!self.is_ntt, "Cannot set coefficients in NTT domain");
-        self.coeffs[i] = value % self.q;
+        match self.moduli.len() {
+            1 => {
+                self.coeffs[i] = value % self.moduli[0];
+            }
+            2 => {
+                let (c0, c1) = crt_decompose_2(value, self.moduli[0], self.moduli[1]);
+                self.coeffs[i] = c0;
+                self.coeffs[i + self.dim] = c1;
+            }
+            _ => panic!("CRT with more than 2 moduli not supported"),
+        }
     }
 
     /// Get reference to coefficient/NTT vector
@@ -227,16 +397,39 @@ impl Poly {
         &mut self.coeffs
     }
 
+    /// Get coefficients slice for a specific CRT modulus.
+    pub fn coeffs_modulus(&self, modulus_idx: usize) -> &[u64] {
+        let start = modulus_idx * self.dim;
+        let end = start + self.dim;
+        &self.coeffs[start..end]
+    }
+
+    /// Get mutable coefficients slice for a specific CRT modulus.
+    pub fn coeffs_modulus_mut(&mut self, modulus_idx: usize) -> &mut [u64] {
+        let start = modulus_idx * self.dim;
+        let end = start + self.dim;
+        &mut self.coeffs[start..end]
+    }
+
     /// Reduce all coefficients modulo q
     fn reduce(&mut self) {
-        for c in &mut self.coeffs {
-            *c %= self.q;
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for c in &mut self.coeffs[start..end] {
+                *c %= modulus;
+            }
         }
     }
 
     /// Convert to NTT domain
     pub fn to_ntt(&mut self, ctx: &NttContext) {
         if !self.is_ntt {
+            debug_assert_eq!(
+                self.moduli,
+                ctx.moduli(),
+                "NTT context moduli must match polynomial moduli"
+            );
             ctx.forward(&mut self.coeffs);
             self.is_ntt = true;
         }
@@ -245,6 +438,11 @@ impl Poly {
     /// Convert from NTT domain to coefficient domain
     pub fn from_ntt(&mut self, ctx: &NttContext) {
         if self.is_ntt {
+            debug_assert_eq!(
+                self.moduli,
+                ctx.moduli(),
+                "NTT context moduli must match polynomial moduli"
+            );
             ctx.inverse(&mut self.coeffs);
             self.is_ntt = false;
         }
@@ -266,25 +464,35 @@ impl Poly {
 
     /// Scalar multiplication
     pub fn scalar_mul(&self, scalar: u64) -> Self {
-        let scalar = scalar % self.q;
-        let coeffs: Vec<u64> = self
-            .coeffs
-            .iter()
-            .map(|&c| ((c as u128 * scalar as u128) % self.q as u128) as u64)
-            .collect();
+        let mut coeffs = self.coeffs.clone();
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let scalar_mod = scalar % modulus;
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for c in &mut coeffs[start..end] {
+                *c = ((*c as u128 * scalar_mod as u128) % modulus as u128) as u64;
+            }
+        }
 
         Self {
             coeffs,
+            moduli: self.moduli.clone(),
             q: self.q,
+            dim: self.dim,
+            crt_q0_inv_mod_q1: self.crt_q0_inv_mod_q1,
             is_ntt: self.is_ntt,
         }
     }
 
     /// In-place scalar multiplication
     pub fn scalar_mul_assign(&mut self, scalar: u64) {
-        let scalar = scalar % self.q;
-        for c in &mut self.coeffs {
-            *c = ((*c as u128 * scalar as u128) % self.q as u128) as u64;
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let scalar_mod = scalar % modulus;
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for c in &mut self.coeffs[start..end] {
+                *c = ((*c as u128 * scalar_mod as u128) % modulus as u128) as u64;
+            }
         }
     }
 
@@ -295,7 +503,7 @@ impl Poly {
 
     /// Polynomial multiplication using NTT (negacyclic for X^d + 1)
     pub fn mul_ntt(&self, other: &Self, ctx: &NttContext) -> Self {
-        assert_eq!(self.q, other.q, "Moduli must match");
+        assert_eq!(self.moduli, other.moduli, "Moduli must match");
         assert_eq!(
             self.coeffs.len(),
             other.coeffs.len(),
@@ -313,7 +521,10 @@ impl Poly {
 
         let mut poly = Self {
             coeffs: result,
+            moduli: self.moduli.clone(),
             q: self.q,
+            dim: self.dim,
+            crt_q0_inv_mod_q1: self.crt_q0_inv_mod_q1,
             is_ntt: true,
         };
         poly.from_ntt(ctx);
@@ -326,14 +537,17 @@ impl Poly {
             self.is_ntt && other.is_ntt,
             "Both polynomials must be in NTT domain"
         );
-        assert_eq!(self.q, other.q, "Moduli must match");
+        assert_eq!(self.moduli, other.moduli, "Moduli must match");
 
         let mut result = vec![0u64; self.coeffs.len()];
         ctx.pointwise_mul(&self.coeffs, &other.coeffs, &mut result);
 
         Self {
             coeffs: result,
+            moduli: self.moduli.clone(),
             q: self.q,
+            dim: self.dim,
+            crt_q0_inv_mod_q1: self.crt_q0_inv_mod_q1,
             is_ntt: true,
         }
     }
@@ -346,31 +560,29 @@ impl Poly {
             self.is_ntt && other.is_ntt,
             "Both polynomials must be in NTT domain"
         );
-        assert_eq!(self.q, other.q, "Moduli must match");
+        assert_eq!(self.moduli, other.moduli, "Moduli must match");
         assert_eq!(
             self.coeffs.len(),
             other.coeffs.len(),
             "Dimensions must match"
         );
 
-        let q = self.q;
-        let coeffs: Vec<u64> = self
-            .coeffs
-            .iter()
-            .zip(other.coeffs.iter())
-            .map(|(&a, &b)| {
-                let sum = a + b;
-                if sum >= q {
-                    sum - q
-                } else {
-                    sum
-                }
-            })
-            .collect();
+        let mut coeffs = self.coeffs.clone();
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for i in start..end {
+                let sum = coeffs[i] + other.coeffs[i];
+                coeffs[i] = if sum >= modulus { sum - modulus } else { sum };
+            }
+        }
 
         Self {
             coeffs,
+            moduli: self.moduli.clone(),
             q: self.q,
+            dim: self.dim,
+            crt_q0_inv_mod_q1: self.crt_q0_inv_mod_q1,
             is_ntt: true,
         }
     }
@@ -383,12 +595,15 @@ impl Poly {
             self.is_ntt && other.is_ntt,
             "Both polynomials must be in NTT domain"
         );
-        assert_eq!(self.q, other.q, "Moduli must match");
+        assert_eq!(self.moduli, other.moduli, "Moduli must match");
 
-        let q = self.q;
-        for (a, &b) in self.coeffs.iter_mut().zip(other.coeffs.iter()) {
-            let sum = *a + b;
-            *a = if sum >= q { sum - q } else { sum };
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for i in start..end {
+                let sum = self.coeffs[i] + other.coeffs[i];
+                self.coeffs[i] = if sum >= modulus { sum - modulus } else { sum };
+            }
         }
     }
 
@@ -400,14 +615,17 @@ impl Poly {
             self.is_ntt && a.is_ntt && b.is_ntt,
             "All polynomials must be in NTT domain"
         );
-        assert_eq!(self.q, a.q, "Moduli must match");
-        assert_eq!(self.q, b.q, "Moduli must match");
+        assert_eq!(self.moduli, a.moduli, "Moduli must match");
+        assert_eq!(self.moduli, b.moduli, "Moduli must match");
 
-        let q = self.q as u128;
-        for i in 0..self.coeffs.len() {
-            let prod = ctx.pointwise_mul_single(a.coeffs[i], b.coeffs[i]);
-            let sum = self.coeffs[i] as u128 + prod as u128;
-            self.coeffs[i] = (sum % q) as u64;
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for i in start..end {
+                let prod = ctx.pointwise_mul_single_at(a.coeffs[i], b.coeffs[i], m);
+                let sum = self.coeffs[i] + prod;
+                self.coeffs[i] = if sum >= modulus { sum - modulus } else { sum };
+            }
         }
     }
 
@@ -420,32 +638,36 @@ impl Poly {
     /// For centered representation: returns max(|c|, |q - c|) for each c
     pub fn linf_norm(&self) -> u64 {
         assert!(!self.is_ntt, "Cannot compute norm in NTT domain");
-        self.coeffs
-            .iter()
-            .map(|&c| if c <= self.q / 2 { c } else { self.q - c })
-            .max()
-            .unwrap_or(0)
+        let mut max_val = 0u64;
+        for i in 0..self.dim {
+            let c = self.coeff(i);
+            let centered = if c <= self.q / 2 { c } else { self.q - c };
+            if centered > max_val {
+                max_val = centered;
+            }
+        }
+        max_val
     }
 
     /// L2 norm squared (sum of squared coefficients in centered representation)
     pub fn l2_norm_squared(&self) -> u128 {
         assert!(!self.is_ntt, "Cannot compute norm in NTT domain");
-        self.coeffs
-            .iter()
-            .map(|&c| {
-                let centered = if c <= self.q / 2 {
-                    c as i64
-                } else {
-                    c as i64 - self.q as i64
-                };
-                (centered as i128 * centered as i128) as u128
-            })
-            .sum()
+        let mut sum = 0u128;
+        for i in 0..self.dim {
+            let c = self.coeff(i);
+            let centered = if c <= self.q / 2 {
+                c as i64
+            } else {
+                c as i64 - self.q as i64
+            };
+            sum += (centered as i128 * centered as i128) as u128;
+        }
+        sum
     }
 
     /// Polynomial multiplication (method style, uses NTT internally)
     pub fn mul(&self, other: &Self) -> Self {
-        let ctx = NttContext::new(self.coeffs.len(), self.q);
+        let ctx = NttContext::with_moduli(self.dim, &self.moduli);
         self.mul_ntt(other, &ctx)
     }
 
@@ -467,7 +689,11 @@ impl Poly {
 
 impl PartialEq for Poly {
     fn eq(&self, other: &Self) -> bool {
-        self.q == other.q && self.is_ntt == other.is_ntt && self.coeffs == other.coeffs
+        self.q == other.q
+            && self.moduli == other.moduli
+            && self.dim == other.dim
+            && self.is_ntt == other.is_ntt
+            && self.coeffs == other.coeffs
     }
 }
 
@@ -485,26 +711,25 @@ impl Add for &Poly {
     type Output = Poly;
 
     fn add(self, rhs: Self) -> Self::Output {
-        assert_eq!(self.q, rhs.q, "Moduli must match");
+        assert_eq!(self.moduli, rhs.moduli, "Moduli must match");
         assert_eq!(self.is_ntt, rhs.is_ntt, "NTT domains must match");
 
-        let coeffs: Vec<u64> = self
-            .coeffs
-            .iter()
-            .zip(rhs.coeffs.iter())
-            .map(|(&a, &b)| {
-                let sum = a + b;
-                if sum >= self.q {
-                    sum - self.q
-                } else {
-                    sum
-                }
-            })
-            .collect();
+        let mut coeffs = self.coeffs.clone();
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for i in start..end {
+                let sum = coeffs[i] + rhs.coeffs[i];
+                coeffs[i] = if sum >= modulus { sum - modulus } else { sum };
+            }
+        }
 
         Poly {
             coeffs,
+            moduli: self.moduli.clone(),
             q: self.q,
+            dim: self.dim,
+            crt_q0_inv_mod_q1: self.crt_q0_inv_mod_q1,
             is_ntt: self.is_ntt,
         }
     }
@@ -534,19 +759,26 @@ impl Sub for &Poly {
     type Output = Poly;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        assert_eq!(self.q, rhs.q, "Moduli must match");
+        assert_eq!(self.moduli, rhs.moduli, "Moduli must match");
         assert_eq!(self.is_ntt, rhs.is_ntt, "NTT domains must match");
 
-        let coeffs: Vec<u64> = self
-            .coeffs
-            .iter()
-            .zip(rhs.coeffs.iter())
-            .map(|(&a, &b)| if a >= b { a - b } else { self.q - b + a })
-            .collect();
+        let mut coeffs = self.coeffs.clone();
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for i in start..end {
+                let a = coeffs[i];
+                let b = rhs.coeffs[i];
+                coeffs[i] = if a >= b { a - b } else { modulus - b + a };
+            }
+        }
 
         Poly {
             coeffs,
+            moduli: self.moduli.clone(),
             q: self.q,
+            dim: self.dim,
+            crt_q0_inv_mod_q1: self.crt_q0_inv_mod_q1,
             is_ntt: self.is_ntt,
         }
     }
@@ -576,15 +808,21 @@ impl Neg for &Poly {
     type Output = Poly;
 
     fn neg(self) -> Self::Output {
-        let coeffs: Vec<u64> = self
-            .coeffs
-            .iter()
-            .map(|&c| if c == 0 { 0 } else { self.q - c })
-            .collect();
+        let mut coeffs = self.coeffs.clone();
+        for (m, &modulus) in self.moduli.iter().enumerate() {
+            let start = m * self.dim;
+            let end = start + self.dim;
+            for c in &mut coeffs[start..end] {
+                *c = if *c == 0 { 0 } else { modulus - *c };
+            }
+        }
 
         Poly {
             coeffs,
+            moduli: self.moduli.clone(),
             q: self.q,
+            dim: self.dim,
+            crt_q0_inv_mod_q1: self.crt_q0_inv_mod_q1,
             is_ntt: self.is_ntt,
         }
     }
@@ -600,7 +838,7 @@ impl Mul for Poly {
             "Use mul_ntt for coefficient domain multiplication"
         );
 
-        let ctx = NttContext::new(self.coeffs.len(), self.q);
+        let ctx = NttContext::with_moduli(self.dim, &self.moduli);
         self.mul_ntt_domain(&rhs, &ctx)
     }
 }

@@ -20,9 +20,7 @@ use memmap2::Mmap;
 
 use crate::params::{InspireParams, ShardConfig};
 
-use super::state_format::{
-    StateHeader, StorageEntry, STATE_ENTRY_SIZE, STATE_HEADER_SIZE, STATE_MAGIC,
-};
+use super::state_format::{StateHeader, StorageEntry, STATE_ENTRY_SIZE, STATE_HEADER_SIZE};
 
 /// PIR entry size in bytes (32-byte value only)
 const PIR_ENTRY_SIZE: usize = 32;

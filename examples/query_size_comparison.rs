@@ -112,6 +112,7 @@ fn main() {
     // Total communication per variant
     println!("=== Total Communication by Variant ===\n");
 
+    #[allow(dead_code)]
     struct VariantInfo {
         name: &'static str,
         query_size: usize,

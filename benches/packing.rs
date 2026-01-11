@@ -15,6 +15,7 @@ fn test_params() -> InspireParams {
     InspireParams {
         ring_dim: 256,
         q: 1152921504606830593,
+        crt_moduli: vec![1152921504606830593],
         p: 65536,
         sigma: 6.4,
         gadget_base: 1 << 20,
@@ -253,9 +254,10 @@ fn y_constants_benchmark(c: &mut Criterion) {
     let params = test_params();
     let d = params.ring_dim;
     let q = params.q;
+    let moduli = params.moduli();
 
     c.bench_function("y_constants_generate", |b| {
-        b.iter(|| YConstants::generate(d, q));
+        b.iter(|| YConstants::generate(d, q, moduli));
     });
 }
 

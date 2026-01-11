@@ -33,9 +33,7 @@ pub fn eval_poly_homomorphic(
     encrypted_point: &RgswCiphertext,
     params: &InspireParams,
 ) -> RlweCiphertext {
-    let d = params.ring_dim;
-    let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
 
     let degree = find_degree(poly_coeffs);
 
@@ -107,10 +105,10 @@ fn encrypt_constant(value: u64, params: &InspireParams) -> RlweCiphertext {
     let q = params.q;
     let delta = params.delta();
 
-    let a = Poly::zero(d, q);
+    let a = Poly::zero_moduli(d, params.moduli());
     let mut b_coeffs = vec![0u64; d];
     b_coeffs[0] = ((value as u128 * delta as u128) % q as u128) as u64;
-    let b = Poly::from_coeffs(b_coeffs, q);
+    let b = Poly::from_coeffs_moduli(b_coeffs, params.moduli());
 
     RlweCiphertext::from_parts(a, b)
 }
@@ -120,10 +118,10 @@ fn encrypt_scaled_constant(value: u64, delta: u64, params: &InspireParams) -> Rl
     let d = params.ring_dim;
     let q = params.q;
 
-    let a = Poly::zero(d, q);
+    let a = Poly::zero_moduli(d, params.moduli());
     let mut b_coeffs = vec![0u64; d];
     b_coeffs[0] = ((value as u128 * delta as u128) % q as u128) as u64;
-    let b = Poly::from_coeffs(b_coeffs, q);
+    let b = Poly::from_coeffs_moduli(b_coeffs, params.moduli());
 
     RlweCiphertext::from_parts(a, b)
 }
@@ -162,10 +160,10 @@ pub fn generate_scalar_eval_points(t: usize, q: u64) -> Vec<u64> {
 
 /// Create polynomial for scalar evaluation point z = ω^k (constant polynomial)
 #[allow(dead_code)]
-pub fn scalar_eval_point_to_poly(value: u64, d: usize, q: u64) -> Poly {
+pub fn scalar_eval_point_to_poly(value: u64, d: usize, moduli: &[u64]) -> Poly {
     let mut coeffs = vec![0u64; d];
     coeffs[0] = value; // Constant polynomial
-    Poly::from_coeffs(coeffs, q)
+    Poly::from_coeffs_moduli(coeffs, moduli)
 }
 
 /// Encrypt a scalar evaluation point as RGSW ciphertext
@@ -178,9 +176,9 @@ pub fn encrypt_scalar_eval_point(
     ctx: &NttContext,
 ) -> RgswCiphertext {
     let d = sk.ring_dim();
-    let q = sk.modulus();
+    let moduli = sk.poly.moduli();
 
-    let point_poly = scalar_eval_point_to_poly(value, d, q);
+    let point_poly = scalar_eval_point_to_poly(value, d, moduli);
     RgswCiphertext::encrypt(sk, &point_poly, gadget, sampler, ctx)
 }
 
@@ -299,7 +297,7 @@ pub fn generate_eval_points(t: usize, d: usize) -> Vec<(usize, bool)> {
 /// * `q` - Modulus
 #[deprecated(note = "Use scalar_eval_point_to_poly for correct NTT domain alignment")]
 #[allow(dead_code)]
-pub fn eval_point_to_poly(index: usize, negate: bool, d: usize, q: u64) -> Poly {
+pub fn eval_point_to_poly(index: usize, negate: bool, d: usize, q: u64, moduli: &[u64]) -> Poly {
     let mut coeffs = vec![0u64; d];
 
     if negate {
@@ -308,7 +306,7 @@ pub fn eval_point_to_poly(index: usize, negate: bool, d: usize, q: u64) -> Poly 
         coeffs[index] = 1;
     }
 
-    Poly::from_coeffs(coeffs, q)
+    Poly::from_coeffs_moduli(coeffs, moduli)
 }
 
 /// Encrypt an evaluation point as RGSW ciphertext
@@ -327,8 +325,9 @@ pub fn encrypt_eval_point(
 ) -> RgswCiphertext {
     let d = sk.ring_dim();
     let q = sk.modulus();
+    let moduli = sk.poly.moduli();
 
-    let point_poly = eval_point_to_poly(index, negate, d, q);
+    let point_poly = eval_point_to_poly(index, negate, d, q, moduli);
     RgswCiphertext::encrypt(sk, &point_poly, gadget, sampler, ctx)
 }
 
@@ -345,10 +344,8 @@ pub fn homomorphic_select(
     index_bits: &[RgswCiphertext],
     params: &InspireParams,
 ) -> RlweCiphertext {
-    let d = params.ring_dim;
-    let q = params.q;
     let delta = params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
 
     if polynomials.is_empty() {
         return RlweCiphertext::zero(params);
@@ -394,9 +391,9 @@ pub fn homomorphic_select(
 #[allow(dead_code)]
 fn poly_to_rlwe(poly: &Poly, delta: u64, params: &InspireParams) -> RlweCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
+    let moduli = params.moduli();
 
-    let a = Poly::zero(d, q);
+    let a = Poly::zero_moduli(d, moduli);
     let b = poly.scalar_mul(delta);
 
     RlweCiphertext::from_parts(a, b)
@@ -414,6 +411,7 @@ mod tests {
         InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -461,7 +459,7 @@ mod tests {
         let q = 1152921504606830593u64;
         let value = 42u64;
 
-        let poly = scalar_eval_point_to_poly(value, d, q);
+        let poly = scalar_eval_point_to_poly(value, d, &[q]);
 
         assert_eq!(poly.coeff(0), value);
         for i in 1..d {
@@ -494,7 +492,7 @@ mod tests {
         let d = 256;
         let q = 1152921504606830593u64;
 
-        let poly = eval_point_to_poly(5, false, d, q);
+        let poly = eval_point_to_poly(5, false, d, q, &[q]);
 
         assert_eq!(poly.coeff(5), 1);
         for i in 0..d {
@@ -509,7 +507,7 @@ mod tests {
         let d = 256;
         let q = 1152921504606830593u64;
 
-        let poly = eval_point_to_poly(3, true, d, q);
+        let poly = eval_point_to_poly(3, true, d, q, &[q]);
 
         assert_eq!(poly.coeff(3), q - 1);
         for i in 0..d {
@@ -523,13 +521,12 @@ mod tests {
     fn test_find_degree() {
         let params = test_params();
         let d = params.ring_dim;
-        let q = params.q;
 
         let mut coeffs = vec![0u64; d];
         coeffs[0] = 1;
         coeffs[5] = 2;
         coeffs[10] = 3;
-        let poly = Poly::from_coeffs(coeffs, q);
+        let poly = Poly::from_coeffs_moduli(coeffs, params.moduli());
 
         assert_eq!(find_degree(&poly), 10);
     }
@@ -538,11 +535,10 @@ mod tests {
     fn test_find_degree_constant() {
         let params = test_params();
         let d = params.ring_dim;
-        let q = params.q;
 
         let mut coeffs = vec![0u64; d];
         coeffs[0] = 42;
-        let poly = Poly::from_coeffs(coeffs, q);
+        let poly = Poly::from_coeffs_moduli(coeffs, params.moduli());
 
         assert_eq!(find_degree(&poly), 0);
     }
@@ -551,9 +547,7 @@ mod tests {
     fn test_find_degree_zero() {
         let params = test_params();
         let d = params.ring_dim;
-        let q = params.q;
-
-        let poly = Poly::zero(d, q);
+        let poly = Poly::zero_moduli(d, params.moduli());
 
         assert_eq!(find_degree(&poly), 0);
     }
@@ -562,7 +556,7 @@ mod tests {
     fn test_encrypt_constant_decrypts_correctly() {
         let params = test_params();
         let mut sampler = GaussianSampler::new(params.sigma);
-        let ctx = NttContext::new(params.ring_dim, params.q);
+        let ctx = params.ntt_context();
 
         let sk = RlweSecretKey::generate(&params, &mut sampler);
         let value = 42u64;
@@ -580,16 +574,16 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let mut sampler = GaussianSampler::new(params.sigma);
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
 
         let sk = RlweSecretKey::generate(&params, &mut sampler);
         let gadget = GadgetVector::new(params.gadget_base, params.gadget_len, q);
 
         let mut coeffs = vec![0u64; d];
         coeffs[0] = 100;
-        let poly = Poly::from_coeffs(coeffs, q);
+        let poly = Poly::from_coeffs_moduli(coeffs, params.moduli());
 
-        let point_poly = eval_point_to_poly(0, false, d, q);
+        let point_poly = eval_point_to_poly(0, false, d, q, params.moduli());
         let encrypted_point =
             RgswCiphertext::encrypt(&sk, &point_poly, &gadget, &mut sampler, &ctx);
 
@@ -603,11 +597,10 @@ mod tests {
     fn test_homomorphic_select_single() {
         let params = test_params();
         let d = params.ring_dim;
-        let q = params.q;
 
         let mut coeffs = vec![0u64; d];
         coeffs[0] = 42;
-        let poly = Poly::from_coeffs(coeffs, q);
+        let poly = Poly::from_coeffs_moduli(coeffs, params.moduli());
 
         let result = homomorphic_select(&[poly], &[], &params);
 

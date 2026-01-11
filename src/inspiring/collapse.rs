@@ -36,8 +36,7 @@ pub fn collapse(
     params: &InspireParams,
 ) -> RlweCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
 
     // Get Galois generators
     let (g, h) = galois_generators(d);
@@ -77,15 +76,14 @@ pub fn collapse_half(
     params: &InspireParams,
 ) -> RlweCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
     let (g, _) = galois_generators(d);
 
     let collapsed = collapse_iteration(ct, k_g, g, rho, &ctx, params);
 
     // Convert final intermediate to RLWE
     if collapsed.a_polys.is_empty() {
-        RlweCiphertext::from_parts(Poly::zero(d, q), collapsed.b_poly)
+        RlweCiphertext::from_parts(Poly::zero_moduli(d, params.moduli()), collapsed.b_poly)
     } else {
         RlweCiphertext::from_parts(collapsed.a_polys[0].clone(), collapsed.b_poly)
     }
@@ -108,8 +106,7 @@ pub fn collapse_partial(
     params: &InspireParams,
 ) -> RlweCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
 
     assert!(gamma <= d / 2, "gamma must be ≤ d/2 for partial collapse");
 
@@ -126,11 +123,11 @@ pub fn collapse_partial(
 
     // Convert to RLWE
     if current.a_polys.is_empty() {
-        RlweCiphertext::from_parts(Poly::zero(d, q), current.b_poly)
+        RlweCiphertext::from_parts(Poly::zero_moduli(d, params.moduli()), current.b_poly)
     } else {
         // Use key-switching to absorb remaining a components
         // Must track both a and b components from key-switching
-        let mut final_a = Poly::zero(d, q);
+        let mut final_a = Poly::zero_moduli(d, params.moduli());
         let mut final_b = current.b_poly.clone();
         for a_poly in &current.a_polys {
             let (ks_a, ks_b) = key_switch_absorb(a_poly, &final_b, k_g, &ctx, params);
@@ -159,7 +156,7 @@ fn collapse_iteration(
     let ct_shifted = shift_intermediate(&ct_rotated, rho, q);
 
     // Add original and shifted versions
-    let ct_combined = add_intermediates(ct, &ct_shifted, q);
+    let ct_combined = add_intermediates(ct, &ct_shifted);
 
     // Key-switch to absorb the automorphism's effect on the secret key
     key_switch_intermediate(&ct_combined, k_g, ctx, params)
@@ -174,20 +171,19 @@ fn final_collapse(
     params: &InspireParams,
 ) -> RlweCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
 
     // Apply automorphism τ_h (conjugation)
     let ct_conj = apply_automorphism_to_intermediate(ct, h);
 
     // Add original and conjugated
-    let ct_combined = add_intermediates(ct, &ct_conj, q);
+    let ct_combined = add_intermediates(ct, &ct_conj);
 
     // Key-switch to get valid RLWE ciphertext
     let switched = key_switch_intermediate(&ct_combined, k_h, ctx, params);
 
     // Convert to RLWE
     if switched.a_polys.is_empty() {
-        RlweCiphertext::from_parts(Poly::zero(d, q), switched.b_poly)
+        RlweCiphertext::from_parts(Poly::zero_moduli(d, params.moduli()), switched.b_poly)
     } else {
         // Absorb any remaining a components using proper key-switching
         let mut final_a = switched.a_polys[0].clone();
@@ -260,15 +256,11 @@ fn mul_by_monomial(poly: &Poly, k: usize, q: u64) -> Poly {
         }
     }
 
-    Poly::from_coeffs(result_coeffs, q)
+    Poly::from_coeffs_moduli(result_coeffs, poly.moduli())
 }
 
 /// Add two intermediate ciphertexts
-fn add_intermediates(
-    ct1: &IntermediateCiphertext,
-    ct2: &IntermediateCiphertext,
-    _q: u64,
-) -> IntermediateCiphertext {
+fn add_intermediates(ct1: &IntermediateCiphertext, ct2: &IntermediateCiphertext) -> IntermediateCiphertext {
     assert_eq!(ct1.dimension(), ct2.dimension());
 
     let a_polys: Vec<Poly> = ct1
@@ -316,7 +308,7 @@ fn key_switch_absorb(
     let decomposed = gadget_decompose(a_component, &gadget);
 
     // Initialize: (a', b') = (0, b)
-    let mut result_a = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, params.moduli());
     let mut result_b = b.clone();
 
     // Accumulate: Σᵢ decomposed_i · K[i]
@@ -368,17 +360,18 @@ mod tests {
         InspireParams::secure_128_d2048()
     }
 
-    fn random_poly<R: Rng>(rng: &mut R, d: usize, q: u64) -> Poly {
+    fn random_poly<R: Rng>(rng: &mut R, d: usize, q: u64, moduli: &[u64]) -> Poly {
         let coeffs: Vec<u64> = (0..d).map(|_| rng.gen_range(0..q)).collect();
-        Poly::from_coeffs(coeffs, q)
+        Poly::from_coeffs_moduli(coeffs, moduli)
     }
 
     #[test]
     fn test_mul_by_monomial_identity() {
         let d = 256;
         let q = 1152921504606830593u64;
+        let moduli = vec![q];
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(12345);
-        let poly = random_poly(&mut rng, d, q);
+        let poly = random_poly(&mut rng, d, q, &moduli);
 
         let result = mul_by_monomial(&poly, 0, q);
 
@@ -393,7 +386,7 @@ mod tests {
         let q = 1152921504606830593u64;
         let mut coeffs = vec![0u64; d];
         coeffs[0] = 1;
-        let poly = Poly::from_coeffs(coeffs, q);
+        let poly = Poly::from_coeffs_moduli(coeffs, &[q]);
 
         let result = mul_by_monomial(&poly, 1, q);
 
@@ -407,7 +400,7 @@ mod tests {
         let q = 1152921504606830593u64;
         let mut coeffs = vec![0u64; d];
         coeffs[d - 1] = 1;
-        let poly = Poly::from_coeffs(coeffs, q);
+        let poly = Poly::from_coeffs_moduli(coeffs, &[q]);
 
         // X^(d-1) * X = X^d = -1
         let result = mul_by_monomial(&poly, 1, q);
@@ -418,17 +411,18 @@ mod tests {
     #[test]
     fn test_add_intermediates() {
         let params = test_params();
+        let moduli = params.moduli();
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(54321);
 
-        let a1 = vec![random_poly(&mut rng, params.ring_dim, params.q)];
-        let b1 = random_poly(&mut rng, params.ring_dim, params.q);
+        let a1 = vec![random_poly(&mut rng, params.ring_dim, params.q, moduli)];
+        let b1 = random_poly(&mut rng, params.ring_dim, params.q, moduli);
         let ct1 = IntermediateCiphertext::new(a1.clone(), b1.clone());
 
-        let a2 = vec![random_poly(&mut rng, params.ring_dim, params.q)];
-        let b2 = random_poly(&mut rng, params.ring_dim, params.q);
+        let a2 = vec![random_poly(&mut rng, params.ring_dim, params.q, moduli)];
+        let b2 = random_poly(&mut rng, params.ring_dim, params.q, moduli);
         let ct2 = IntermediateCiphertext::new(a2.clone(), b2.clone());
 
-        let sum = add_intermediates(&ct1, &ct2, params.q);
+        let sum = add_intermediates(&ct1, &ct2);
 
         assert_eq!(sum.dimension(), 1);
         for i in 0..params.ring_dim {
@@ -454,10 +448,11 @@ mod tests {
     fn test_apply_automorphism_to_intermediate() {
         let params = test_params();
         let (g, _) = galois_generators(params.ring_dim);
+        let moduli = params.moduli();
 
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(99999);
-        let a = vec![random_poly(&mut rng, params.ring_dim, params.q)];
-        let b = random_poly(&mut rng, params.ring_dim, params.q);
+        let a = vec![random_poly(&mut rng, params.ring_dim, params.q, moduli)];
+        let b = random_poly(&mut rng, params.ring_dim, params.q, moduli);
         let ct = IntermediateCiphertext::new(a.clone(), b.clone());
 
         let rotated = apply_automorphism_to_intermediate(&ct, g);
@@ -476,15 +471,16 @@ mod tests {
     fn test_collapse_partial_dimensions() {
         let params = test_params();
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(11111);
+        let moduli = params.moduli();
 
         let gamma = 4;
         let a_polys: Vec<Poly> = (0..gamma)
-            .map(|_| random_poly(&mut rng, params.ring_dim, params.q))
+            .map(|_| random_poly(&mut rng, params.ring_dim, params.q, moduli))
             .collect();
-        let b_poly = random_poly(&mut rng, params.ring_dim, params.q);
+        let b_poly = random_poly(&mut rng, params.ring_dim, params.q, moduli);
         let ct = IntermediateCiphertext::new(a_polys, b_poly);
 
-        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
+        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
 
         let result = collapse_partial(gamma, &ct, &k_g, &params);
 

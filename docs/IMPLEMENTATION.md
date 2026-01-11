@@ -13,11 +13,13 @@ Based on the InsPIRe paper's validated parameters:
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | Ring dimension d | 2048 | Power of two, balances security/performance |
-| Ciphertext modulus q | 2^60 - 2^14 + 1 | NTT-friendly: q ≡ 1 (mod 4096) |
+| Ciphertext modulus q | CRT moduli [268369921, 249561089] (q ≈ 2^56) | NTT-friendly per-modulus |
 | Plaintext modulus p | 2^16 | Packs 32-byte entries across coefficients |
 | Error σ | 6.4 | Discrete Gaussian parameter |
 | Gadget base z | 2^20 | For key-switching decomposition |
 | Key-switching matrices | 2 | K_g, K_h (vs logarithmic in prior work) |
+
+**Note**: Single-modulus params remain available for modulus-switching experiments (switched queries). To enable it, construct params with `crt_moduli: vec![q]` (set `q` to that prime and recompute `gadget_len` for the single modulus) and call `query_switched` on the client; this path is experimental and only supported in single-modulus mode. Default `secure_128_*` params use CRT.
 
 ### 2. Database Sharding
 
@@ -36,6 +38,7 @@ inspire-pir/
 │   ├── params.rs              # Parameter sets
 │   ├── modulus_switch.rs      # Modulus switching (experimental)
 │   ├── math/
+│   │   ├── crt.rs             # CRT helpers (compose/decompose)
 │   │   ├── mod_q.rs           # Modular arithmetic Z_q
 │   │   ├── modular.rs         # Montgomery reduction
 │   │   ├── ntt.rs             # Number-Theoretic Transform

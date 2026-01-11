@@ -221,10 +221,10 @@ added_error ≈ ℓ × B × (q / q')
 Where:
   ℓ = gadget digits (3)
   B = gadget base (2^20)
-  q / q' = modulus ratio (2^30 for q=2^60, q'=2^30)
+  q / q' = modulus ratio (≈2^26 for q≈2^56, q'=2^30)
 
-Current: 3 × 2^20 × 2^30 = 3×2^50 ≈ 3.4×10^15
-Allowed: q / (2p) = 2^60 / 2^17 = 2^43 ≈ 8.8×10^12
+Current: 3 × 2^20 × 2^26 = 3×2^46 ≈ 2.1×10^14
+Allowed: q / (2p) ≈ 2^56 / 2^17 = 2^39 ≈ 5.5×10^11
 
 Result: Error exceeds threshold by ~128×, causing decryption failures.
 ```
@@ -249,7 +249,7 @@ RGSW ciphertext has **2ℓ rows**. Changing parameters:
 | ℓ=6, B=2^10 | 12 | 192 KB | ✓ (50% off) | 96 KB |
 | ℓ=8, B=2^8 | 16 | 261 KB | ✓ (50% off) | 130 KB |
 
-**Conclusion**: Doubling ℓ to enable modulus switching results in the same or worse final size. Seeded-only compression (96 KB) is the practical optimum for current security parameters.
+**Conclusion**: Doubling ℓ to enable modulus switching results in the same or worse final size. Seeded-only compression (96 KB) is the practical optimum for current security parameters. Switched queries are currently supported only in single-modulus mode.
 
 ### When Modulus Switching Does Help
 

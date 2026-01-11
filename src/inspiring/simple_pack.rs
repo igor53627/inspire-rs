@@ -39,13 +39,17 @@ pub fn pack_rlwe_coeffs(
 ) -> RlweCiphertext {
     let d = params.ring_dim;
     let q = params.q;
+    let moduli = params.moduli();
 
     if rlwe_ciphertexts.is_empty() {
-        return RlweCiphertext::from_parts(Poly::zero(d, q), Poly::zero(d, q));
+        return RlweCiphertext::from_parts(
+            Poly::zero_moduli(d, moduli),
+            Poly::zero_moduli(d, moduli),
+        );
     }
 
-    let mut result_a = Poly::zero(d, q);
-    let mut result_b = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, moduli);
+    let mut result_b = Poly::zero_moduli(d, moduli);
 
     for (slot, rlwe) in rlwe_ciphertexts.iter().enumerate() {
         let shifted = if slot == 0 {
@@ -102,7 +106,7 @@ fn mul_poly_by_monomial(poly: &Poly, k: usize, q: u64) -> Poly {
         }
     }
 
-    Poly::from_coeffs(result_coeffs, q)
+    Poly::from_coeffs_moduli(result_coeffs, poly.moduli())
 }
 
 #[inline]
@@ -138,10 +142,13 @@ pub fn pack_lwe_trivial(
     params: &InspireParams,
 ) -> RlweCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
+    let moduli = params.moduli();
 
     if lwe_ciphertexts.is_empty() {
-        return RlweCiphertext::from_parts(Poly::zero(d, q), Poly::zero(d, q));
+        return RlweCiphertext::from_parts(
+            Poly::zero_moduli(d, moduli),
+            Poly::zero_moduli(d, moduli),
+        );
     }
 
     // Just pack the b values at their respective coefficient positions
@@ -153,7 +160,10 @@ pub fn pack_lwe_trivial(
     }
 
     // a = 0, b = packed values
-    RlweCiphertext::from_parts(Poly::zero(d, q), Poly::from_coeffs(b_coeffs, q))
+    RlweCiphertext::from_parts(
+        Poly::zero_moduli(d, moduli),
+        Poly::from_coeffs_moduli(b_coeffs, moduli),
+    )
 }
 
 /// Pack multiple LWE ciphertexts into a single RLWE ciphertext via key-switching
@@ -178,14 +188,17 @@ pub fn pack_lwe_to_rlwe(
 ) -> RlweCiphertext {
     let d = params.ring_dim;
     let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
 
     if lwe_ciphertexts.is_empty() {
-        return RlweCiphertext::from_parts(Poly::zero(d, q), Poly::zero(d, q));
+        return RlweCiphertext::from_parts(
+            Poly::zero_moduli(d, params.moduli()),
+            Poly::zero_moduli(d, params.moduli()),
+        );
     }
 
-    let mut result_a = Poly::zero(d, q);
-    let mut result_b = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, params.moduli());
+    let mut result_b = Poly::zero_moduli(d, params.moduli());
 
     for (slot, lwe) in lwe_ciphertexts.iter().enumerate() {
         // Convert LWE to RLWE and key-switch
@@ -254,16 +267,17 @@ fn lwe_to_rlwe_keyswitch(
 ) -> RlweCiphertext {
     let d = params.ring_dim;
     let q = params.q;
+    let moduli = params.moduli();
 
     // Apply negacyclic permutation to convert LWE a-vector to polynomial
     // This ensures <a, s_lwe> = coeff_0(a_poly * s_rlwe)
     let a_perm = negacyclic_perm(&lwe.a, q);
-    let a_poly = Poly::from_coeffs(a_perm, q);
+    let a_poly = Poly::from_coeffs_moduli(a_perm, moduli);
 
     // Create initial b polynomial with LWE b in constant term
     let mut b_coeffs = vec![0u64; d];
     b_coeffs[0] = lwe.b;
-    let b_poly = Poly::from_coeffs(b_coeffs, q);
+    let b_poly = Poly::from_coeffs_moduli(b_coeffs, moduli);
 
     // Key-switch: decompose a_poly and apply KS matrix
     // This converts encryption from s_lwe (as polynomial) to s_rlwe
@@ -271,7 +285,7 @@ fn lwe_to_rlwe_keyswitch(
     let a_decomp = gadget_decompose(&a_poly, &gadget);
 
     // Initialize result: (0, b)
-    let mut result_a = Poly::zero(d, q);
+    let mut result_a = Poly::zero_moduli(d, moduli);
     let mut result_b = b_poly;
 
     // Accumulate: Σᵢ decomp_i · K[i]
@@ -295,13 +309,14 @@ fn lwe_to_rlwe_keyswitch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::math::{GaussianSampler, ModQ, NttContext};
+    use crate::math::{GaussianSampler, ModQ};
     use crate::rlwe::RlweSecretKey;
 
     fn test_params() -> InspireParams {
         InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -326,7 +341,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         let rlwe_sk = RlweSecretKey::generate(&params, &mut sampler);
@@ -362,7 +377,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         let rlwe_sk = RlweSecretKey::generate(&params, &mut sampler);
@@ -426,7 +441,7 @@ mod tests {
         let d = params.ring_dim;
         let q = params.q;
         let delta = params.delta();
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         // Generate keys

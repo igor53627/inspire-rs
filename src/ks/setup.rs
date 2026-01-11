@@ -3,20 +3,14 @@
 //! Provides functions for generating key-switching matrices used in
 //! RLWE ciphertext transformations.
 
-use crate::math::{GaussianSampler, ModQ, NttContext, Poly};
+use crate::math::{GaussianSampler, NttContext, Poly};
 use crate::rgsw::GadgetVector;
 use crate::rlwe::{RlweCiphertext, RlweSecretKey};
 use serde::{Deserialize, Serialize};
 
 /// Samples a polynomial with coefficients from discrete Gaussian.
-fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly {
-    let coeffs: Vec<u64> = (0..dim)
-        .map(|_| {
-            let sample = sampler.sample();
-            ModQ::from_signed(sample, q)
-        })
-        .collect();
-    Poly::from_coeffs(coeffs, q)
+fn sample_error_poly(dim: usize, moduli: &[u64], sampler: &mut GaussianSampler) -> Poly {
+    Poly::sample_gaussian_moduli(dim, moduli, sampler)
 }
 
 /// Key-switching matrix from secret key s to secret key s'.
@@ -91,12 +85,13 @@ impl KeySwitchingMatrix {
     /// Create a dummy key-switching matrix for testing
     ///
     /// This creates a matrix with zero ciphertexts, useful for structural tests.
-    pub fn dummy(ring_dim: usize, q: u64, gadget_len: usize) -> Self {
+    pub fn dummy(ring_dim: usize, moduli: &[u64], gadget_len: usize) -> Self {
+        let q = moduli.iter().product::<u64>();
         let gadget = GadgetVector::new(1 << 20, gadget_len, q);
         let rows: Vec<RlweCiphertext> = (0..gadget_len)
             .map(|_| {
-                let a = Poly::zero(ring_dim, q);
-                let b = Poly::zero(ring_dim, q);
+                let a = Poly::zero_moduli(ring_dim, moduli);
+                let b = Poly::zero_moduli(ring_dim, moduli);
                 RlweCiphertext::from_parts(a, b)
             })
             .collect();
@@ -128,7 +123,6 @@ pub fn generate_ks_matrix(
     ctx: &NttContext,
 ) -> KeySwitchingMatrix {
     let d = from_key.ring_dim();
-    let q = from_key.modulus();
     let ell = gadget.len;
     let powers = gadget.powers();
 
@@ -143,14 +137,15 @@ pub fn generate_ks_matrix(
         "Keys must have same modulus"
     );
 
+    let moduli = from_key.poly.moduli();
     let mut rows = Vec::with_capacity(ell);
 
     for i in 0..ell {
         // Sample random a_i
-        let a = Poly::random(d, q);
+        let a = Poly::random_moduli(d, moduli);
 
         // Sample error e_i
-        let error = sample_error_poly(d, q, sampler);
+        let error = sample_error_poly(d, moduli, sampler);
 
         // Compute b_i = -a_i·s' + e_i + s·z^i
         let a_times_s_prime = a.mul_ntt(&to_key.poly, ctx);
@@ -201,7 +196,10 @@ pub fn generate_packing_ks_matrix(
     );
     debug_assert_eq!(lwe_sk.q, q, "LWE key modulus must match RLWE modulus");
 
-    let lwe_as_rlwe = RlweSecretKey::from_poly(Poly::from_coeffs(lwe_sk.coeffs.clone(), q));
+    let lwe_as_rlwe = RlweSecretKey::from_poly(Poly::from_coeffs_moduli(
+        lwe_sk.coeffs.clone(),
+        rlwe_sk.poly.moduli(),
+    ));
 
     generate_ks_matrix(&lwe_as_rlwe, rlwe_sk, gadget, sampler, ctx)
 }
@@ -242,7 +240,10 @@ pub fn generate_automorphism_ks_matrix(
             auto_s_coeffs[reduced_idx] = if coeff == 0 { 0 } else { q - coeff };
         }
     }
-    let auto_s = RlweSecretKey::from_poly(Poly::from_coeffs(auto_s_coeffs, q));
+    let auto_s = RlweSecretKey::from_poly(Poly::from_coeffs_moduli(
+        auto_s_coeffs,
+        sk.poly.moduli(),
+    ));
 
     // Generate KS matrix from τ_g(s) to s
     generate_ks_matrix(&auto_s, sk, gadget, sampler, ctx)
@@ -258,7 +259,7 @@ mod tests {
     }
 
     fn make_ctx(params: &InspireParams) -> NttContext {
-        NttContext::new(params.ring_dim, params.q)
+        params.ntt_context()
     }
 
     #[test]

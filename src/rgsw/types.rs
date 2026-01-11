@@ -2,20 +2,14 @@
 //!
 //! Provides types for RGSW encryption and gadget decomposition.
 
-use crate::math::{GaussianSampler, ModQ, NttContext, Poly};
+use crate::math::{GaussianSampler, NttContext, Poly};
 use crate::rlwe::{RlweCiphertext, RlweSecretKey, SeededRlweCiphertext};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-/// Samples a polynomial with coefficients from discrete Gaussian.
-fn sample_error_poly(dim: usize, q: u64, sampler: &mut GaussianSampler) -> Poly {
-    let coeffs: Vec<u64> = (0..dim)
-        .map(|_| {
-            let sample = sampler.sample();
-            ModQ::from_signed(sample, q)
-        })
-        .collect();
-    Poly::from_coeffs(coeffs, q)
+/// Samples a polynomial with coefficients from discrete Gaussian (CRT-aware).
+fn sample_error_poly(dim: usize, moduli: &[u64], sampler: &mut GaussianSampler) -> Poly {
+    Poly::sample_gaussian_moduli(dim, moduli, sampler)
 }
 
 /// Gadget vector g_z = [1, z, z², ..., z^(ℓ-1)]^T.
@@ -201,7 +195,7 @@ impl RgswCiphertext {
         ctx: &NttContext,
     ) -> Self {
         let d = sk.ring_dim();
-        let q = sk.modulus();
+        let moduli = sk.poly.moduli();
         let ell = gadget.len;
 
         let mut rows = Vec::with_capacity(2 * ell);
@@ -211,8 +205,8 @@ impl RgswCiphertext {
         // Row i = (a + m·z^i, b) where (a, b) encrypts 0
         // Decrypts to: (a + m·z^i)·s + b = a·s + b + m·z^i·s ≈ m·z^i·s
         for i in 0..ell {
-            let a_rand = Poly::random(d, q);
-            let error = sample_error_poly(d, q, sampler);
+            let a_rand = Poly::random_moduli(d, moduli);
+            let error = sample_error_poly(d, moduli, sampler);
 
             // b = -a·s + e (encrypts 0)
             let a_s = a_rand.mul_ntt(&sk.poly, ctx);
@@ -229,8 +223,8 @@ impl RgswCiphertext {
         // Row ℓ+i = (a, b + m·z^i) where (a, b) encrypts 0
         // Decrypts to: a·s + b + m·z^i ≈ m·z^i
         for i in 0..ell {
-            let a = Poly::random(d, q);
-            let error = sample_error_poly(d, q, sampler);
+            let a = Poly::random_moduli(d, moduli);
+            let error = sample_error_poly(d, moduli, sampler);
 
             // b_base = -a·s + e (encrypts 0)
             let a_s = a.mul_ntt(&sk.poly, ctx);
@@ -257,7 +251,7 @@ impl RgswCiphertext {
         sampler: &mut GaussianSampler,
         ctx: &NttContext,
     ) -> Self {
-        let msg_poly = Poly::constant(message, sk.ring_dim(), sk.modulus());
+        let msg_poly = Poly::constant_moduli(message, sk.ring_dim(), sk.poly.moduli());
         Self::encrypt(sk, &msg_poly, gadget, sampler, ctx)
     }
 
@@ -303,7 +297,7 @@ impl SeededRgswCiphertext {
         ctx: &NttContext,
     ) -> Self {
         let d = sk.ring_dim();
-        let q = sk.modulus();
+        let moduli = sk.poly.moduli();
         let ell = gadget.len;
 
         let mut rows = Vec::with_capacity(2 * ell);
@@ -321,8 +315,8 @@ impl SeededRgswCiphertext {
             let mut seed = [0u8; 32];
             rng.fill_bytes(&mut seed);
 
-            let a_rand = Poly::from_seed(&seed, d, q);
-            let error = sample_error_poly(d, q, sampler);
+            let a_rand = Poly::from_seed_moduli(&seed, d, moduli);
+            let error = sample_error_poly(d, moduli, sampler);
 
             // b = -a·s + e (encrypts 0)
             let a_s = a_rand.mul_ntt(&sk.poly, ctx);
@@ -342,8 +336,8 @@ impl SeededRgswCiphertext {
             let mut seed = [0u8; 32];
             rng.fill_bytes(&mut seed);
 
-            let a = Poly::from_seed(&seed, d, q);
-            let error = sample_error_poly(d, q, sampler);
+            let a = Poly::from_seed_moduli(&seed, d, moduli);
+            let error = sample_error_poly(d, moduli, sampler);
 
             // b_base = -a·s + e (encrypts 0)
             let a_s = a.mul_ntt(&sk.poly, ctx);
@@ -370,7 +364,7 @@ impl SeededRgswCiphertext {
         sampler: &mut GaussianSampler,
         ctx: &NttContext,
     ) -> Self {
-        let msg_poly = Poly::constant(message, sk.ring_dim(), sk.modulus());
+        let msg_poly = Poly::constant_moduli(message, sk.ring_dim(), sk.poly.moduli());
         Self::encrypt(sk, &msg_poly, gadget, sampler, ctx)
     }
 
@@ -406,7 +400,7 @@ mod tests {
     }
 
     fn make_ctx(params: &InspireParams) -> NttContext {
-        NttContext::new(params.ring_dim, params.q)
+        params.ntt_context()
     }
 
     #[test]

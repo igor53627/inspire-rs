@@ -17,6 +17,7 @@ fn main() -> eyre::Result<()> {
             InspireParams {
                 ring_dim: 256,
                 q: 1152921504606830593,
+                crt_moduli: vec![1152921504606830593],
                 p: 65536,
                 sigma: 6.4,
                 gadget_base: 1 << 20,

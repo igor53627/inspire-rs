@@ -21,6 +21,7 @@ use super::types::IntermediateCiphertext;
 pub fn transform(lwe: &LweCiphertext, params: &InspireParams) -> IntermediateCiphertext {
     let d = params.ring_dim;
     let q = params.q;
+    let moduli = params.moduli();
 
     debug_assert_eq!(lwe.a.len(), d, "LWE dimension must match ring dimension");
     debug_assert_eq!(lwe.q, q, "LWE modulus must match params");
@@ -32,10 +33,14 @@ pub fn transform(lwe: &LweCiphertext, params: &InspireParams) -> IntermediateCip
     //
     // Transform: â_j(X) = a_j (constant polynomial with coefficient a_j at position 0)
     // This gets modified during aggregation with appropriate X^k multipliers.
-    let a_polys: Vec<Poly> = lwe.a.iter().map(|&a_j| Poly::constant(a_j, d, q)).collect();
+    let a_polys: Vec<Poly> = lwe
+        .a
+        .iter()
+        .map(|&a_j| Poly::constant_moduli(a_j, d, moduli))
+        .collect();
 
     // The b-component becomes a constant polynomial
-    let b_poly = Poly::constant(lwe.b, d, q);
+    let b_poly = Poly::constant_moduli(lwe.b, d, moduli);
 
     IntermediateCiphertext::new(a_polys, b_poly)
 }
@@ -56,9 +61,11 @@ pub fn transform_partial(
 ) -> IntermediateCiphertext {
     let d = params.ring_dim;
     let q = params.q;
+    let moduli = params.moduli();
 
     debug_assert!(gamma <= d / 2, "gamma must be ≤ d/2 for partial packing");
     debug_assert_eq!(lwe.a.len(), d, "LWE dimension must match ring dimension");
+    debug_assert_eq!(lwe.q, q, "LWE modulus must match params");
 
     // For partial packing, we only need to handle γ positions
     // The transformation is similar but optimized for fewer ciphertexts
@@ -80,11 +87,11 @@ pub fn transform_partial(
                 coeffs[k] = lwe.a[idx];
             }
         }
-        a_polys.push(Poly::from_coeffs(coeffs, q));
+        a_polys.push(Poly::from_coeffs_moduli(coeffs, moduli));
     }
 
     // The b-component remains a constant polynomial
-    let b_poly = Poly::constant(lwe.b, d, q);
+    let b_poly = Poly::constant_moduli(lwe.b, d, moduli);
 
     IntermediateCiphertext::new(a_polys, b_poly)
 }
@@ -105,6 +112,7 @@ pub fn transform_at_slot(
 ) -> IntermediateCiphertext {
     let d = params.ring_dim;
     let q = params.q;
+    let moduli = params.moduli();
 
     debug_assert!(slot_index < d, "slot_index must be < ring_dim");
     debug_assert_eq!(lwe.a.len(), d, "LWE dimension must match ring dimension");
@@ -128,14 +136,14 @@ pub fn transform_at_slot(
                 };
                 coeffs[actual_idx] = sign;
             }
-            Poly::from_coeffs(coeffs, q)
+            Poly::from_coeffs_moduli(coeffs, moduli)
         })
         .collect();
 
     // Similarly for b
     let mut b_coeffs = vec![0u64; d];
     b_coeffs[slot_index] = lwe.b;
-    let b_poly = Poly::from_coeffs(b_coeffs, q);
+    let b_poly = Poly::from_coeffs_moduli(b_coeffs, moduli);
 
     IntermediateCiphertext::new(a_polys, b_poly)
 }
@@ -149,7 +157,7 @@ pub fn aggregate(
     params: &InspireParams,
 ) -> super::types::AggregatedCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
+    let moduli = params.moduli();
     let n = intermediates.len();
 
     assert!(
@@ -161,8 +169,10 @@ pub fn aggregate(
     let num_a_polys = intermediates[0].dimension();
 
     // Initialize aggregated polynomials
-    let mut agg_a_polys: Vec<Poly> = (0..num_a_polys).map(|_| Poly::zero(d, q)).collect();
-    let mut agg_b_poly = Poly::zero(d, q);
+    let mut agg_a_polys: Vec<Poly> = (0..num_a_polys)
+        .map(|_| Poly::zero_moduli(d, moduli))
+        .collect();
+    let mut agg_b_poly = Poly::zero_moduli(d, moduli);
 
     // Sum all intermediate ciphertexts (already positioned at their slots)
     for ct in intermediates.iter() {
@@ -186,6 +196,7 @@ pub fn aggregate(
 /// Multiply a polynomial by X^k in R_q = Z_q[X]/(X^d + 1)
 ///
 /// For negacyclic rings: X^d = -1
+#[allow(dead_code)]
 fn mul_by_monomial(poly: &Poly, k: usize, q: u64) -> Poly {
     let d = poly.dimension();
     let k = k % (2 * d);
@@ -218,7 +229,7 @@ fn mul_by_monomial(poly: &Poly, k: usize, q: u64) -> Poly {
         }
     }
 
-    Poly::from_coeffs(result_coeffs, q)
+    Poly::from_coeffs_moduli(result_coeffs, poly.moduli())
 }
 
 #[cfg(test)]

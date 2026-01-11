@@ -15,7 +15,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::inspiring::packing_online;
-use crate::math::{NttContext, Poly};
+use crate::math::Poly;
 use crate::params::InspireVariant;
 use crate::rgsw::external_product;
 use crate::rgsw::DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR;
@@ -112,8 +112,6 @@ pub fn respond(
     encoded_db: &EncodedDatabase,
     query: &ClientQuery,
 ) -> Result<ServerResponse> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
     let delta = crs.params.delta();
 
     let shard = encoded_db
@@ -134,7 +132,7 @@ pub fn respond(
         .polynomials
         .par_iter()
         .map(|db_poly| {
-            let local_ctx = NttContext::new(d, q);
+            let local_ctx = crs.params.ntt_context();
             let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
             external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
         })
@@ -221,8 +219,8 @@ pub fn respond_one_packing(
 ) -> Result<ServerResponse> {
     use crate::inspiring::automorph_pack::pack_lwes;
 
-    let d = crs.ring_dim();
-    let q = crs.modulus();
+    let _d = crs.ring_dim();
+    let _q = crs.modulus();
     let delta = crs.params.delta();
 
     let shard = encoded_db
@@ -246,7 +244,7 @@ pub fn respond_one_packing(
         .polynomials
         .par_iter()
         .map(|db_poly| {
-            let local_ctx = NttContext::new(d, q);
+            let local_ctx = crs.params.ntt_context();
             let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
             external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
         })
@@ -293,9 +291,8 @@ pub fn respond_inspiring(
     use crate::inspiring::{packing_offline, OfflinePackingKeys, PackParams};
 
     let d = crs.ring_dim();
-    let q = crs.modulus();
     let delta = crs.params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     // Get client packing keys (y_all) from query
     let client_packing_keys = query.inspiring_packing_keys.as_ref().ok_or_else(|| {
@@ -321,7 +318,7 @@ pub fn respond_inspiring(
         .polynomials
         .par_iter()
         .map(|db_poly| {
-            let local_ctx = NttContext::new(d, q);
+            let local_ctx = crs.params.ntt_context();
             let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
             external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
         })
@@ -357,7 +354,7 @@ pub fn respond_inspiring(
             b_coeffs[i] = lwe.b;
         }
     }
-    let b_poly = Poly::from_coeffs(b_coeffs, q);
+    let b_poly = Poly::from_coeffs_moduli(b_coeffs, crs.params.moduli());
 
     // Step 5: Run InspiRING offline phase with actual LWE a-vectors
     // This must be done per-query since a-vectors depend on the RGSW query
@@ -464,10 +461,10 @@ pub fn respond_sequential(
     encoded_db: &EncodedDatabase,
     query: &ClientQuery,
 ) -> Result<ServerResponse> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
+    let _d = crs.ring_dim();
+    let _q = crs.modulus();
     let delta = crs.params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let shard = encoded_db
         .shards
@@ -515,8 +512,8 @@ pub fn respond_mmap(
     mmap_db: &MmapDatabase,
     query: &ClientQuery,
 ) -> Result<ServerResponse> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
+    let _d = crs.ring_dim();
+    let _q = crs.modulus();
     let delta = crs.params.delta();
 
     let shard = mmap_db.get_shard(query.shard_id)?;
@@ -533,7 +530,7 @@ pub fn respond_mmap(
         .polynomials
         .par_iter()
         .map(|db_poly| {
-            let local_ctx = NttContext::new(d, q);
+            let local_ctx = crs.params.ntt_context();
             let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
             external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
         })
@@ -566,8 +563,8 @@ pub fn respond_mmap_one_packing(
 ) -> Result<ServerResponse> {
     use crate::inspiring::automorph_pack::pack_lwes;
 
-    let d = crs.ring_dim();
-    let q = crs.modulus();
+    let _d = crs.ring_dim();
+    let _q = crs.modulus();
     let delta = crs.params.delta();
 
     let shard = mmap_db.get_shard(query.shard_id)?;
@@ -584,7 +581,7 @@ pub fn respond_mmap_one_packing(
         .polynomials
         .par_iter()
         .map(|db_poly| {
-            let local_ctx = NttContext::new(d, q);
+            let local_ctx = crs.params.ntt_context();
             let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
             external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
         })
@@ -614,6 +611,7 @@ mod tests {
         crate::params::InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -687,18 +685,18 @@ mod tests {
     fn test_ciphertext_addition() {
         let params = test_params();
         let d = params.ring_dim;
-        let q = params.q;
+        let moduli = params.moduli();
 
-        let a1 = Poly::zero(d, q);
+        let a1 = Poly::zero_moduli(d, moduli);
         let mut b1_coeffs = vec![0u64; d];
         b1_coeffs[0] = 100;
-        let b1 = Poly::from_coeffs(b1_coeffs, q);
+        let b1 = Poly::from_coeffs_moduli(b1_coeffs, moduli);
         let ct1 = RlweCiphertext::from_parts(a1, b1);
 
-        let a2 = Poly::zero(d, q);
+        let a2 = Poly::zero_moduli(d, moduli);
         let mut b2_coeffs = vec![0u64; d];
         b2_coeffs[0] = 200;
-        let b2 = Poly::from_coeffs(b2_coeffs, q);
+        let b2 = Poly::from_coeffs_moduli(b2_coeffs, moduli);
         let ct2 = RlweCiphertext::from_parts(a2, b2);
 
         let combined = ct1.add(&ct2);
@@ -900,8 +898,17 @@ mod tests {
     fn test_inspire_sizes_production() {
         use crate::pir::query::{query_seeded, query_switched};
 
-        // Production parameters: d=2048, 32-byte entries
-        let params = crate::params::InspireParams::secure_128_d2048();
+        // Production parameters: d=2048, 32-byte entries (single-modulus for switching)
+        let params = crate::params::InspireParams {
+            ring_dim: 2048,
+            q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
+            p: 65536,
+            sigma: 6.4,
+            gadget_base: 1 << 20,
+            gadget_len: 3,
+            security_level: crate::params::SecurityLevel::Bits128,
+        };
         let d = params.ring_dim;
         let entry_size = 32; // Ethereum state entry
         let mut sampler = GaussianSampler::new(params.sigma);

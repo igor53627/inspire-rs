@@ -467,7 +467,10 @@
                 <button data-format="inspire2plus">InsPIRe+ (~166 KB)</button>
             </div>
             <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                InsPIRe+ uses modulus switching which may exceed noise budget with default parameters. See <a href="COMMUNICATION_COSTS.md#modulus-switching-tradeoffs">tradeoffs</a>.
+                InsPIRe+ uses modulus switching which may exceed noise budget with default parameters and is only supported in single-modulus mode. See <a href="COMMUNICATION_COSTS.md#modulus-switching-tradeoffs">tradeoffs</a>.
+            </p>
+            <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                Sizes shown reflect single-modulus serialization (crt_moduli length 1). The default CRT mode stores two residues per coefficient and approximately doubles the serialized size.
             </p>
             <div id="size-breakdown" style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;">
                 <div class="chart-container">
@@ -1423,7 +1426,7 @@
         // ============================================================
         // Actual formulas from code:
         // InsPIRe Protocol Variants (d=2048, l=3, entry_size=32, 16 columns)
-        // Measured sizes from test_inspire_sizes_production:
+        // Measured sizes from test_inspire_sizes_production (single-modulus mode):
         // - Full query: 196,848 bytes (192.2 KB)
         // - Seeded query: 98,634 bytes (96.3 KB)
         // - Switched query: 49,524 bytes (48.4 KB)

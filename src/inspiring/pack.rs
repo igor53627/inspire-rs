@@ -78,7 +78,10 @@ pub fn partial_pack(
     assert!(gamma <= d / 2, "partial_pack requires γ ≤ d/2 ciphertexts");
 
     if gamma == 0 {
-        return RlweCiphertext::from_parts(Poly::zero(d, params.q), Poly::zero(d, params.q));
+        return RlweCiphertext::from_parts(
+            Poly::zero_moduli(d, params.moduli()),
+            Poly::zero_moduli(d, params.moduli()),
+        );
     }
 
     // Stage 1: Transform using partial transform
@@ -117,6 +120,8 @@ pub struct PackingPrecomputation {
 
     /// Modulus
     q: u64,
+    /// CRT moduli
+    moduli: Vec<u64>,
 }
 
 impl PackingPrecomputation {
@@ -147,6 +152,7 @@ pub fn precompute_packing(
 ) -> PackingPrecomputation {
     let d = params.ring_dim;
     let q = params.q;
+    let moduli = params.moduli().to_vec();
     let n = crs_a_vectors.len();
 
     assert!(!crs_a_vectors.is_empty(), "Must have at least one a vector");
@@ -178,6 +184,7 @@ pub fn precompute_packing(
         num_ciphertexts: n,
         ring_dim: d,
         q,
+        moduli,
     }
 }
 
@@ -200,7 +207,7 @@ pub fn pack_online(
     params: &InspireParams,
 ) -> RlweCiphertext {
     let d = precomp.ring_dim;
-    let q = precomp.q;
+    let moduli = &precomp.moduli;
     let n = lwe_b_values.len();
 
     assert_eq!(
@@ -216,7 +223,7 @@ pub fn pack_online(
             b_coeffs[i] = b_val;
         }
     }
-    let b_poly = Poly::from_coeffs(b_coeffs, q);
+    let b_poly = Poly::from_coeffs_moduli(b_coeffs, moduli);
 
     // Combine with precomputed a aggregate
     let full_aggregate = AggregatedCiphertext::new(
@@ -241,6 +248,7 @@ mod tests {
         InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -279,8 +287,8 @@ mod tests {
             .map(|_| random_lwe(&mut rng, &params))
             .collect();
 
-        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
-        let k_h = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
+        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
+        let k_h = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
 
         let result = pack(&lwe_cts, &k_g, &k_h, &params);
 
@@ -297,7 +305,7 @@ mod tests {
         let lwe_cts: Vec<LweCiphertext> =
             (0..gamma).map(|_| random_lwe(&mut rng, &params)).collect();
 
-        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
+        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
 
         let result = partial_pack(&lwe_cts, &k_g, &params);
 
@@ -318,8 +326,8 @@ mod tests {
             })
             .collect();
 
-        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
-        let k_h = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
+        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
+        let k_h = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
 
         // Precompute
         let precomp = precompute_packing(&crs_a_vectors, &k_g, &k_h, &params);
@@ -358,8 +366,8 @@ mod tests {
             assert_eq!(decrypted, expected, "LWE decryption failed");
         }
 
-        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
-        let k_h = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
+        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
+        let k_h = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
 
         // Pack
         let packed = pack(&lwe_cts, &k_g, &k_h, &params);
@@ -373,7 +381,7 @@ mod tests {
     #[test]
     fn test_empty_partial_pack() {
         let params = test_params();
-        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.q, params.gadget_len);
+        let k_g = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
 
         let result = partial_pack(&[], &k_g, &params);
 

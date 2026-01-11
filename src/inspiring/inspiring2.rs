@@ -67,6 +67,8 @@ pub struct PackParams {
     pub ring_dim: usize,
     /// Modulus q
     pub q: u64,
+    /// CRT moduli (length 1 for single-modulus mode)
+    pub moduli: Vec<u64>,
     /// Generator for the multiplicative group
     pub generator: usize,
     /// Powers of generator: gen_pows[i] = g^i mod 2n
@@ -105,8 +107,9 @@ impl PackParams {
     pub fn new(params: &InspireParams, num_to_pack: usize) -> Self {
         let n = params.ring_dim;
         let q = params.q;
+        let moduli = params.moduli().to_vec();
         let two_n = 2 * n;
-        let ctx = NttContext::new(n, q);
+        let ctx = params.ntt_context();
 
         // Generator selection (canonical formula)
         let generator = if num_to_pack < n {
@@ -128,7 +131,7 @@ impl PackParams {
             mod_inverse_u64(num_to_pack as u64, q).expect("num_to_pack must be invertible mod q");
 
         // mod_inv as constant polynomial in NTT form for fast scalar multiply
-        let mut mod_inv_poly_ntt = Poly::constant(mod_inv_gamma, n, q);
+        let mut mod_inv_poly_ntt = Poly::constant_moduli(mod_inv_gamma, n, &moduli);
         mod_inv_poly_ntt.to_ntt(&ctx);
 
         // Precompute monomials in both coefficient and NTT form
@@ -140,14 +143,14 @@ impl PackParams {
         for j in 0..n {
             let mut coeffs = vec![0u64; n];
             coeffs[j] = 1;
-            let mono = Poly::from_coeffs(coeffs.clone(), q);
+            let mono = Poly::from_coeffs_moduli(coeffs.clone(), &moduli);
             let mut mono_ntt = mono.clone();
             mono_ntt.to_ntt(&ctx);
             monomials.push(mono);
             monomials_ntt.push(mono_ntt);
 
             coeffs[j] = q - 1; // -1 mod q
-            let neg_mono = Poly::from_coeffs(coeffs, q);
+            let neg_mono = Poly::from_coeffs_moduli(coeffs, &moduli);
             let mut neg_mono_ntt = neg_mono.clone();
             neg_mono_ntt.to_ntt(&ctx);
             neg_monomials.push(neg_mono);
@@ -158,12 +161,13 @@ impl PackParams {
 
         // Generate automorphism tables for NTT-domain automorphisms
         // Following Google's generate_automorph_tables_brute_force approach
-        let automorph_tables = generate_automorph_tables(n, q, &ctx);
+        let automorph_tables = generate_automorph_tables(n, &moduli, &ctx);
 
         Self {
             num_to_pack,
             ring_dim: n,
             q,
+            moduli,
             generator,
             gen_pows,
             mod_inv_gamma,
@@ -201,7 +205,7 @@ impl PackParams {
 /// such that: NTT(τ_t(poly))[i] = NTT(poly)[table[i]]
 ///
 /// This allows O(n) automorphism in NTT domain via index permutation.
-fn generate_automorph_tables(n: usize, q: u64, ctx: &NttContext) -> Vec<Vec<usize>> {
+fn generate_automorph_tables(n: usize, moduli: &[u64], ctx: &NttContext) -> Vec<Vec<usize>> {
     let two_n = 2 * n;
     let mut tables = Vec::with_capacity(n);
 
@@ -213,7 +217,7 @@ fn generate_automorph_tables(n: usize, q: u64, ctx: &NttContext) -> Vec<Vec<usiz
         // by comparing NTT of random poly vs NTT of automorphed poly
         loop {
             // Generate random polynomial
-            let poly = Poly::random(n, q);
+            let poly = Poly::random_moduli(n, moduli);
             let mut poly_ntt = poly.clone();
             poly_ntt.to_ntt(ctx);
 
@@ -275,7 +279,7 @@ fn generate_automorph_tables(n: usize, q: u64, ctx: &NttContext) -> Vec<Vec<usiz
 pub fn apply_automorphism_ntt(poly_ntt: &Poly, table: &[usize]) -> Poly {
     debug_assert!(poly_ntt.is_ntt(), "Polynomial must be in NTT domain");
     let n = poly_ntt.dimension();
-    let q = poly_ntt.modulus();
+    let moduli = poly_ntt.moduli();
 
     let mut result_coeffs = vec![0u64; n];
     let src = poly_ntt.coeffs();
@@ -285,7 +289,7 @@ pub fn apply_automorphism_ntt(poly_ntt: &Poly, table: &[usize]) -> Poly {
         result_coeffs[i] = src[table[i]];
     }
 
-    let mut result = Poly::from_coeffs(result_coeffs, q);
+    let mut result = Poly::from_coeffs_moduli(result_coeffs, moduli);
     // Mark as NTT domain (from_coeffs sets is_ntt = false)
     result.force_ntt_domain();
     result
@@ -324,7 +328,7 @@ pub fn apply_automorphism_ntt_double(
 ) -> (Poly, Poly) {
     debug_assert!(poly_ntt.is_ntt(), "Polynomial must be in NTT domain");
     let n = poly_ntt.dimension();
-    let q = poly_ntt.modulus();
+    let moduli = poly_ntt.moduli();
 
     let mut result_pos = vec![0u64; n];
     let mut result_neg = vec![0u64; n];
@@ -335,8 +339,8 @@ pub fn apply_automorphism_ntt_double(
         result_neg[i] = src[table_neg[i]];
     }
 
-    let mut poly_pos = Poly::from_coeffs(result_pos, q);
-    let mut poly_neg = Poly::from_coeffs(result_neg, q);
+    let mut poly_pos = Poly::from_coeffs_moduli(result_pos, moduli);
+    let mut poly_neg = Poly::from_coeffs_moduli(result_neg, moduli);
     poly_pos.force_ntt_domain();
     poly_neg.force_ntt_domain();
 
@@ -446,10 +450,10 @@ impl OfflinePackingKeys {
         let q = pack_params.q;
         let num_to_pack = pack_params.num_to_pack;
         let gadget_len = pack_params.gadget.len;
-        let ctx = NttContext::new(n, q);
+        let ctx = NttContext::with_moduli(n, &pack_params.moduli);
 
         // Generate w_mask from seed and convert to NTT form
-        let w_mask = generate_mask_from_seed(w_seed, n, q, gadget_len);
+        let w_mask = generate_mask_from_seed(w_seed, n, q, &pack_params.moduli, gadget_len);
         let w_mask_ntt: Vec<Poly> = w_mask
             .iter()
             .map(|p| {
@@ -512,11 +516,11 @@ impl OfflinePackingKeys {
         let num_to_pack_half = n / 2;
         let two_n = 2 * n;
         let gadget_len = pack_params.gadget.len;
-        let ctx = NttContext::new(n, q);
+        let ctx = NttContext::with_moduli(n, &pack_params.moduli);
 
         // Generate masks from seeds and convert to NTT
-        let w_mask = generate_mask_from_seed(w_seed, n, q, gadget_len);
-        let v_mask = generate_mask_from_seed(v_seed, n, q, gadget_len);
+        let w_mask = generate_mask_from_seed(w_seed, n, q, &pack_params.moduli, gadget_len);
+        let v_mask = generate_mask_from_seed(v_seed, n, q, &pack_params.moduli, gadget_len);
 
         let w_mask_ntt: Vec<Poly> = w_mask
             .iter()
@@ -638,10 +642,10 @@ impl ClientPackingKeys {
         let q = pack_params.q;
         let num_to_pack = pack_params.num_to_pack;
         let gadget_len = pack_params.gadget.len;
-        let ctx = NttContext::new(n, q);
+        let ctx = NttContext::with_moduli(n, &pack_params.moduli);
 
         // Regenerate w_mask from seed (same as server did)
-        let w_mask = generate_mask_from_seed(w_seed, n, q, gadget_len);
+        let w_mask = generate_mask_from_seed(w_seed, n, q, &pack_params.moduli, gadget_len);
 
         // Generate y_body = τ_g(s)·G - s·w_mask + error
         // Google uses gen_pows[1] which equals generator (g^1)
@@ -714,11 +718,11 @@ impl ClientPackingKeys {
         let num_to_pack_half = n / 2;
         let two_n = 2 * n;
         let gadget_len = pack_params.gadget.len;
-        let ctx = NttContext::new(n, q);
+        let ctx = NttContext::with_moduli(n, &pack_params.moduli);
 
         // Regenerate masks from seeds
-        let w_mask = generate_mask_from_seed(w_seed, n, q, gadget_len);
-        let v_mask = generate_mask_from_seed(v_seed, n, q, gadget_len);
+        let w_mask = generate_mask_from_seed(w_seed, n, q, &pack_params.moduli, gadget_len);
+        let v_mask = generate_mask_from_seed(v_seed, n, q, &pack_params.moduli, gadget_len);
 
         // Generate y_body and z_body
         // Google uses gen_pows[1] for y_body, (2*poly_len - 1) for z_body
@@ -804,7 +808,13 @@ impl ClientPackingKeys {
 }
 
 /// Generate mask from seed (deterministic expansion)
-fn generate_mask_from_seed(seed: [u8; 32], n: usize, q: u64, gadget_len: usize) -> Vec<Poly> {
+fn generate_mask_from_seed(
+    seed: [u8; 32],
+    n: usize,
+    q: u64,
+    moduli: &[u64],
+    gadget_len: usize,
+) -> Vec<Poly> {
     let mut rng = ChaCha20Rng::from_seed(seed);
     let mut result = Vec::with_capacity(gadget_len);
 
@@ -813,7 +823,7 @@ fn generate_mask_from_seed(seed: [u8; 32], n: usize, q: u64, gadget_len: usize) 
         for coeff in coeffs.iter_mut() {
             *coeff = (rng.next_u64()) % q;
         }
-        result.push(Poly::from_coeffs(coeffs, q));
+        result.push(Poly::from_coeffs_moduli(coeffs, moduli));
     }
 
     result
@@ -839,6 +849,7 @@ fn generate_ksk_body(
     let s = &sk.poly;
     let n = s.dimension();
     let q = s.modulus();
+    let moduli = s.moduli();
 
     // τ_g(s) - automorphism of secret key
     let tau_s = apply_automorphism(s, gen);
@@ -863,7 +874,7 @@ fn generate_ksk_body(
             prod.from_ntt(ctx);
             prod
         } else {
-            Poly::zero(n, q)
+            Poly::zero_moduli(n, moduli)
         };
         let neg_s_times_mask = s_times_mask.negate();
 
@@ -877,7 +888,7 @@ fn generate_ksk_body(
                 (q as i64 + (sample % q as i64)) as u64
             };
         }
-        let error = Poly::from_coeffs(error_coeffs, q);
+        let error = Poly::from_coeffs_moduli(error_coeffs, moduli);
 
         // y_body[k] = τ_g(s)·g^k - s·w_mask[k] + error
         let result_k = &(&tau_s_times_g + &neg_s_times_mask) + &error;
@@ -915,6 +926,7 @@ pub fn packing_offline(
 ) -> PrecompInsPIR {
     let n = pack_params.ring_dim;
     let q = pack_params.q;
+    let moduli = &pack_params.moduli;
     let num_to_pack = pack_params.num_to_pack;
     let gen_pows = &pack_params.gen_pows;
 
@@ -934,7 +946,7 @@ pub fn packing_offline(
 
     for i in 0..num_to_pack {
         // Inner product: Σ_j X^{j·g^{n-i}} · a_j (all in NTT domain)
-        let mut r_pow_i_ntt = Poly::zero(n, q);
+        let mut r_pow_i_ntt = Poly::zero_moduli(n, moduli);
         r_pow_i_ntt.to_ntt(ctx);
 
         for (j, a_j_ntt) in a_ct_ntt.iter().enumerate() {
@@ -1034,6 +1046,7 @@ pub fn full_packing_offline(
 ) -> PrecompInsPIR {
     let n = pack_params.ring_dim;
     let q = pack_params.q;
+    let moduli = &pack_params.moduli;
     let num_to_pack_half = n / 2;
     let two_n = 2 * n;
     let gen_pows = &pack_params.gen_pows;
@@ -1046,8 +1059,8 @@ pub fn full_packing_offline(
     let mut r_bar_all: Vec<Poly> = Vec::with_capacity(num_to_pack_half);
 
     for i in 0..num_to_pack_half {
-        let mut r_pow_i = Poly::zero(n, q);
-        let mut r_bar_pow_i = Poly::zero(n, q);
+        let mut r_pow_i = Poly::zero_moduli(n, moduli);
+        let mut r_bar_pow_i = Poly::zero_moduli(n, moduli);
 
         for (j, a_j) in a_ct_tilde.iter().enumerate() {
             let exp_index = (n - i) % n;
@@ -1171,11 +1184,11 @@ pub fn packing_online(
     ctx: &NttContext,
 ) -> RlweCiphertext {
     let n = precomp.ring_dim;
-    let q = precomp.q;
     let num_to_pack = precomp.num_to_pack;
+    let moduli = precomp.a_hat.moduli();
 
     // Convert bold_t to NTT form for efficient multiply-accumulate
-    let mut sum_b_ntt = Poly::zero(n, q);
+    let mut sum_b_ntt = Poly::zero_moduli(n, moduli);
     sum_b_ntt.to_ntt(ctx);
 
     for i in 0..(num_to_pack - 1) {
@@ -1214,11 +1227,11 @@ pub fn packing_online_ntt(
     ctx: &NttContext,
 ) -> RlweCiphertext {
     let n = precomp.ring_dim;
-    let q = precomp.q;
     let num_to_pack = precomp.num_to_pack;
+    let moduli = precomp.a_hat.moduli();
 
     // Accumulate in NTT domain
-    let mut sum_b_ntt = Poly::zero(n, q);
+    let mut sum_b_ntt = Poly::zero_moduli(n, moduli);
     sum_b_ntt.to_ntt(ctx);
 
     for i in 0..(num_to_pack - 1) {
@@ -1259,11 +1272,11 @@ pub fn packing_online_fully_ntt(
     ctx: &NttContext,
 ) -> RlweCiphertext {
     let n = precomp.ring_dim;
-    let q = precomp.q;
     let num_to_pack = precomp.num_to_pack;
+    let moduli = precomp.a_hat.moduli();
 
     // Accumulate in NTT domain - pure pointwise operations
-    let mut sum_b_ntt = Poly::zero(n, q);
+    let mut sum_b_ntt = Poly::zero_moduli(n, moduli);
     sum_b_ntt.to_ntt(ctx);
 
     for i in 0..(num_to_pack - 1) {
@@ -1316,13 +1329,13 @@ pub fn pack_inspiring(
     params: &InspireParams,
 ) -> RlweCiphertext {
     let d = params.ring_dim;
-    let q = params.q;
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
+    let moduli = params.moduli();
 
     // Convert LWE a-vectors to Poly
     let a_ct_tilde: Vec<Poly> = lwe_ciphertexts
         .iter()
-        .map(|lwe| Poly::from_coeffs(lwe.a.clone(), q))
+        .map(|lwe| Poly::from_coeffs_moduli(lwe.a.clone(), params.moduli()))
         .collect();
 
     // Offline phase
@@ -1338,7 +1351,7 @@ pub fn pack_inspiring(
             b_coeffs[i] = lwe.b;
         }
     }
-    let b_poly = Poly::from_coeffs(b_coeffs, q);
+    let b_poly = Poly::from_coeffs_moduli(b_coeffs, moduli);
 
     // Online phase
     packing_online(&precomp, &y_all, &b_poly, &ctx)
@@ -1470,7 +1483,7 @@ pub fn precompute_inspiring(
     let d = params.ring_dim;
     let q = params.q;
     let num_to_pack = crs_a_vectors.len();
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
 
     let gen_pows = GeneratorPowers::new(d);
     let rotated_k_g = RotatedKsMatrix::generate(k_g, &gen_pows, num_to_pack);
@@ -1481,7 +1494,7 @@ pub fn precompute_inspiring(
     // Convert a vectors to Poly
     let a_polys: Vec<Poly> = crs_a_vectors
         .iter()
-        .map(|a| Poly::from_coeffs(a.clone(), q))
+        .map(|a| Poly::from_coeffs_moduli(a.clone(), params.moduli()))
         .collect();
 
     // Create simple packing key (using K_g rows as w_all approximation)
@@ -1541,7 +1554,8 @@ pub fn pack_inspiring_legacy(
     let d = params.ring_dim;
     let q = params.q;
     let n = lwe_ciphertexts.len();
-    let ctx = NttContext::new(d, q);
+    let ctx = params.ntt_context();
+    let moduli = params.moduli();
 
     assert_eq!(
         n, precomp.num_to_pack,
@@ -1563,7 +1577,7 @@ pub fn pack_inspiring_legacy(
             b_coeffs[i] = lwe.b;
         }
     }
-    let b_poly = Poly::from_coeffs(b_coeffs, q);
+    let b_poly = Poly::from_coeffs_moduli(b_coeffs, moduli);
 
     // Build precomp for online phase
     let precomp_new = PrecompInsPIR {
@@ -1571,7 +1585,7 @@ pub fn pack_inspiring_legacy(
             .r_polys
             .get(0)
             .cloned()
-            .unwrap_or_else(|| Poly::zero(d, q)),
+            .unwrap_or_else(|| Poly::zero_moduli(d, moduli)),
         bold_t: precomp.bold_t.clone(),
         bold_t_ntt: vec![], // Legacy shim - will be converted on-the-fly
         bold_t_bar: vec![],
@@ -1651,7 +1665,6 @@ fn extended_gcd_i64(a: i64, b: i64) -> (i64, i64, i64) {
 mod tests {
     use super::*;
     use crate::ks::generate_automorphism_ks_matrix;
-    use crate::lwe::LweSecretKey;
     use crate::math::GaussianSampler;
     use crate::rlwe::RlweSecretKey;
 
@@ -1659,6 +1672,7 @@ mod tests {
         InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
@@ -1736,7 +1750,7 @@ mod tests {
         let params = test_params();
         let d = params.ring_dim;
         let q = params.q;
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         let sk = RlweSecretKey::generate(&params, &mut sampler);
@@ -1748,7 +1762,7 @@ mod tests {
         // Create dummy CRS a-vectors
         let num_to_pack = 8;
         let crs_a_vectors: Vec<Vec<u64>> = (0..num_to_pack)
-            .map(|_| Poly::random(d, q).coeffs().to_vec())
+            .map(|_| Poly::random_moduli(d, params.moduli()).coeffs().to_vec())
             .collect();
 
         let precomp = precompute_inspiring(&crs_a_vectors, &k_g, &params);
@@ -1761,8 +1775,7 @@ mod tests {
     fn test_packing_offline_dimensions() {
         let params = test_params();
         let d = params.ring_dim;
-        let q = params.q;
-        let ctx = NttContext::new(d, q);
+        let ctx = params.ntt_context();
         let mut sampler = GaussianSampler::new(params.sigma);
 
         let _sk = RlweSecretKey::generate(&params, &mut sampler);
@@ -1775,7 +1788,9 @@ mod tests {
         let packing_key = OfflinePackingKeys::generate(&pack_params, w_seed);
 
         // Create test a-polynomials
-        let a_polys: Vec<Poly> = (0..num_to_pack).map(|_| Poly::random(d, q)).collect();
+        let a_polys: Vec<Poly> = (0..num_to_pack)
+            .map(|_| Poly::random_moduli(d, params.moduli()))
+            .collect();
 
         let precomp = packing_offline(&pack_params, &packing_key, &a_polys, &ctx);
 

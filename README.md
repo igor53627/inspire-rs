@@ -76,7 +76,7 @@ The key insight: storing value `y_k` at coefficient `k` of polynomial `h(X)`, th
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | Ring dimension d | 2048 | Power of two |
-| Ciphertext modulus q | 2^60 - 2^14 + 1 | NTT-friendly |
+| Ciphertext modulus q | CRT moduli [268369921, 249561089] (q ≈ 2^56) | NTT-friendly per-modulus |
 | Plaintext modulus p | 2^16 | For 32-byte entries |
 | Error σ | 6.4 | Discrete Gaussian |
 | Key-switching matrices | 2 | K_g, K_h only (InspiRING) |
@@ -89,7 +89,7 @@ The key insight: storing value `y_k` at coefficient `k` of polynomial `h(X)`, th
 | InspiRING (2-matrix) | 2 (seeds only) | 64 bytes |
 | **Reduction** | **5.5x** | **16,000x** |
 
-**Note**: The conceptual 64-byte figure refers only to InspiRING packing-key seeds. The actual `ServerCrs` in this implementation is ~40-50 MB (d=2048), dominated by `crs_a_vectors` (d×d coefficients ≈ 33 MB) and offline precomputation. The HTTP server currently uses **tree packing** (`respond_one_packing`); InspiRING 2-matrix packing (`respond_inspiring`) is available for local experiments.
+**Note**: The conceptual 64-byte figure refers only to InspiRING packing-key seeds. The actual `ServerCrs` in this implementation is ~40-50 MB (d=2048), dominated by `crs_a_vectors` (d×d coefficients ≈ 33 MB) and offline precomputation. The HTTP server currently uses **tree packing** (`respond_one_packing`); InspiRING 2-matrix packing (`respond_inspiring`) is available for local experiments. Default parameters now use CRT moduli (two residues per coefficient); single-modulus params remain for switched-query experiments.
 
 ## Building
 
@@ -170,9 +170,11 @@ InsPIRe offers 4 protocol variants with different bandwidth/computation tradeoff
 | **InsPIRe^2** (Seeded+Packed) | 96 KB | 32 KB | **128 KB** | 5.7x |
 | **InsPIRe^2+** (Switched+Packed)* | 48 KB | 32 KB | **80 KB** | 9.2x |
 
-*InsPIRe^2+ uses modulus switching which may exceed noise budget with default parameters.
+*InsPIRe^2+ uses modulus switching which may exceed noise budget with default parameters and is only supported for single-modulus params.
 
 These costs are **independent of database size**—the same whether querying 1 MB or 73 GB.
+
+**Note**: The table reflects serialized sizes in single-modulus mode (crt_moduli length 1). With CRT enabled (default), ciphertexts store two residues per coefficient and sizes increase roughly proportionally.
 
 > **Why constant sizes?** This is a privacy requirement. If sizes varied with target index or database, traffic analysis could reveal what's being queried. See [docs/COMMUNICATION_COSTS.md](docs/COMMUNICATION_COSTS.md#why-pir-sizes-are-constant) for the formulas.
 

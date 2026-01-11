@@ -4,7 +4,6 @@
 
 use super::error::Result;
 
-use crate::math::NttContext;
 use crate::params::InspireVariant;
 
 use super::encode_db::reconstruct_entry;
@@ -35,11 +34,9 @@ pub fn extract(
     response: &ServerResponse,
     entry_size: usize,
 ) -> Result<Vec<u8>> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
     let p = crs.params.p;
     let delta = crs.params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let num_columns = (entry_size * 8 + 15) / 16;
     let mut column_values = Vec::with_capacity(num_columns);
@@ -103,10 +100,9 @@ fn extract_packed(
     entry_size: usize,
 ) -> Result<Vec<u8>> {
     let d = crs.ring_dim();
-    let q = crs.modulus();
     let p = crs.params.p;
     let delta = crs.params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let num_columns = (entry_size * 8 + 15) / 16;
 
@@ -145,11 +141,9 @@ pub fn extract_inspiring(
     response: &ServerResponse,
     entry_size: usize,
 ) -> Result<Vec<u8>> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
     let p = crs.params.p;
     let delta = crs.params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let num_columns = (entry_size * 8 + 15) / 16;
 
@@ -200,11 +194,9 @@ pub fn extract_with_tolerance(
     entry_size: usize,
     tolerance: u64,
 ) -> Result<Vec<u8>> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
     let p = crs.params.p;
     let delta = crs.params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let num_columns = (entry_size * 8 + 15) / 16;
     let mut column_values = Vec::with_capacity(num_columns);
@@ -249,11 +241,9 @@ pub fn extract_single_coeff(
     state: &ClientState,
     response: &ServerResponse,
 ) -> Result<u64> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
     let p = crs.params.p;
     let delta = crs.params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let decrypted = response
         .ciphertext
@@ -272,11 +262,9 @@ pub fn extract_raw(
     state: &ClientState,
     response: &ServerResponse,
 ) -> Result<Vec<u64>> {
-    let d = crs.ring_dim();
-    let q = crs.modulus();
     let p = crs.params.p;
     let delta = crs.params.delta();
-    let ctx = NttContext::new(d, q);
+    let ctx = crs.params.ntt_context();
 
     let decrypted = response
         .ciphertext
@@ -297,6 +285,7 @@ mod tests {
         crate::params::InspireParams {
             ring_dim: 256,
             q: 1152921504606830593,
+            crt_moduli: vec![1152921504606830593],
             p: 65536,
             sigma: 6.4,
             gadget_base: 1 << 20,
