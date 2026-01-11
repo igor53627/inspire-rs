@@ -6,7 +6,37 @@ on:
   pull_request:
 
 jobs:
-  build:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_DIR: /tmp/sccache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: true
+
+      - name: Test (quick PR path)
+        if: github.event_name == 'pull_request'
+        run: cargo test --all --lib --bins
+
+      - name: Test (full)
+        if: github.event_name != 'pull_request'
+        run: cargo test --all
+
+      - name: sccache stats
+        if: always()
+        continue-on-error: true
+        run: command -v sccache >/dev/null && sccache --show-stats || true
+
+  clippy:
     runs-on: ubuntu-latest
     env:
       RUSTC_WRAPPER: sccache
@@ -24,12 +54,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-targets: true
-
-      - name: Build
-        run: cargo build --all-targets
-
-      - name: Test
-        run: cargo test --all
 
       - name: Clippy
         run: cargo clippy --all-targets -- -W clippy::all
