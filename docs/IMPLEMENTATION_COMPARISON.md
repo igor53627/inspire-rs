@@ -80,7 +80,7 @@ lib.rs
 | Parameter | inspire-rs | Google |
 |-----------|------------|--------|
 | Ring dimension (d) | 2048 (configurable) | 2048 (fixed) |
-| Modulus (q) | Single ~2^60 prime | CRT: [268369921, 249561089] |
+| Modulus (q) | CRT: [268369921, 249561089] (default); single-modulus optional | CRT: [268369921, 249561089] |
 | Noise (sigma) | 6.4 | 6.4 |
 | Gadget base | 2^20 | ~2^19-2^20 |
 | Gadget digits | 3 | 3 (t_gsw), varies for t_exp_* |
@@ -88,8 +88,8 @@ lib.rs
 
 ### Key Difference: Modulus Strategy
 
-- **inspire-rs**: Single large prime modulus - simpler implementation, no CRT complexity
-- **Google**: CRT with two moduli - enables modulus switching optimizations but adds complexity
+- **inspire-rs**: CRT by default, with an optional single-modulus mode used for switched-query sizing experiments
+- **Google**: CRT with two moduli throughout (via spiral-rs)
 
 ---
 
@@ -216,7 +216,6 @@ run_ypir_batched(&params, protocol_type, &mut measurement);
 | Feature | Description |
 |---------|-------------|
 | **Protocol variants** | SimplePIR, DoublePIR, InsPIRe^0, InsPIRe^2 |
-| **CRT moduli** | Two-modulus CRT representation |
 | **AVX-512 kernels** | Highly optimized SIMD operations |
 | **Auto-tuning** | params_for_scenario_* with noise analysis |
 | **Packing variants** | NoPacking, CDKS, InspiRING as options |

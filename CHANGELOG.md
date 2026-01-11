@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **CRT support**: Default `secure_128` parameters now use CRT moduli `[268369921, 249561089]` (q ≈ 2^56 composite)
+  - Added CRT helpers and moduli-aware polynomials across InspiRING/PIR/KS/RLWE
+  - Gaussian sampling now shares the same signed sample across CRT components
+  - Size comparison tests/docs use single-modulus params where modulus switching is required
 - **STATE_FORMAT support**: `inspire-setup` now reads new `state.bin` format instead of plinko-extractor format (Issue #32)
   - Single `state.bin` file with 64-byte header + 84-byte entries (address + slot + value)
   - Removed support for legacy `database.bin`, `account-mapping.bin`, `storage-mapping.bin` files

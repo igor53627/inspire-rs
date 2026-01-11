@@ -42,7 +42,7 @@
   },
   "parameters": {
     "ring_dim": 2048,
-    "modulus_q": "2^60 - 2^14 + 1 (NTT-friendly)",
+    "modulus_q": "CRT moduli [268369921, 249561089] (q ≈ 2^56 composite)",
     "plaintext_p": 65536,
     "sigma": 6.4,
     "gadget_base": "2^20",
@@ -114,5 +114,5 @@
     "inspire_paper": "https://eprint.iacr.org/2024/XXX",
     "google_reference": "https://github.com/google/private-membership/tree/main/research/InsPIRe"
   },
-  "last_updated": "2024-12-19"
+  "last_updated": "2026-01-11"
 }
