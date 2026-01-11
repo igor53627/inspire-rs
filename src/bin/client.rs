@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use eyre::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
@@ -17,7 +17,10 @@ use tracing_subscriber::FmtSubscriber;
 use inspire_pir::ethereum_db::EthereumStateDb;
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::{InspireVariant, ShardConfig};
-use inspire_pir::pir::{extract_with_variant, query, ClientQuery, ServerCrs, ServerResponse};
+use inspire_pir::pir::{
+    extract_with_variant, query, query_seeded, ClientQuery, SeededClientQuery, ServerCrs,
+    ServerResponse,
+};
 use inspire_pir::rlwe::RlweSecretKey;
 
 #[derive(Parser)]
@@ -36,6 +39,9 @@ struct Args {
     /// Path to state.bin file or directory containing it (for storage lookup)
     #[arg(long, default_value = "inspire_data")]
     state_path: PathBuf,
+    /// Protocol variant (OnePacking = full query, TwoPacking = seeded + packed)
+    #[arg(long, value_enum, default_value = "two-packing")]
+    variant: VariantChoice,
 
     #[command(subcommand)]
     command: Commands,
@@ -68,6 +74,27 @@ enum Commands {
     Params,
     /// Health check
     Health,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+#[value(rename_all = "kebab_case")]
+enum VariantChoice {
+    OnePacking,
+    TwoPacking,
+}
+
+enum QueryPayload {
+    Full(ClientQuery),
+    Seeded(SeededClientQuery),
+}
+
+impl VariantChoice {
+    fn inspire_variant(self) -> InspireVariant {
+        match self {
+            VariantChoice::OnePacking => InspireVariant::OnePacking,
+            VariantChoice::TwoPacking => InspireVariant::TwoPacking,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -113,7 +140,7 @@ async fn main() -> Result<()> {
             get_params(&args.server).await?;
         }
         Commands::Index { index } => {
-            query_by_index(&args.server, &args.secret_key, index).await?;
+            query_by_index(&args.server, &args.secret_key, index, args.variant).await?;
         }
         Commands::Storage { address, slot } => {
             query_storage(
@@ -122,11 +149,12 @@ async fn main() -> Result<()> {
                 &args.state_path,
                 &address,
                 &slot,
+                args.variant,
             )
             .await?;
         }
         Commands::Batch { file } => {
-            batch_query(&args.server, &args.secret_key, &file).await?;
+            batch_query(&args.server, &args.secret_key, &file, args.variant).await?;
         }
     }
 
@@ -165,7 +193,12 @@ async fn get_params(server: &str) -> Result<()> {
     Ok(())
 }
 
-async fn query_by_index(server: &str, sk_path: &PathBuf, index: u64) -> Result<()> {
+async fn query_by_index(
+    server: &str,
+    sk_path: &PathBuf,
+    index: u64,
+    variant: VariantChoice,
+) -> Result<()> {
     let total_start = Instant::now();
 
     info!("Loading secret key...");
@@ -189,15 +222,30 @@ async fn query_by_index(server: &str, sk_path: &PathBuf, index: u64) -> Result<(
     let query_start = Instant::now();
 
     let mut sampler = GaussianSampler::new(crs.params.sigma);
-    let (state, client_query) = query(&crs, index, &shard_config, &secret_key, &mut sampler)
-        .with_context(|| "Failed to generate query")?;
+    let inspire_variant = variant.inspire_variant();
+    let (state, payload) = match variant {
+        VariantChoice::OnePacking => {
+            let (state, client_query) =
+                query(&crs, index, &shard_config, &secret_key, &mut sampler)
+                    .with_context(|| "Failed to generate query")?;
+            (state, QueryPayload::Full(client_query))
+        }
+        VariantChoice::TwoPacking => {
+            let (state, seeded_query) =
+                query_seeded(&crs, index, &shard_config, &secret_key, &mut sampler)
+                    .with_context(|| "Failed to generate seeded query")?;
+            (state, QueryPayload::Seeded(seeded_query))
+        }
+    };
 
     info!("Query generation time: {:.2?}", query_start.elapsed());
 
     info!("Sending query to server...");
     let send_start = Instant::now();
-
-    let response = send_query(server, &client_query).await?;
+    let response = match &payload {
+        QueryPayload::Full(client_query) => send_query(server, client_query).await?,
+        QueryPayload::Seeded(seeded_query) => send_seeded_query(server, seeded_query).await?,
+    };
 
     info!("Server processing time: {} ms", response.processing_time_ms);
     info!("Network round-trip: {:.2?}", send_start.elapsed());
@@ -205,14 +253,8 @@ async fn query_by_index(server: &str, sk_path: &PathBuf, index: u64) -> Result<(
     info!("Extracting result...");
     let extract_start = Instant::now();
 
-    let entry = extract_with_variant(
-        &crs,
-        &state,
-        &response.response,
-        32,
-        InspireVariant::OnePacking,
-    )
-    .with_context(|| "Failed to extract result")?;
+    let entry = extract_with_variant(&crs, &state, &response.response, 32, inspire_variant)
+        .with_context(|| "Failed to extract result")?;
 
     info!("Extraction time: {:.2?}", extract_start.elapsed());
 
@@ -240,6 +282,7 @@ async fn query_storage(
     state_path: &PathBuf,
     address: &str,
     slot: &str,
+    variant: VariantChoice,
 ) -> Result<()> {
     let address_bytes = parse_hex_address(address)?;
     let slot_bytes = parse_hex_slot(slot)?;
@@ -276,10 +319,15 @@ async fn query_storage(
     };
 
     info!("Found storage slot at index {}", index);
-    query_by_index(server, sk_path, index).await
+    query_by_index(server, sk_path, index, variant).await
 }
 
-async fn batch_query(server: &str, sk_path: &PathBuf, file: &PathBuf) -> Result<()> {
+async fn batch_query(
+    server: &str,
+    sk_path: &PathBuf,
+    file: &PathBuf,
+    variant: VariantChoice,
+) -> Result<()> {
     info!("Loading secret key...");
     let secret_key = load_secret_key(sk_path)?;
 
@@ -329,20 +377,28 @@ async fn batch_query(server: &str, sk_path: &PathBuf, file: &PathBuf) -> Result<
     let mut results = Vec::new();
     let mut total_server_time = 0u64;
 
+    let inspire_variant = variant.inspire_variant();
     for index in &indices {
         let mut sampler = GaussianSampler::new(crs.params.sigma);
-        let (state, client_query) = query(&crs, *index, &shard_config, &secret_key, &mut sampler)?;
-
-        let response = send_query(server, &client_query).await?;
+        let (state, payload) = match variant {
+            VariantChoice::OnePacking => {
+                let (state, client_query) =
+                    query(&crs, *index, &shard_config, &secret_key, &mut sampler)?;
+                (state, QueryPayload::Full(client_query))
+            }
+            VariantChoice::TwoPacking => {
+                let (state, seeded_query) =
+                    query_seeded(&crs, *index, &shard_config, &secret_key, &mut sampler)?;
+                (state, QueryPayload::Seeded(seeded_query))
+            }
+        };
+        let response = match &payload {
+            QueryPayload::Full(client_query) => send_query(server, client_query).await?,
+            QueryPayload::Seeded(seeded_query) => send_seeded_query(server, seeded_query).await?,
+        };
         total_server_time += response.processing_time_ms;
 
-        let entry = extract_with_variant(
-            &crs,
-            &state,
-            &response.response,
-            32,
-            InspireVariant::OnePacking,
-        )?;
+        let entry = extract_with_variant(&crs, &state, &response.response, 32, inspire_variant)?;
         results.push((*index, entry));
 
         pb.inc(1);
@@ -413,6 +469,23 @@ async fn send_query(server: &str, query: &ClientQuery) -> Result<QueryResponse> 
         .json()
         .await
         .with_context(|| "Failed to parse query response")?;
+
+    Ok(response)
+}
+
+async fn send_seeded_query(server: &str, query: &SeededClientQuery) -> Result<QueryResponse> {
+    let url = format!("{}/query_seeded", server);
+    let client = reqwest::Client::new();
+
+    let response: QueryResponse = client
+        .post(&url)
+        .json(query)
+        .send()
+        .await
+        .with_context(|| "Failed to send seeded query")?
+        .json()
+        .await
+        .with_context(|| "Failed to parse seeded query response")?;
 
     Ok(response)
 }

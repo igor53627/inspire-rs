@@ -16,8 +16,8 @@ use crate::math::GaussianSampler;
 use crate::modulus_switch::{SwitchedSeededRgswCiphertext, DEFAULT_SWITCHED_Q};
 use crate::params::ShardConfig;
 use crate::rgsw::{
-    switched_gadget_for_params, DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR, GadgetVector,
-    RgswCiphertext, SeededRgswCiphertext,
+    switched_gadget_for_params, GadgetVector, RgswCiphertext, SeededRgswCiphertext,
+    DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR,
 };
 use crate::rlwe::RlweSecretKey;
 
@@ -43,8 +43,7 @@ fn seeded_query_with_gadget(
     let lwe_sk = rlwe_to_lwe_key(rlwe_sk);
 
     let inv_mono = inverse_monomial(local_index as usize, d, q, crs.params.moduli());
-    let rgsw_ciphertext =
-        SeededRgswCiphertext::encrypt(rlwe_sk, &inv_mono, gadget, sampler, &ctx);
+    let rgsw_ciphertext = SeededRgswCiphertext::encrypt(rlwe_sk, &inv_mono, gadget, sampler, &ctx);
 
     let state = ClientState {
         secret_key: lwe_sk,
@@ -63,11 +62,7 @@ fn seeded_query_with_gadget(
 }
 
 /// Select a switched-query gadget that keeps modulus-switch noise within bounds.
-fn switched_gadget_for_params_checked(
-    q: u64,
-    p: u64,
-    switched_q: u64,
-) -> Result<GadgetVector> {
+fn switched_gadget_for_params_checked(q: u64, p: u64, switched_q: u64) -> Result<GadgetVector> {
     switched_gadget_for_params(q, p, switched_q).ok_or_else(|| {
         let min_switched_q =
             4u64.saturating_mul(p).saturating_mul(DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR as u64);
@@ -336,11 +331,8 @@ pub fn query_switched(
     rlwe_sk: &RlweSecretKey,
     sampler: &mut GaussianSampler,
 ) -> Result<(ClientState, SwitchedClientQuery)> {
-    let switched_gadget = switched_gadget_for_params_checked(
-        crs.params.q,
-        crs.params.p,
-        DEFAULT_SWITCHED_Q,
-    )?;
+    let switched_gadget =
+        switched_gadget_for_params_checked(crs.params.q, crs.params.p, DEFAULT_SWITCHED_Q)?;
 
     // First create the seeded query with a switched-safe gadget.
     let (state, seeded_query) = seeded_query_with_gadget(
@@ -524,13 +516,10 @@ mod tests {
         let seeded_size = bincode::serialize(&seeded_query).unwrap().len();
         let switched_size = bincode::serialize(&switched_query).unwrap().len();
 
-        let switched_len = crate::rgsw::switched_gadget_params(
-            params.q,
-            params.p,
-            DEFAULT_SWITCHED_Q,
-        )
-        .map(|(_, len)| len)
-        .unwrap_or(params.gadget_len);
+        let switched_len =
+            crate::rgsw::switched_gadget_params(params.q, params.p, DEFAULT_SWITCHED_Q)
+                .map(|(_, len)| len)
+                .unwrap_or(params.gadget_len);
         println!(
             "\n=== Query Size Comparison (d={}, l_full={}, l_switched={}) ===",
             params.ring_dim, params.gadget_len, switched_len

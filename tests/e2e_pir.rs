@@ -6,7 +6,7 @@ use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::{InspireParams, InspireVariant, SecurityLevel};
 use inspire_pir::pir::{
     extract, extract_inspiring, extract_with_variant, query, query_seeded, query_switched, respond,
-    respond_inspiring, respond_with_variant, setup,
+    respond_inspiring, respond_seeded_packed, respond_with_variant, setup,
 };
 
 fn test_params() -> InspireParams {
@@ -354,21 +354,72 @@ fn test_e2e_switched_query_default_params() {
     let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     let target_idx = 3u64;
-    let (state, switched_query) = query_switched(
-        &crs,
-        target_idx,
-        &encoded_db.config,
-        &rlwe_sk,
-        &mut sampler,
-    )
-    .unwrap();
+    let (state, switched_query) =
+        query_switched(&crs, target_idx, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
 
     let expanded_query = switched_query.expand();
     let response = respond(&crs, &encoded_db, &expanded_query).unwrap();
     let result = extract(&crs, &state, &response, entry_size).unwrap();
 
-    let expected = &database[target_idx as usize * entry_size..(target_idx as usize + 1) * entry_size];
+    let expected =
+        &database[target_idx as usize * entry_size..(target_idx as usize + 1) * entry_size];
     assert_eq!(result, expected, "Switched query default params mismatch");
+}
+
+/// Switched query correctness with OnePacking (production-like path).
+///
+/// Currently fails due to switched+packing noise amplification; keep as a
+/// regression test once parameters are updated.
+#[test]
+#[ignore = "Switched+OnePacking currently incorrect with default params (see #41)"]
+fn test_e2e_switched_query_default_params_one_packing() {
+    let mut params = InspireParams::secure_128_d2048();
+    // Switched queries only support single-modulus mode.
+    let q = inspire_pir::math::mod_q::DEFAULT_Q;
+    params.q = q;
+    params.crt_moduli = vec![q];
+    params.gadget_len = ((q as f64).log2() / (params.gadget_base as f64).log2()).ceil() as usize;
+
+    let num_entries = 16;
+    let entry_size = 32;
+    let mut database = vec![0u8; num_entries * entry_size];
+
+    for i in 0..num_entries {
+        for j in 0..entry_size {
+            database[i * entry_size + j] = ((i * 37 + j * 19) % 256) as u8;
+        }
+    }
+
+    let mut sampler = GaussianSampler::new(params.sigma);
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+    let target_idx = 3u64;
+    let (state, switched_query) =
+        query_switched(&crs, target_idx, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
+
+    let expanded_query = switched_query.expand();
+    let response = respond_with_variant(
+        &crs,
+        &encoded_db,
+        &expanded_query,
+        InspireVariant::OnePacking,
+    )
+    .unwrap();
+    let result = extract_with_variant(
+        &crs,
+        &state,
+        &response,
+        entry_size,
+        InspireVariant::OnePacking,
+    )
+    .unwrap();
+
+    let expected =
+        &database[target_idx as usize * entry_size..(target_idx as usize + 1) * entry_size];
+    assert_eq!(
+        result, expected,
+        "Switched query default params (OnePacking) mismatch"
+    );
 }
 
 #[test]
@@ -507,7 +558,7 @@ fn test_e2e_variant_two_packing() {
     let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
 
     let target_index = 42u64;
-    let (state, client_query) = query(
+    let (state, seeded_query) = query_seeded(
         &crs,
         target_index,
         &encoded_db.config,
@@ -516,10 +567,9 @@ fn test_e2e_variant_two_packing() {
     )
     .unwrap();
 
-    // TwoPacking now works (same as OnePacking on server side)
-    let response =
-        respond_with_variant(&crs, &encoded_db, &client_query, InspireVariant::TwoPacking)
-            .expect("TwoPacking respond should succeed");
+    // TwoPacking: seeded query + packed response
+    let response = respond_seeded_packed(&crs, &encoded_db, &seeded_query)
+        .expect("TwoPacking respond should succeed");
 
     // Extract using TwoPacking (falls back to OnePacking extraction)
     let extracted = extract_with_variant(

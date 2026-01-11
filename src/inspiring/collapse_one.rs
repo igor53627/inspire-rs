@@ -189,7 +189,8 @@ mod tests {
         let b = random_poly(&mut rng, params.ring_dim, params.q, moduli);
 
         // Create a dummy key-switching matrix
-        let ks_matrix = KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
+        let ks_matrix =
+            KeySwitchingMatrix::dummy(params.ring_dim, params.moduli(), params.gadget_len);
 
         let (new_a, _new_b) = collapse_one(&a, &b, &ks_matrix, &params);
 

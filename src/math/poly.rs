@@ -30,9 +30,9 @@
 //! ```
 
 use super::crt::{crt_compose_2, crt_decompose_2, crt_modulus, mod_inverse};
+use super::gaussian::GaussianSampler;
 use super::mod_q::{ModQ, DEFAULT_Q};
 use super::ntt::NttContext;
-use super::gaussian::GaussianSampler;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;

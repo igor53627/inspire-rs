@@ -72,6 +72,7 @@ pub fn extract(
 /// # Variants
 /// - `NoPacking`: Reads from per-column ciphertexts (same as `extract`)
 /// - `OnePacking`: Reads columns from coefficients 0..num_cols of packed ciphertext
+/// - `TwoPacking`: Same packed response format as OnePacking (seeded query path)
 pub fn extract_with_variant(
     crs: &InspireCrs,
     state: &ClientState,
@@ -82,8 +83,24 @@ pub fn extract_with_variant(
     match variant {
         InspireVariant::NoPacking => extract(crs, state, response, entry_size),
         InspireVariant::OnePacking => extract_packed(crs, state, response, entry_size),
-        InspireVariant::TwoPacking => extract_packed(crs, state, response, entry_size),
+        InspireVariant::TwoPacking => extract_two_packing(crs, state, response, entry_size),
     }
+}
+
+/// Extract from TwoPacking response (InsPIRe^2)
+///
+/// TwoPacking uses the same packed response format as OnePacking in this
+/// implementation: column values are placed at coefficients 0..num_cols.
+///
+/// If the server switches to InspiRING packing for TwoPacking, this function
+/// can be updated to call `extract_inspiring` instead.
+pub fn extract_two_packing(
+    crs: &InspireCrs,
+    state: &ClientState,
+    response: &ServerResponse,
+    entry_size: usize,
+) -> Result<Vec<u8>> {
+    extract_packed(crs, state, response, entry_size)
 }
 
 /// Extract from OnePacking response (InsPIRe^1)

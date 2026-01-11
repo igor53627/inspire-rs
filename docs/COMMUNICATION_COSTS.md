@@ -36,6 +36,8 @@ The table above shows **InsPIRe^0 (NoPacking)** costs. With packing enabled, res
 
 *InsPIRe^2+ uses a smaller gadget base (larger ℓ) to satisfy the noise bound; size depends on parameters (see [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs)).
 
+**Production recommendation**: use InsPIRe^2 (seeded + packed) and avoid modulus switching.
+
 **Key insight**: Packing reduces response from 544 KB → 32 KB (17x reduction) by combining all column values into a single RLWE ciphertext using Galois automorphisms.
 
 ## CRS (Common Reference String) Overhead

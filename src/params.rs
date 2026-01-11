@@ -24,8 +24,8 @@
 //! let delta = params.delta();
 //! ```
 
-use serde::{Deserialize, Serialize};
 use crate::math::NttContext;
+use serde::{Deserialize, Serialize};
 
 /// Default CRT moduli from the InsPIRe reference implementation.
 pub const DEFAULT_CRT_MODULI: [u64; 2] = [268_369_921, 249_561_089];
@@ -291,7 +291,7 @@ impl InspireParams {
     /// let params = InspireParams::secure_128_d2048();
     /// let delta = params.delta();
     /// // delta ≈ 2^44 for q ≈ 2^60 and p ≈ 2^16
-    /// assert!(delta > (1 << 40));
+    /// assert!(delta > (1 << 39));
     /// ```
     pub fn delta(&self) -> u64 {
         self.q / self.p

@@ -240,10 +240,8 @@ pub fn generate_automorphism_ks_matrix(
             auto_s_coeffs[reduced_idx] = if coeff == 0 { 0 } else { q - coeff };
         }
     }
-    let auto_s = RlweSecretKey::from_poly(Poly::from_coeffs_moduli(
-        auto_s_coeffs,
-        sk.poly.moduli(),
-    ));
+    let auto_s =
+        RlweSecretKey::from_poly(Poly::from_coeffs_moduli(auto_s_coeffs, sk.poly.moduli()));
 
     // Generate KS matrix from τ_g(s) to s
     generate_ks_matrix(&auto_s, sk, gadget, sampler, ctx)
