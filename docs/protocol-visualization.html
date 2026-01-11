@@ -470,7 +470,7 @@
                 InsPIRe+ uses modulus switching which may exceed noise budget with default parameters and is only supported in single-modulus mode. See <a href="COMMUNICATION_COSTS.md#modulus-switching-tradeoffs">tradeoffs</a>.
             </p>
             <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                Sizes shown reflect single-modulus serialization (crt_moduli length 1). With CRT enabled (default), ciphertexts store two residues per coefficient and sizes increase proportionally.
+                Sizes shown reflect single-modulus serialization (crt_moduli length 1). The default CRT mode stores two residues per coefficient and approximately doubles the serialized size.
             </p>
             <div id="size-breakdown" style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;">
                 <div class="chart-container">
