@@ -172,6 +172,8 @@ InsPIRe offers 4 protocol variants with different bandwidth/computation tradeoff
 
 *InsPIRe^2+ uses modulus switching which may exceed noise budget with default parameters and is only supported for single-modulus params.
 
+**Production recommendation**: use **InsPIRe^2 (TwoPacking)** — seeded query + packed response — and avoid modulus switching.
+
 These costs are **independent of database size**—the same whether querying 1 MB or 73 GB.
 
 **Note**: The table reflects serialized sizes in single-modulus mode (crt_moduli length 1). With CRT enabled (default), ciphertexts store two residues per coefficient and sizes increase roughly proportionally.
@@ -195,7 +197,7 @@ let (state, seeded_query) = query_seeded(&crs, index, &config, &sk, &mut sampler
 let response = respond_seeded_packed(&crs, &db, &seeded_query)?;
 
 // Extract with variant-specific extraction
-let entry = extract_with_variant(&crs, &state, &response, entry_size, InspireVariant::OnePacking)?;
+let entry = extract_with_variant(&crs, &state, &response, entry_size, InspireVariant::TwoPacking)?;
 ```
 
 ## Performance

@@ -159,8 +159,8 @@ pub fn respond(
 ///
 /// # Variants
 /// - `NoPacking` (InsPIRe^0): One RLWE per column, simplest
-/// - `OnePacking` (InsPIRe^1): InspiRING packed response (single RLWE ciphertext)
-/// - `TwoPacking` (InsPIRe^2): Double-packed response (not yet implemented)
+/// - `OnePacking` (InsPIRe^1): Packed response (single RLWE ciphertext)
+/// - `TwoPacking` (InsPIRe^2): Packed response intended for seeded queries
 ///
 /// # Packing Algorithm Selection
 /// - If `inspiring_packing_keys` is present in query: uses InspiRING (~35x faster online)
@@ -180,6 +180,28 @@ pub fn respond_with_variant(
             } else {
                 respond_one_packing(crs, encoded_db, query)
             }
+        }
+    }
+}
+
+/// PIR.Respond with seeded query and explicit variant selection
+///
+/// This is the recommended entry point for InsPIRe^2 (seeded + packed).
+///
+/// # Variants
+/// - `NoPacking` (InsPIRe^0): Seeded query, unpacked response
+/// - `OnePacking` (InsPIRe^1): Seeded query, packed response
+/// - `TwoPacking` (InsPIRe^2): Seeded query, packed response (no switching)
+pub fn respond_seeded_with_variant(
+    crs: &ServerCrs,
+    encoded_db: &EncodedDatabase,
+    query: &SeededClientQuery,
+    variant: InspireVariant,
+) -> Result<ServerResponse> {
+    match variant {
+        InspireVariant::NoPacking => respond_seeded(crs, encoded_db, query),
+        InspireVariant::OnePacking | InspireVariant::TwoPacking => {
+            respond_seeded_packed(crs, encoded_db, query)
         }
     }
 }
@@ -403,9 +425,17 @@ pub fn respond_seeded(
     respond(crs, encoded_db, &expanded)
 }
 
-/// PIR.Respond with seeded query using OnePacking
+/// PIR.Respond with seeded query using OnePacking (InsPIRe^2 response path)
 ///
 /// Full InsPIRe^2: seeded query (50% query reduction) + packed response (16x response reduction).
+/// This is the production path used to avoid modulus switching while keeping
+/// responses packed.
+///
+/// # Algorithm Notes
+/// 1. Expand the seeded RGSW query into a full `ClientQuery`.
+/// 2. Compute per-column RLWE responses via external product.
+/// 3. Pack the column LWEs into a single RLWE ciphertext (tree packing).
+/// 4. Return the packed ciphertext (no per-column ciphertexts).
 pub fn respond_seeded_packed(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,

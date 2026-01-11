@@ -21,12 +21,12 @@ pub mod rgsw;
 pub mod rlwe;
 
 pub use pir::{
-    encode_column, encode_database, encode_direct, extract, extract_with_variant, inverse_monomial,
-    query, query_seeded, query_switched, respond, respond_inspiring, respond_one_packing,
-    respond_seeded, respond_seeded_inspiring, respond_seeded_packed, respond_switched,
-    respond_switched_packed, respond_with_variant, setup, ClientQuery, ClientState,
-    EncodedDatabase, InspireCrs, SeededClientQuery, ServerCrs, ServerResponse, ShardData,
-    SwitchedClientQuery,
+    encode_column, encode_database, encode_direct, extract, extract_two_packing,
+    extract_with_variant, inverse_monomial, query, query_seeded, query_switched, respond,
+    respond_inspiring, respond_one_packing, respond_seeded, respond_seeded_inspiring,
+    respond_seeded_packed, respond_seeded_with_variant, respond_switched, respond_switched_packed,
+    respond_with_variant, setup, ClientQuery, ClientState, EncodedDatabase, InspireCrs,
+    SeededClientQuery, ServerCrs, ServerResponse, ShardData, SwitchedClientQuery,
 };
 
 #[cfg(feature = "server")]

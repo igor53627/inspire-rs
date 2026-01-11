@@ -22,8 +22,8 @@ use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use inspire_pir::pir::{
-    respond_inspiring, respond_mmap_one_packing, respond_one_packing, ClientQuery, EncodedDatabase,
-    InspireCrs, MmapDatabase, ServerResponse,
+    respond_inspiring, respond_mmap_one_packing, respond_one_packing, respond_seeded_packed,
+    ClientQuery, EncodedDatabase, InspireCrs, MmapDatabase, SeededClientQuery, ServerResponse,
 };
 
 #[derive(Parser)]
@@ -153,6 +153,36 @@ async fn handle_query(
     }))
 }
 
+async fn handle_seeded_query(
+    State(state): State<Arc<AppState>>,
+    Json(query): Json<SeededClientQuery>,
+) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let start = Instant::now();
+
+    let response = match &state.db {
+        DatabaseMode::InMemory(encoded_db) => respond_seeded_packed(&state.crs, encoded_db, &query),
+        DatabaseMode::Mmap(mmap_db) => {
+            let expanded = query.expand();
+            respond_mmap_one_packing(&state.crs, mmap_db, &expanded)
+        }
+    }
+    .map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!("Seeded query processing failed: {}", e),
+            }),
+        )
+    })?;
+
+    let processing_time_ms = start.elapsed().as_millis() as u64;
+
+    Ok(Json(QueryResponse {
+        response,
+        processing_time_ms,
+    }))
+}
+
 async fn get_crs(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     Json(state.crs.clone())
 }
@@ -231,6 +261,7 @@ async fn main() -> Result<()> {
         .route("/params", get(get_params))
         .route("/crs", get(get_crs))
         .route("/query", post(handle_query))
+        .route("/query_seeded", post(handle_seeded_query))
         .with_state(state);
 
     info!("Starting server on {}", args.bind);
@@ -245,6 +276,7 @@ async fn main() -> Result<()> {
     println!("  GET  /params  - Get public parameters");
     println!("  GET  /crs     - Get full CRS (large)");
     println!("  POST /query   - Process PIR query");
+    println!("  POST /query_seeded - Process seeded PIR query (TwoPacking)");
     println!();
 
     axum::serve(listener, app).await?;

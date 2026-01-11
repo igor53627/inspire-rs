@@ -411,8 +411,7 @@ impl NttContext {
         for idx in 0..self.crt_count() {
             let start = idx * self.n;
             for i in 0..self.n {
-                result[start + i] =
-                    self.montgomery_mul_at(a[start + i], b[start + i], idx);
+                result[start + i] = self.montgomery_mul_at(a[start + i], b[start + i], idx);
             }
         }
     }

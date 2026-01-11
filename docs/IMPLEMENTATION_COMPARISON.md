@@ -73,6 +73,8 @@ lib.rs
 - InsPIRe^2: `query_seeded()` + `respond_seeded_packed()` - seeded + packed
 - InsPIRe^2+: `query_switched()` + `respond_switched_packed()` - experimental
 
+**Production recommendation**: use InsPIRe^2 (seeded + packed / TwoPacking) without modulus switching.
+
 ---
 
 ## 3. Cryptographic Parameters

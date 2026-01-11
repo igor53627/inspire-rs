@@ -29,7 +29,10 @@ fn main() {
     println!("  Ring dimension (d): {}", d);
     println!("  Modulus (q): {} ({:.1} bits)", q, (q as f64).log2());
     println!("  Gadget length (l): {}", gadget_len);
-    println!("  Gadget base: 2^{}", (params.gadget_base as f64).log2() as u32);
+    println!(
+        "  Gadget base: 2^{}",
+        (params.gadget_base as f64).log2() as u32
+    );
     if switched_gadget.is_some()
         && (switched_gadget_base != params.gadget_base || switched_gadget_len != params.gadget_len)
     {

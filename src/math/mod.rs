@@ -26,8 +26,8 @@
 //! poly.to_ntt(&ctx);
 //! ```
 
-pub mod gaussian;
 pub mod crt;
+pub mod gaussian;
 pub mod mod_q;
 pub mod modular;
 pub mod ntt;
@@ -35,8 +35,8 @@ pub mod poly;
 pub mod sampler;
 pub mod sampling;
 
-pub use gaussian::GaussianSampler;
 pub use crt::{crt_compose_2, crt_decompose_2, crt_modulus, mod_inverse};
+pub use gaussian::GaussianSampler;
 pub use mod_q::DEFAULT_Q;
 pub use modular::ModQ;
 pub use ntt::NttContext;

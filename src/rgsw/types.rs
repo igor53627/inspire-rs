@@ -134,12 +134,7 @@ pub fn switched_gadget_params_with_safety(
 
 /// Compute switched gadget parameters using the default safety factor.
 pub fn switched_gadget_params(q: u64, p: u64, switched_q: u64) -> Option<(u64, usize)> {
-    switched_gadget_params_with_safety(
-        q,
-        p,
-        switched_q,
-        DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR,
-    )
+    switched_gadget_params_with_safety(q, p, switched_q, DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR)
 }
 
 /// Build a switched gadget vector using the default safety factor.

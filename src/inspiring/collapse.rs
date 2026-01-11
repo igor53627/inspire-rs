@@ -260,7 +260,10 @@ fn mul_by_monomial(poly: &Poly, k: usize, q: u64) -> Poly {
 }
 
 /// Add two intermediate ciphertexts
-fn add_intermediates(ct1: &IntermediateCiphertext, ct2: &IntermediateCiphertext) -> IntermediateCiphertext {
+fn add_intermediates(
+    ct1: &IntermediateCiphertext,
+    ct2: &IntermediateCiphertext,
+) -> IntermediateCiphertext {
     assert_eq!(ct1.dimension(), ct2.dimension());
 
     let a_polys: Vec<Poly> = ct1

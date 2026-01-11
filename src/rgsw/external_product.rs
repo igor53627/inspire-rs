@@ -95,12 +95,12 @@ pub fn external_product(
     let gadget = &rgsw.gadget;
     let ell = gadget.len;
     assert_eq!(rlwe.b.moduli(), moduli, "RLWE components must share moduli");
-    assert_eq!(ctx.moduli(), moduli, "NTT context moduli must match ciphertext moduli");
     assert_eq!(
-        rgsw.rows.len(),
-        2 * ell,
-        "RGSW must have 2ℓ rows"
+        ctx.moduli(),
+        moduli,
+        "NTT context moduli must match ciphertext moduli"
     );
+    assert_eq!(rgsw.rows.len(), 2 * ell, "RGSW must have 2ℓ rows");
     for (idx, row) in rgsw.rows.iter().enumerate() {
         assert_eq!(
             row.ring_dim(),
