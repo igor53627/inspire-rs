@@ -333,7 +333,12 @@ fn test_e2e_switched_query() {
 /// Switched query correctness with default production parameters.
 #[test]
 fn test_e2e_switched_query_default_params() {
-    let params = InspireParams::secure_128_d2048();
+    let mut params = InspireParams::secure_128_d2048();
+    // Switched queries only support single-modulus mode.
+    let q = inspire_pir::math::mod_q::DEFAULT_Q;
+    params.q = q;
+    params.crt_moduli = vec![q];
+    params.gadget_len = ((q as f64).log2() / (params.gadget_base as f64).log2()).ceil() as usize;
 
     let num_entries = 16;
     let entry_size = 32;
