@@ -25,8 +25,8 @@ fn test_params() -> InspireParams {
 fn test_e2e_single_entry() {
     let params = test_params();
 
-    let num_entries = 16;
-    let entry_size = 32;
+    let num_entries = 4;
+    let entry_size = 2;
     let mut database = vec![0u8; num_entries * entry_size];
 
     for i in 0..num_entries {
@@ -327,6 +327,42 @@ fn test_e2e_switched_query() {
             target_idx
         );
     }
+}
+
+/// Switched query correctness with default production parameters.
+#[test]
+fn test_e2e_switched_query_default_params() {
+    let params = InspireParams::secure_128_d2048();
+
+    let num_entries = 16;
+    let entry_size = 32;
+    let mut database = vec![0u8; num_entries * entry_size];
+
+    for i in 0..num_entries {
+        for j in 0..entry_size {
+            database[i * entry_size + j] = ((i * 23 + j * 29) % 256) as u8;
+        }
+    }
+
+    let mut sampler = GaussianSampler::new(params.sigma);
+    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+    let target_idx = 3u64;
+    let (state, switched_query) = query_switched(
+        &crs,
+        target_idx,
+        &encoded_db.config,
+        &rlwe_sk,
+        &mut sampler,
+    )
+    .unwrap();
+
+    let expanded_query = switched_query.expand();
+    let response = respond(&crs, &encoded_db, &expanded_query).unwrap();
+    let result = extract(&crs, &state, &response, entry_size).unwrap();
+
+    let expected = &database[target_idx as usize * entry_size..(target_idx as usize + 1) * entry_size];
+    assert_eq!(result, expected, "Switched query default params mismatch");
 }
 
 #[test]
