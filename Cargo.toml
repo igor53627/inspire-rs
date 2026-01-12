@@ -4,6 +4,12 @@ version = "0.1.1"
 edition = "2021"
 description = "InsPIRe: Communication-Efficient PIR with Server-side Preprocessing"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/igor53627/inspire-rs"
+homepage = "https://github.com/igor53627/inspire-rs"
+documentation = "https://docs.rs/inspire-pir"
+readme = "README.md"
+keywords = ["pir", "homomorphic", "cryptography", "inspire"]
+categories = ["cryptography", "network-programming"]
 
 [features]
 default = ["server", "cli", "zstd"]
