@@ -292,10 +292,11 @@ pub fn respond_inspiring(
     let delta = crs.params.delta();
     let ctx = crs.params.ntt_context();
 
-    // Get client packing keys (y_all) from query
-    let client_packing_keys = query.inspiring_packing_keys.as_ref().ok_or_else(|| {
-        pir_err!("InspiRING client packing keys not in query - use query() not query_seeded()")
-    })?;
+    // Get client packing keys (y_all or y_body) from query
+    let client_packing_keys = query
+        .inspiring_packing_keys
+        .as_ref()
+        .ok_or_else(|| pir_err!("InspiRING client packing keys missing from query"))?;
 
     let shard = encoded_db
         .shards
@@ -362,6 +363,11 @@ pub fn respond_inspiring(
 
     // Step 6: Use client's y_all from query, or derive from y_body if omitted in wire format
     let derived_y_all = if client_packing_keys.y_all.is_empty() {
+        if client_packing_keys.y_body.is_empty() {
+            return Err(pir_err!(
+                "InspiRING packing keys invalid: y_all and y_body are both empty"
+            ));
+        }
         Some(generate_rotations(&pack_params, &client_packing_keys.y_body))
     } else {
         None
@@ -591,9 +597,10 @@ pub fn respond_mmap_inspiring(
     let delta = crs.params.delta();
     let ctx = crs.params.ntt_context();
 
-    let client_packing_keys = query.inspiring_packing_keys.as_ref().ok_or_else(|| {
-        pir_err!("InspiRING client packing keys not in query - use query() not query_seeded()")
-    })?;
+    let client_packing_keys = query
+        .inspiring_packing_keys
+        .as_ref()
+        .ok_or_else(|| pir_err!("InspiRING client packing keys missing from query"))?;
 
     let shard = mmap_db.get_shard(query.shard_id)?;
 
@@ -647,6 +654,11 @@ pub fn respond_mmap_inspiring(
     let precomp = packing_offline(&pack_params, &offline_keys, &a_ct_tilde, &ctx);
 
     let derived_y_all = if client_packing_keys.y_all.is_empty() {
+        if client_packing_keys.y_body.is_empty() {
+            return Err(pir_err!(
+                "InspiRING packing keys invalid: y_all and y_body are both empty"
+            ));
+        }
         Some(generate_rotations(&pack_params, &client_packing_keys.y_body))
     } else {
         None
