@@ -68,11 +68,16 @@ fn seeded_query_with_gadget(
     };
 
     let inspiring_packing_keys = maybe_generate_packing_keys(crs, rlwe_sk, sampler);
+    let packing_mode = if inspiring_packing_keys.is_some() {
+        PackingMode::Inspiring
+    } else {
+        PackingMode::Tree
+    };
 
     let query = SeededClientQuery {
         shard_id,
         rgsw_ciphertext,
-        packing_mode: PackingMode::default(),
+        packing_mode,
         inspiring_packing_keys,
     };
 
@@ -222,11 +227,16 @@ pub fn query(
 
     // Generate InspiRING client packing keys if server supports it
     let inspiring_packing_keys = maybe_generate_packing_keys(crs, rlwe_sk, sampler);
+    let packing_mode = if inspiring_packing_keys.is_some() {
+        PackingMode::Inspiring
+    } else {
+        PackingMode::Tree
+    };
 
     let query = ClientQuery {
         shard_id,
         rgsw_ciphertext,
-        packing_mode: PackingMode::default(),
+        packing_mode,
         inspiring_packing_keys,
     };
 
