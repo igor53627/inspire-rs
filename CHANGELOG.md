@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-01-12
+
+### Changed
+
+- Removed the experimental InsPIRe^2+ (modulus-switching) variant; public APIs now expose only ^0/^1/^2.
+- InspiRING is the network default when packing keys are present; queries now fall back to tree packing when keys/CRS support are absent.
+- Added clear validation for InspiRING packing keys over HTTP (error when missing; derive rotations when only y_body is sent).
+- Updated protocol visualization, docs, and communication-cost tables to match the supported variants and refreshed measured sizes.
+- Added SECURITY.md documenting supported variants and the removal rationale for modulus switching.
+
 ### Changed
 
 - **CRT support**: Default `secure_128` parameters now use CRT moduli `[268369921, 249561089]` (q ≈ 2^56 composite)
