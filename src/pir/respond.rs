@@ -18,13 +18,12 @@ use crate::inspiring::packing_online;
 use crate::math::Poly;
 use crate::params::InspireVariant;
 use crate::rgsw::external_product;
-use crate::rgsw::DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR;
 use crate::rlwe::RlweCiphertext;
 
 use super::error::{pir_err, Result};
 #[cfg(feature = "server")]
 use super::mmap::MmapDatabase;
-use super::query::{ClientQuery, SeededClientQuery, SwitchedClientQuery};
+use super::query::{ClientQuery, PackingMode, SeededClientQuery};
 use super::setup::{EncodedDatabase, ServerCrs};
 
 /// Server response containing RLWE ciphertexts for each column
@@ -35,44 +34,6 @@ pub struct ServerResponse {
     pub ciphertext: RlweCiphertext,
     /// Per-column ciphertexts (for proper multi-column extraction)
     pub column_ciphertexts: Vec<RlweCiphertext>,
-}
-
-fn validate_switched_query(crs: &ServerCrs, query: &SwitchedClientQuery) -> Result<()> {
-    let gadget = &query.rgsw_ciphertext.gadget;
-
-    if gadget.q != crs.params.q {
-        return Err(pir_err!(
-            "Switched query gadget modulus mismatch: gadget.q={} crs.q={}",
-            gadget.q,
-            crs.params.q
-        ));
-    }
-
-    let switched_q = query.rgsw_ciphertext.switched_modulus();
-    if switched_q > u32::MAX as u64 {
-        return Err(pir_err!(
-            "Switched modulus q'={} exceeds u32; unsupported by switched query format",
-            switched_q
-        ));
-    }
-
-    let p = crs.params.p;
-    let max_product =
-        (switched_q as u128) / (2u128 * p as u128 * DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR);
-    let product = gadget.base as u128 * gadget.len as u128;
-
-    if max_product < 2 || product > max_product {
-        return Err(pir_err!(
-            "Switched query gadget base/len too large for q'={} (base={} len={} p={} safety_factor={}); require base*len <= q'/(2*p*safety_factor)",
-            switched_q,
-            gadget.base,
-            gadget.len,
-            p,
-            DEFAULT_SWITCHED_NOISE_SAFETY_FACTOR
-        ));
-    }
-
-    Ok(())
 }
 
 impl ServerResponse {
@@ -163,8 +124,8 @@ pub fn respond(
 /// - `TwoPacking` (InsPIRe^2): Packed response intended for seeded queries
 ///
 /// # Packing Algorithm Selection
-/// - If `inspiring_packing_keys` is present in query: uses InspiRING (~35x faster online)
-/// - Otherwise: falls back to tree packing (requires galois_keys in CRS)
+/// - Default: InspiRING (requires client packing keys)
+/// - Tree packing is only used when explicitly requested
 pub fn respond_with_variant(
     crs: &ServerCrs,
     encoded_db: &EncodedDatabase,
@@ -174,11 +135,16 @@ pub fn respond_with_variant(
     match variant {
         InspireVariant::NoPacking => respond(crs, encoded_db, query),
         InspireVariant::OnePacking | InspireVariant::TwoPacking => {
-            // Use InspiRING if packing keys available, otherwise tree packing
-            if query.inspiring_packing_keys.is_some() {
-                respond_inspiring(crs, encoded_db, query)
-            } else {
-                respond_one_packing(crs, encoded_db, query)
+            match query.packing_mode {
+                PackingMode::Inspiring => {
+                    if query.inspiring_packing_keys.is_none() {
+                        return Err(pir_err!(
+                            "InspiRING packing keys missing (set packing_mode=tree to use tree packing)"
+                        ));
+                    }
+                    respond_inspiring(crs, encoded_db, query)
+                }
+                PackingMode::Tree => respond_one_packing(crs, encoded_db, query),
             }
         }
     }
@@ -201,7 +167,17 @@ pub fn respond_seeded_with_variant(
     match variant {
         InspireVariant::NoPacking => respond_seeded(crs, encoded_db, query),
         InspireVariant::OnePacking | InspireVariant::TwoPacking => {
-            respond_seeded_packed(crs, encoded_db, query)
+            match query.packing_mode {
+                PackingMode::Inspiring => {
+                    if query.inspiring_packing_keys.is_none() {
+                        return Err(pir_err!(
+                            "InspiRING packing keys missing (set packing_mode=tree to use tree packing)"
+                        ));
+                    }
+                    respond_seeded_inspiring(crs, encoded_db, query)
+                }
+                PackingMode::Tree => respond_seeded_packed(crs, encoded_db, query),
+            }
         }
     }
 }
@@ -310,16 +286,17 @@ pub fn respond_inspiring(
     encoded_db: &EncodedDatabase,
     query: &ClientQuery,
 ) -> Result<ServerResponse> {
-    use crate::inspiring::{packing_offline, OfflinePackingKeys, PackParams};
+    use crate::inspiring::{generate_rotations, packing_offline, OfflinePackingKeys, PackParams};
 
     let d = crs.ring_dim();
     let delta = crs.params.delta();
     let ctx = crs.params.ntt_context();
 
-    // Get client packing keys (y_all) from query
-    let client_packing_keys = query.inspiring_packing_keys.as_ref().ok_or_else(|| {
-        pir_err!("InspiRING client packing keys not in query - use query() not query_seeded()")
-    })?;
+    // Get client packing keys (y_all or y_body) from query
+    let client_packing_keys = query
+        .inspiring_packing_keys
+        .as_ref()
+        .ok_or_else(|| pir_err!("InspiRING client packing keys missing from query"))?;
 
     let shard = encoded_db
         .shards
@@ -384,8 +361,20 @@ pub fn respond_inspiring(
     let offline_keys = OfflinePackingKeys::generate(&pack_params, crs.inspiring_w_seed);
     let precomp = packing_offline(&pack_params, &offline_keys, &a_ct_tilde, &ctx);
 
-    // Step 6: Use client's y_all from query (proper client/server separation)
-    let y_all = &client_packing_keys.y_all;
+    // Step 6: Use client's y_all from query, or derive from y_body if omitted in wire format
+    let derived_y_all = if client_packing_keys.y_all.is_empty() {
+        if client_packing_keys.y_body.is_empty() {
+            return Err(pir_err!(
+                "InspiRING packing keys invalid: y_all and y_body are both empty"
+            ));
+        }
+        Some(generate_rotations(&pack_params, &client_packing_keys.y_body))
+    } else {
+        None
+    };
+    let y_all: &[Vec<Poly>] = derived_y_all
+        .as_deref()
+        .unwrap_or(&client_packing_keys.y_all);
 
     // Step 7: Online packing using precomputed a_hat and bold_t with client's y_all
     let packed = packing_online(&precomp, y_all, &b_poly, &ctx);
@@ -441,47 +430,6 @@ pub fn respond_seeded_packed(
     encoded_db: &EncodedDatabase,
     query: &SeededClientQuery,
 ) -> Result<ServerResponse> {
-    let expanded = query.expand();
-    respond_one_packing(crs, encoded_db, &expanded)
-}
-
-/// PIR.Respond with switched+seeded query (maximum query compression)
-///
-/// Expands the switched+seeded query and processes it with packing.
-///
-/// # Warning: Noise Amplification
-///
-/// Modulus switching on RGSW ciphertexts may introduce too much noise.
-/// See `query_switched` documentation for details.
-///
-/// # Query Size Comparison (d=2048)
-/// - Full query (ℓ=3): ~196 KB
-/// - Seeded query (ℓ=3): ~98 KB
-/// - Switched+seeded query depends on gadget selection; with the safe gadget
-///   for q'=2^30 it's typically ~95–115 KB.
-pub fn respond_switched(
-    crs: &ServerCrs,
-    encoded_db: &EncodedDatabase,
-    query: &SwitchedClientQuery,
-) -> Result<ServerResponse> {
-    validate_switched_query(crs, query)?;
-    let expanded = query.expand();
-    respond(crs, encoded_db, &expanded)
-}
-
-/// PIR.Respond with switched+seeded query using OnePacking
-///
-/// Maximum compression variant: 75% query reduction + 16x response reduction.
-///
-/// NOTE: With current default parameters, switched+OnePacking is not
-/// correctness-safe due to noise amplification. Prefer `respond_switched`
-/// (no packing) until parameters are updated.
-pub fn respond_switched_packed(
-    crs: &ServerCrs,
-    encoded_db: &EncodedDatabase,
-    query: &SwitchedClientQuery,
-) -> Result<ServerResponse> {
-    validate_switched_query(crs, query)?;
     let expanded = query.expand();
     respond_one_packing(crs, encoded_db, &expanded)
 }
@@ -627,6 +575,99 @@ pub fn respond_mmap_one_packing(
         .collect();
 
     let packed = pack_lwes(&lwe_cts, &crs.galois_keys, &crs.params);
+
+    Ok(ServerResponse {
+        ciphertext: packed,
+        column_ciphertexts: vec![],
+    })
+}
+
+/// PIR.Respond using InspiRING packing with memory-mapped database
+///
+/// Same as `respond_inspiring` but loads shards on-demand from disk.
+#[cfg(feature = "server")]
+pub fn respond_mmap_inspiring(
+    crs: &ServerCrs,
+    mmap_db: &MmapDatabase,
+    query: &ClientQuery,
+) -> Result<ServerResponse> {
+    use crate::inspiring::{generate_rotations, packing_offline, OfflinePackingKeys, PackParams};
+
+    let d = crs.ring_dim();
+    let delta = crs.params.delta();
+    let ctx = crs.params.ntt_context();
+
+    let client_packing_keys = query
+        .inspiring_packing_keys
+        .as_ref()
+        .ok_or_else(|| pir_err!("InspiRING client packing keys missing from query"))?;
+
+    let shard = mmap_db.get_shard(query.shard_id)?;
+
+    if shard.polynomials.is_empty() {
+        let zero = RlweCiphertext::zero(&crs.params);
+        return Ok(ServerResponse {
+            ciphertext: zero.clone(),
+            column_ciphertexts: vec![zero],
+        });
+    }
+
+    let column_ciphertexts: Vec<RlweCiphertext> = shard
+        .polynomials
+        .par_iter()
+        .map(|db_poly| {
+            let local_ctx = crs.params.ntt_context();
+            let rlwe_db = RlweCiphertext::trivial_encrypt(db_poly, delta, &crs.params);
+            external_product(&rlwe_db, &query.rgsw_ciphertext, &local_ctx)
+        })
+        .collect();
+
+    let lwe_cts: Vec<_> = column_ciphertexts
+        .iter()
+        .map(|rlwe| rlwe.sample_extract_coeff0())
+        .collect();
+
+    let num_columns = lwe_cts.len();
+    if num_columns == 0 {
+        let zero = RlweCiphertext::zero(&crs.params);
+        return Ok(ServerResponse {
+            ciphertext: zero,
+            column_ciphertexts: vec![],
+        });
+    }
+
+    let a_ct_tilde: Vec<Poly> = column_ciphertexts
+        .iter()
+        .map(|rlwe| rlwe.a.clone())
+        .collect();
+
+    let mut b_coeffs = vec![0u64; d];
+    for (i, lwe) in lwe_cts.iter().enumerate() {
+        if i < d {
+            b_coeffs[i] = lwe.b;
+        }
+    }
+    let b_poly = Poly::from_coeffs_moduli(b_coeffs, crs.params.moduli());
+
+    let pack_params = PackParams::new(&crs.params, num_columns);
+    let offline_keys = OfflinePackingKeys::generate(&pack_params, crs.inspiring_w_seed);
+    let precomp = packing_offline(&pack_params, &offline_keys, &a_ct_tilde, &ctx);
+
+    let derived_y_all = if client_packing_keys.y_all.is_empty() {
+        if client_packing_keys.y_body.is_empty() {
+            return Err(pir_err!(
+                "InspiRING packing keys invalid: y_all and y_body are both empty"
+            ));
+        }
+        Some(generate_rotations(&pack_params, &client_packing_keys.y_body))
+    } else {
+        None
+    };
+    let y_all: &[Vec<Poly>] = derived_y_all
+        .as_deref()
+        .unwrap_or(&client_packing_keys.y_all);
+
+    let packed = packing_online(&precomp, y_all, &b_poly, &ctx);
 
     Ok(ServerResponse {
         ciphertext: packed,
@@ -784,6 +825,56 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "server")]
+    #[test]
+    fn test_respond_mmap_inspiring() {
+        use crate::pir::{extract_inspiring, save_shards_binary};
+        use tempfile::tempdir;
+
+        let params = test_params();
+        let mut sampler = GaussianSampler::new(params.sigma);
+
+        let entry_size = 2; // 1 column, values < 256
+        let num_entries = params.ring_dim;
+        let database: Vec<u8> = (0..num_entries)
+            .flat_map(|i| {
+                let low_byte = (i % 256) as u8;
+                let high_byte = 0u8;
+                vec![low_byte, high_byte]
+            })
+            .collect();
+
+        let (crs, encoded_db, rlwe_sk) =
+            setup(&params, &database, entry_size, &mut sampler).unwrap();
+
+        let dir = tempdir().unwrap();
+        save_shards_binary(&encoded_db.shards, dir.path()).unwrap();
+
+        let mmap_db = MmapDatabase::open(dir.path(), encoded_db.config.clone()).unwrap();
+
+        let target_index = 42u64;
+        let (state, client_query) = query(
+            &crs,
+            target_index,
+            &encoded_db.config,
+            &rlwe_sk,
+            &mut sampler,
+        )
+        .unwrap();
+
+        let response_inmem = respond_inspiring(&crs, &encoded_db, &client_query).unwrap();
+        let response_mmap = respond_mmap_inspiring(&crs, &mmap_db, &client_query).unwrap();
+        let extracted_inmem =
+            extract_inspiring(&crs, &state, &response_inmem, entry_size).unwrap();
+        let extracted_mmap =
+            extract_inspiring(&crs, &state, &response_mmap, entry_size).unwrap();
+
+        let expected_start = (target_index as usize) * entry_size;
+        let expected = &database[expected_start..expected_start + entry_size];
+        assert_eq!(extracted_inmem.as_slice(), expected);
+        assert_eq!(extracted_mmap.as_slice(), expected);
+    }
+
     #[test]
     fn test_respond_one_packing_correctness() {
         use crate::params::InspireVariant;
@@ -930,7 +1021,7 @@ mod tests {
 
     #[test]
     fn test_inspire_sizes_production() {
-        use crate::pir::query::{query_seeded, query_switched};
+        use crate::pir::query::query_seeded;
 
         // Production parameters: d=2048, 32-byte entries (single-modulus for switching)
         let params = crate::params::InspireParams {
@@ -975,14 +1066,6 @@ mod tests {
             &mut sampler,
         )
         .unwrap();
-        let (_state, switched_query) = query_switched(
-            &crs,
-            target_index,
-            &encoded_db.config,
-            &rlwe_sk,
-            &mut sampler,
-        )
-        .unwrap();
 
         // Get responses
         let response_no_pack = respond(&crs, &encoded_db, &full_query).unwrap();
@@ -991,7 +1074,6 @@ mod tests {
         // Serialize to get actual sizes
         let query_full_bytes = bincode::serialize(&full_query).unwrap();
         let query_seeded_bytes = bincode::serialize(&seeded_query).unwrap();
-        let query_switched_bytes = bincode::serialize(&switched_query).unwrap();
         let resp_0_bytes = response_no_pack.to_binary().unwrap();
         let resp_1_bytes = response_one_pack.to_binary().unwrap();
 
@@ -1015,12 +1097,6 @@ mod tests {
             query_seeded_bytes.len() as f64 / 1024.0,
             query_seeded_bytes.len() as f64 / query_full_bytes.len() as f64 * 100.0
         );
-        println!(
-            "║  Switched query:  {:>8} bytes ({:>6.1} KB)  [{:.0}% of full] ║",
-            query_switched_bytes.len(),
-            query_switched_bytes.len() as f64 / 1024.0,
-            query_switched_bytes.len() as f64 / query_full_bytes.len() as f64 * 100.0
-        );
         println!("╠══════════════════════════════════════════════════════════════╣");
         println!("║  RESPONSE SIZES                                              ║");
         println!("╟──────────────────────────────────────────────────────────────╢");
@@ -1042,7 +1118,6 @@ mod tests {
         let total_0 = query_full_bytes.len() + resp_0_bytes.len();
         let total_1 = query_full_bytes.len() + resp_1_bytes.len();
         let total_2 = query_seeded_bytes.len() + resp_1_bytes.len();
-        let total_2s = query_switched_bytes.len() + resp_1_bytes.len();
 
         println!(
             "║  InsPIRe^0 (full+nopack):   {:>8} bytes ({:>6.1} KB)        ║",
@@ -1059,11 +1134,6 @@ mod tests {
             total_2,
             total_2 as f64 / 1024.0
         );
-        println!(
-            "║  InsPIRe^2+ (switch+pack):  {:>8} bytes ({:>6.1} KB)        ║",
-            total_2s,
-            total_2s as f64 / 1024.0
-        );
         println!("╠══════════════════════════════════════════════════════════════╣");
         println!("║  BANDWIDTH SAVINGS vs InsPIRe^0                              ║");
         println!("╟──────────────────────────────────────────────────────────────╢");
@@ -1074,10 +1144,6 @@ mod tests {
         println!(
             "║  InsPIRe^2: {:.1}x reduction                                   ║",
             total_0 as f64 / total_2 as f64
-        );
-        println!(
-            "║  InsPIRe^2+ (with modulus switch): {:.1}x reduction            ║",
-            total_0 as f64 / total_2s as f64
         );
         println!("╚══════════════════════════════════════════════════════════════╝");
     }

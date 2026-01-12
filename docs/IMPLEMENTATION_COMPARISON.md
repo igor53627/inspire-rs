@@ -17,7 +17,6 @@
 ```
 lib.rs
 ├── params          # InspireParams, SecurityLevel
-├── modulus_switch  # Modulus switching (experimental)
 ├── math            # Poly, NTT, samplers
 ├── lwe             # LWE primitives
 ├── rlwe            # RlweSecretKey, RlweCiphertext
@@ -62,16 +61,12 @@ lib.rs
 | InsPIRe^0 (NoPacking) | [OK] | [OK] |
 | InsPIRe^1 (OnePacking) | [OK] | [OK] |
 | InsPIRe^2 (Seeded+Packed) | [OK] | [OK] |
-| InsPIRe^2+ (ModSwitch+Packed) | [OK]* | [OK] |
 | Sqrt-N layout | [OK] | (via nu_1/nu_2) |
-
-*InsPIRe^2+ is experimental and may exceed noise budget with default parameters.
 
 **inspire-rs** implements the InsPIRe protocol with multiple variants:
 - InsPIRe^0: `respond()` - no packing
 - InsPIRe^1: `respond_one_packing()` - tree-packed response (uses `automorph_pack`)
 - InsPIRe^2: `query_seeded()` + `respond_seeded_packed()` - seeded + packed
-- InsPIRe^2+: `query_switched()` + `respond_switched_packed()` - experimental
 
 **Production recommendation**: use InsPIRe^2 (seeded + packed / TwoPacking) without modulus switching.
 
@@ -130,7 +125,6 @@ Raw bytes → YServer::new() → in-memory matrices
 | SIMD (AVX-512) | [X] Portable Rust | [OK] Full AVX-512 |
 | Parallelism | [OK] Rayon | Single-threaded |
 | Seeded ciphertexts | [OK] SeededRgsw/Rlwe | [X] Not exposed |
-| Modulus switching | [OK] SwitchedSeeded* | [OK] q2_bits |
 | Memory-mapped I/O | [OK] | [X] |
 | Aligned memory | Standard | AlignedMemory64 |
 
@@ -154,7 +148,7 @@ Google's InspiRING is deeply integrated with multi-layer PIR (DoublePIR, InsPIRe
 
 **inspire-rs** implements both packing approaches:
 - **Tree packing** (`automorph_pack`): Used by `respond_one_packing()` and the HTTP server. Uses log(d) Galois key-switching matrices stored in `galois_keys`.
-- **InspiRING 2-matrix** (`inspiring2`): Available via `respond_inspiring()` for local experiments. Requires `ClientPackingKeys` which are not currently transmitted over the network API.
+- **InspiRING 2-matrix** (`inspiring2`): Available via `respond_inspiring()` and can be used over the network by sending `ClientPackingKeys` (compact `y_body` form) with the query. InspiRING is the default; tree packing requires `packing_mode=tree`.
 
 ---
 
@@ -208,7 +202,6 @@ run_ypir_batched(&params, protocol_type, &mut measurement);
 |---------|-------------|
 | **Service binaries** | inspire-server, inspire-client, inspire-setup with Axum/Tokio |
 | **Seeded compression** | SeededRlweCiphertext, SeededRgswCiphertext (~50% reduction) |
-| **Modulus switching** | SwitchedSeededRgsw (experimental, exceeds noise budget with default params) |
 | **Mmap support** | Memory-mapped database for large datasets |
 | **Sharding** | Native multi-shard database support |
 | **Ethereum DB** | Built-in Ethereum state integration |
@@ -270,7 +263,7 @@ Based on this comparison, potential future enhancements:
 5. **SimplePIR variant** - For comparison/simpler use cases
 
 Note: Seed expansion was implemented in December 2024, achieving 50% query size reduction (192 KB -> 98 KB).
-Modulus switching is also available but exceeds noise budget with default parameters due to error amplification in external product.
+The prior modulus-switching experiment was removed because it exceeded the noise budget with default parameters.
 
 ---
 

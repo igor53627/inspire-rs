@@ -19,7 +19,7 @@ Based on the InsPIRe paper's validated parameters:
 | Gadget base z | 2^20 | For key-switching decomposition |
 | Key-switching matrices | 2 | K_g, K_h (vs logarithmic in prior work) |
 
-**Note**: Single-modulus params remain available for modulus-switching experiments (switched queries). To enable it, construct params with `crt_moduli: vec![q]` (set `q` to that prime and recompute `gadget_len` for the single modulus) and call `query_switched` on the client; this path is experimental and only supported in single-modulus mode. Default `secure_128_*` params use CRT.
+**Note**: Single-modulus params remain available for compatibility testing, but the experimental modulus-switching query path has been removed. Default `secure_128_*` params use CRT.
 
 ### 2. Database Sharding
 
@@ -36,7 +36,6 @@ inspire-pir/
 ├── src/
 │   ├── lib.rs                 # Public API
 │   ├── params.rs              # Parameter sets
-│   ├── modulus_switch.rs      # Modulus switching (experimental)
 │   ├── math/
 │   │   ├── crt.rs             # CRT helpers (compose/decompose)
 │   │   ├── mod_q.rs           # Modular arithmetic Z_q

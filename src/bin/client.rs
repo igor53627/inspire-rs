@@ -18,8 +18,8 @@ use inspire_pir::ethereum_db::EthereumStateDb;
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::{InspireVariant, ShardConfig};
 use inspire_pir::pir::{
-    extract_with_variant, query, query_seeded, ClientQuery, SeededClientQuery, ServerCrs,
-    ServerResponse,
+    extract_inspiring, extract_with_variant, query, query_seeded, ClientQuery, PackingMode,
+    SeededClientQuery, ServerCrs, ServerResponse,
 };
 use inspire_pir::rlwe::RlweSecretKey;
 
@@ -42,6 +42,9 @@ struct Args {
     /// Protocol variant (OnePacking = full query, TwoPacking = seeded + packed)
     #[arg(long, value_enum, default_value = "two-packing")]
     variant: VariantChoice,
+    /// Packing algorithm (default: InspiRING; tree packing is slower)
+    #[arg(long, value_enum, default_value = "inspiring")]
+    packing_mode: PackingModeChoice,
 
     #[command(subcommand)]
     command: Commands,
@@ -81,6 +84,22 @@ enum Commands {
 enum VariantChoice {
     OnePacking,
     TwoPacking,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+#[value(rename_all = "kebab_case")]
+enum PackingModeChoice {
+    Inspiring,
+    Tree,
+}
+
+impl From<PackingModeChoice> for PackingMode {
+    fn from(value: PackingModeChoice) -> Self {
+        match value {
+            PackingModeChoice::Inspiring => PackingMode::Inspiring,
+            PackingModeChoice::Tree => PackingMode::Tree,
+        }
+    }
 }
 
 enum QueryPayload {
@@ -140,7 +159,14 @@ async fn main() -> Result<()> {
             get_params(&args.server).await?;
         }
         Commands::Index { index } => {
-            query_by_index(&args.server, &args.secret_key, index, args.variant).await?;
+            query_by_index(
+                &args.server,
+                &args.secret_key,
+                index,
+                args.variant,
+                args.packing_mode,
+            )
+            .await?;
         }
         Commands::Storage { address, slot } => {
             query_storage(
@@ -150,11 +176,19 @@ async fn main() -> Result<()> {
                 &address,
                 &slot,
                 args.variant,
+                args.packing_mode,
             )
             .await?;
         }
         Commands::Batch { file } => {
-            batch_query(&args.server, &args.secret_key, &file, args.variant).await?;
+            batch_query(
+                &args.server,
+                &args.secret_key,
+                &file,
+                args.variant,
+                args.packing_mode,
+            )
+            .await?;
         }
     }
 
@@ -198,6 +232,7 @@ async fn query_by_index(
     sk_path: &PathBuf,
     index: u64,
     variant: VariantChoice,
+    packing_mode: PackingModeChoice,
 ) -> Result<()> {
     let total_start = Instant::now();
 
@@ -225,15 +260,25 @@ async fn query_by_index(
     let inspire_variant = variant.inspire_variant();
     let (state, payload) = match variant {
         VariantChoice::OnePacking => {
-            let (state, client_query) =
+            let (state, mut client_query) =
                 query(&crs, index, &shard_config, &secret_key, &mut sampler)
                     .with_context(|| "Failed to generate query")?;
+            let packing_mode: PackingMode = packing_mode.into();
+            client_query.packing_mode = packing_mode;
+            if packing_mode == PackingMode::Tree {
+                client_query.inspiring_packing_keys = None;
+            }
             (state, QueryPayload::Full(client_query))
         }
         VariantChoice::TwoPacking => {
-            let (state, seeded_query) =
+            let (state, mut seeded_query) =
                 query_seeded(&crs, index, &shard_config, &secret_key, &mut sampler)
                     .with_context(|| "Failed to generate seeded query")?;
+            let packing_mode: PackingMode = packing_mode.into();
+            seeded_query.packing_mode = packing_mode;
+            if packing_mode == PackingMode::Tree {
+                seeded_query.inspiring_packing_keys = None;
+            }
             (state, QueryPayload::Seeded(seeded_query))
         }
     };
@@ -253,8 +298,13 @@ async fn query_by_index(
     info!("Extracting result...");
     let extract_start = Instant::now();
 
-    let entry = extract_with_variant(&crs, &state, &response.response, 32, inspire_variant)
-        .with_context(|| "Failed to extract result")?;
+    let entry = match packing_mode {
+        PackingModeChoice::Inspiring => extract_inspiring(&crs, &state, &response.response, 32),
+        PackingModeChoice::Tree => {
+            extract_with_variant(&crs, &state, &response.response, 32, inspire_variant)
+        }
+    }
+    .with_context(|| "Failed to extract result")?;
 
     info!("Extraction time: {:.2?}", extract_start.elapsed());
 
@@ -283,6 +333,7 @@ async fn query_storage(
     address: &str,
     slot: &str,
     variant: VariantChoice,
+    packing_mode: PackingModeChoice,
 ) -> Result<()> {
     let address_bytes = parse_hex_address(address)?;
     let slot_bytes = parse_hex_slot(slot)?;
@@ -319,7 +370,7 @@ async fn query_storage(
     };
 
     info!("Found storage slot at index {}", index);
-    query_by_index(server, sk_path, index, variant).await
+    query_by_index(server, sk_path, index, variant, packing_mode).await
 }
 
 async fn batch_query(
@@ -327,6 +378,7 @@ async fn batch_query(
     sk_path: &PathBuf,
     file: &PathBuf,
     variant: VariantChoice,
+    packing_mode: PackingModeChoice,
 ) -> Result<()> {
     info!("Loading secret key...");
     let secret_key = load_secret_key(sk_path)?;
@@ -382,13 +434,23 @@ async fn batch_query(
         let mut sampler = GaussianSampler::new(crs.params.sigma);
         let (state, payload) = match variant {
             VariantChoice::OnePacking => {
-                let (state, client_query) =
+                let (state, mut client_query) =
                     query(&crs, *index, &shard_config, &secret_key, &mut sampler)?;
+                let packing_mode: PackingMode = packing_mode.into();
+                client_query.packing_mode = packing_mode;
+                if packing_mode == PackingMode::Tree {
+                    client_query.inspiring_packing_keys = None;
+                }
                 (state, QueryPayload::Full(client_query))
             }
             VariantChoice::TwoPacking => {
-                let (state, seeded_query) =
+                let (state, mut seeded_query) =
                     query_seeded(&crs, *index, &shard_config, &secret_key, &mut sampler)?;
+                let packing_mode: PackingMode = packing_mode.into();
+                seeded_query.packing_mode = packing_mode;
+                if packing_mode == PackingMode::Tree {
+                    seeded_query.inspiring_packing_keys = None;
+                }
                 (state, QueryPayload::Seeded(seeded_query))
             }
         };
@@ -398,7 +460,12 @@ async fn batch_query(
         };
         total_server_time += response.processing_time_ms;
 
-        let entry = extract_with_variant(&crs, &state, &response.response, 32, inspire_variant)?;
+        let entry = match packing_mode {
+            PackingModeChoice::Inspiring => extract_inspiring(&crs, &state, &response.response, 32),
+            PackingModeChoice::Tree => {
+                extract_with_variant(&crs, &state, &response.response, 32, inspire_variant)
+            }
+        }?;
         results.push((*index, entry));
 
         pb.inc(1);

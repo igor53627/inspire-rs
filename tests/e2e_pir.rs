@@ -5,8 +5,8 @@
 use inspire_pir::math::GaussianSampler;
 use inspire_pir::params::{InspireParams, InspireVariant, SecurityLevel};
 use inspire_pir::pir::{
-    extract, extract_inspiring, extract_with_variant, query, query_seeded, query_switched, respond,
-    respond_inspiring, respond_seeded_packed, respond_with_variant, setup,
+    extract, extract_inspiring, extract_with_variant, query, query_seeded, respond,
+    respond_inspiring, respond_seeded_packed, respond_with_variant, setup, PackingMode,
 };
 
 fn test_params() -> InspireParams {
@@ -284,144 +284,6 @@ fn test_e2e_seeded_query() {
     }
 }
 
-/// Test switched query compression.
-///
-/// The switched-query path auto-selects a smaller gadget base to keep the
-/// modulus-switching noise within the decryption bound. This increases ℓ
-/// (and query size) relative to the ℓ=3 estimate but restores correctness.
-#[test]
-fn test_e2e_switched_query() {
-    let params = test_params();
-
-    let num_entries = 64;
-    let entry_size = 32;
-    let mut database = vec![0u8; num_entries * entry_size];
-
-    for i in 0..num_entries {
-        for j in 0..entry_size {
-            database[i * entry_size + j] = ((i * 17 + j * 13) % 256) as u8;
-        }
-    }
-
-    let mut sampler = GaussianSampler::new(params.sigma);
-    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
-
-    for target_idx in [0, 15, 31, 63] {
-        let (state, switched_query) = query_switched(
-            &crs,
-            target_idx as u64,
-            &encoded_db.config,
-            &rlwe_sk,
-            &mut sampler,
-        )
-        .unwrap();
-
-        // Server expands the switched query (modulus switch + seed expansion)
-        let expanded_query = switched_query.expand();
-        let response = respond(&crs, &encoded_db, &expanded_query).unwrap();
-        let result = extract(&crs, &state, &response, entry_size).unwrap();
-
-        let expected = &database[target_idx * entry_size..(target_idx + 1) * entry_size];
-        assert_eq!(
-            result, expected,
-            "Switched query: Entry {} mismatch",
-            target_idx
-        );
-    }
-}
-
-/// Switched query correctness with default production parameters.
-#[test]
-fn test_e2e_switched_query_default_params() {
-    let mut params = InspireParams::secure_128_d2048();
-    // Switched queries only support single-modulus mode.
-    let q = inspire_pir::math::mod_q::DEFAULT_Q;
-    params.q = q;
-    params.crt_moduli = vec![q];
-    params.gadget_len = ((q as f64).log2() / (params.gadget_base as f64).log2()).ceil() as usize;
-
-    let num_entries = 16;
-    let entry_size = 32;
-    let mut database = vec![0u8; num_entries * entry_size];
-
-    for i in 0..num_entries {
-        for j in 0..entry_size {
-            database[i * entry_size + j] = ((i * 23 + j * 29) % 256) as u8;
-        }
-    }
-
-    let mut sampler = GaussianSampler::new(params.sigma);
-    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
-
-    let target_idx = 3u64;
-    let (state, switched_query) =
-        query_switched(&crs, target_idx, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
-
-    let expanded_query = switched_query.expand();
-    let response = respond(&crs, &encoded_db, &expanded_query).unwrap();
-    let result = extract(&crs, &state, &response, entry_size).unwrap();
-
-    let expected =
-        &database[target_idx as usize * entry_size..(target_idx as usize + 1) * entry_size];
-    assert_eq!(result, expected, "Switched query default params mismatch");
-}
-
-/// Switched query correctness with OnePacking (production-like path).
-///
-/// Currently fails due to switched+packing noise amplification; keep as a
-/// regression test once parameters are updated.
-#[test]
-#[ignore = "Switched+OnePacking currently incorrect with default params (see #41)"]
-fn test_e2e_switched_query_default_params_one_packing() {
-    let mut params = InspireParams::secure_128_d2048();
-    // Switched queries only support single-modulus mode.
-    let q = inspire_pir::math::mod_q::DEFAULT_Q;
-    params.q = q;
-    params.crt_moduli = vec![q];
-    params.gadget_len = ((q as f64).log2() / (params.gadget_base as f64).log2()).ceil() as usize;
-
-    let num_entries = 16;
-    let entry_size = 32;
-    let mut database = vec![0u8; num_entries * entry_size];
-
-    for i in 0..num_entries {
-        for j in 0..entry_size {
-            database[i * entry_size + j] = ((i * 37 + j * 19) % 256) as u8;
-        }
-    }
-
-    let mut sampler = GaussianSampler::new(params.sigma);
-    let (crs, encoded_db, rlwe_sk) = setup(&params, &database, entry_size, &mut sampler).unwrap();
-
-    let target_idx = 3u64;
-    let (state, switched_query) =
-        query_switched(&crs, target_idx, &encoded_db.config, &rlwe_sk, &mut sampler).unwrap();
-
-    let expanded_query = switched_query.expand();
-    let response = respond_with_variant(
-        &crs,
-        &encoded_db,
-        &expanded_query,
-        InspireVariant::OnePacking,
-    )
-    .unwrap();
-    let result = extract_with_variant(
-        &crs,
-        &state,
-        &response,
-        entry_size,
-        InspireVariant::OnePacking,
-    )
-    .unwrap();
-
-    let expected =
-        &database[target_idx as usize * entry_size..(target_idx as usize + 1) * entry_size];
-    assert_eq!(
-        result, expected,
-        "Switched query default params (OnePacking) mismatch"
-    );
-}
-
 #[test]
 fn test_e2e_variant_no_packing() {
     let params = test_params();
@@ -448,6 +310,9 @@ fn test_e2e_variant_no_packing() {
             &mut sampler,
         )
         .unwrap();
+
+        let mut client_query = client_query;
+        client_query.packing_mode = PackingMode::Tree;
 
         let response =
             respond_with_variant(&crs, &encoded_db, &client_query, InspireVariant::NoPacking)
@@ -498,6 +363,9 @@ fn test_e2e_variant_one_packing() {
             &mut sampler,
         )
         .unwrap();
+
+        let mut client_query = client_query;
+        client_query.packing_mode = PackingMode::Tree;
 
         // Use OnePacking variant
         let response =

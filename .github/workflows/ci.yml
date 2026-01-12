@@ -31,6 +31,12 @@ jobs:
         if: github.event_name != 'pull_request'
         run: cargo test --all
 
+      - name: Bench (sizes only)
+        if: github.event_name != 'pull_request'
+        env:
+          INSPIRE_BENCH_SIZES_ONLY: "1"
+        run: cargo bench --bench query_size_latency
+
       - name: sccache stats
         if: always()
         continue-on-error: true

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-01-12
+
+### Changed
+
+- Removed the experimental InsPIRe^2+ (modulus-switching) variant; public APIs now expose only ^0/^1/^2.
+- InspiRING is the network default when packing keys are present; queries now fall back to tree packing when keys/CRS support are absent.
+- Added clear validation for InspiRING packing keys over HTTP (error when missing; derive rotations when only y_body is sent).
+- Updated protocol visualization, docs, and communication-cost tables to match the supported variants and refreshed measured sizes.
+- Added SECURITY.md documenting supported variants and the removal rationale for modulus switching.
+
 ### Changed
 
 - **CRT support**: Default `secure_128` parameters now use CRT moduli `[268369921, 249561089]` (q ≈ 2^56 composite)
@@ -22,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed `AccountMapping`, `StorageMapping` and related functions
 - **Default packing algorithm**: `respond_with_variant` for OnePacking/TwoPacking now uses InspiRING when `inspiring_packing_keys` is present in the query (~35x faster online), falling back to tree packing otherwise
 - **HTTP server**: Uses InspiRING for in-memory databases when packing keys are available
+- **Network API**: Client queries can now include `ClientPackingKeys` (compact `y_body` form). Server derives rotations as needed to enable InspiRING over HTTP; otherwise it falls back to tree packing.
+- **Packing mode**: InspiRING is now the default; missing packing keys result in an error unless the client explicitly sets `packing_mode=tree`.
+- **mmap mode**: Added InspiRING support for memory-mapped shards when packing keys are provided.
 - **Documentation**: Fixed performance claims ("226x faster" -> "~35x faster") and clarified CRS size comparison in protocol-visualization.html
 
 ### Fixed
@@ -29,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **protocol-visualization.html**: Fixed incorrect claims per issue #31
   - Key Privacy Property: Now correctly states query size depends on N (via N/t indicator) and response depends on entry size
   - Query structures: InsPIRe_0 and InsPIRe^(2) now correctly show LWE indicator vectors (no RGSW); only InsPIRe uses RGSW ciphertext
-  - Variant naming: Aligned with paper notation (InsPIRe_0, InsPIRe^(2), InsPIRe, InsPIRe+)
+  - Variant naming: Aligned with paper notation (InsPIRe_0, InsPIRe^(2), InsPIRe)
   - Key material: Added separate "Upload Keys" chart showing packing keys (86 KB) per Theorem 12; Protocol Flow now shows "Upload: Keys + Query" breakdown matching paper's Figure 2/3
 
 ### Added
@@ -74,8 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Performance: **35x faster** online packing (115μs vs ~4ms for d=2048, 16 LWEs)
   - CRS key material: **16,000x smaller** (64 bytes seeds vs 1056 KB for d=2048)
   - Updated docs/protocol-visualization.html with algorithm comparison toggle
-  - **Protocol Flow section now variant-aware**: Toggle between ^0, ^1, ^2, ^2+ to see different query/response flows
-  - Each variant shows accurate sizes and processing steps (e.g., InspiRING packing for ^1+)
+  - **Protocol Flow section now variant-aware**: Toggle between ^0, ^1, ^2 to see different query/response flows
+  - Each variant shows accurate sizes and processing steps (e.g., InspiRING packing for ^1,^2)
   - New benchmark groups: `ntt_automorphism_d2048`, `production_inspiring2_d2048`
   - New example: `cargo run --release --example query_size_comparison`
   - References: https://github.com/google/private-membership/tree/main/research/InsPIRe
@@ -89,10 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **InsPIRe^2 (TwoPacking) implementation**: Seeded query + packed response
   - `respond_seeded()` and `respond_seeded_packed()` for seeded query handling
-  - `respond_switched()` and `respond_switched_packed()` for maximum compression
-  - Query size: 192 KB -> 96 KB (seeded) or 48 KB (switched)
+  - Query size: 192 KB -> 96 KB (seeded)
   - Total roundtrip with ^2: 128 KB (5.7x reduction from ^0)
-  - Total roundtrip with ^2+: 80 KB (9.2x reduction from ^0)
 
 - Automorphism key infrastructure for tree packing:
   - `generate_automorph_keys()` creates log(d) key-switching matrices
@@ -112,12 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `prep_pack_lwes()` to prepare LWEs for tree packing
 - Benchmark example: `cargo run --example benchmark_variants --release`
 - New e2e tests: `test_e2e_variant_no_packing`, `test_variant_packing_unimplemented`
-- Modulus switching module for ciphertext compression
-  - `modulus_switch` module with `SwitchedPoly`, `SwitchedSeededRlweCiphertext`, `SwitchedSeededRgswCiphertext`
-  - `SwitchedClientQuery` type for maximum compression
-  - `query_switched()` function combining seeding + modulus switching
-  - **Note**: With default parameters, modulus switching on RGSW queries exceeds noise budget
-    due to error amplification in external product. Use `query_seeded()` for production.
+- Removed experimental modulus-switching (^2+) query variant; modulus-switching types are no longer exposed.
 - Seed expansion for ~50% query size reduction
   - `SeededRlweCiphertext`, `SeededRgswCiphertext` types
   - `SeededClientQuery` for network transmission

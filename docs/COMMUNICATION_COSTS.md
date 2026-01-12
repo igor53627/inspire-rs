@@ -20,8 +20,6 @@ Optimizations:
 - **Seed expansion**: 50% query reduction (seeds replace `a` polynomials)
 - **Binary (bincode)**: ~60% reduction vs JSON (no text overhead)
 
-Note: Modulus switching with ℓ=3 would reduce query to ~48 KB, but exceeds the noise budget. The switched-safe gadget (smaller base, larger ℓ) yields ~112 KB queries with q'=2^30. See [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs).
-
 ### Protocol Variant Comparison
 
 The table above shows **InsPIRe^0 (NoPacking)** costs. With packing enabled, response sizes drop significantly:
@@ -32,11 +30,7 @@ The table above shows **InsPIRe^0 (NoPacking)** costs. With packing enabled, res
 | **InsPIRe^0 seeded** | 96 KB | 544 KB | 640 KB | Seed expansion only |
 | **InsPIRe^1** | 192 KB | 32 KB | 224 KB | Tree-packed response (1 RLWE) |
 | **InsPIRe^2** | 96 KB | 32 KB | **128 KB** | Seeded + packed |
-| **InsPIRe^2+*** | 112 KB | 32 KB | 144 KB | + Modulus switching |
-
-*InsPIRe^2+ uses a smaller gadget base (larger ℓ) to satisfy the noise bound; size depends on parameters (see [Modulus Switching Tradeoffs](#modulus-switching-tradeoffs)).
-
-**Production recommendation**: use InsPIRe^2 (seeded + packed) and avoid modulus switching.
+**Production recommendation**: use InsPIRe^2 (seeded + packed).
 
 **Key insight**: Packing reduces response from 544 KB → 32 KB (17x reduction) by combining all column values into a single RLWE ciphertext using Galois automorphisms.
 
@@ -67,9 +61,9 @@ The CRS is shared once and reused across queries.
 
 ### Packing Approach in HTTP Server
 
-The HTTP server uses **tree packing** (`respond_one_packing` / `respond_mmap_one_packing`) for all responses, returning packed 32 KB responses instead of 544 KB unpacked responses. The client uses `extract_with_variant(..., InspireVariant::OnePacking)` to unpack the columns.
+The HTTP server defaults to **InspiRING** packing when clients include `ClientPackingKeys` (compact `y_body` form). Tree packing (`respond_one_packing` / `respond_mmap_one_packing`) is opt-in via `packing_mode=tree`. The client uses `extract_inspiring(...)` for InspiRING responses or `extract_with_variant(..., InspireVariant::OnePacking)` for tree packing.
 
-InspiRING 2-matrix packing (`respond_inspiring`) is also implemented but requires `ClientPackingKeys` which are not currently transmitted over the network API.
+InspiRING 2-matrix packing (`respond_inspiring`) is also implemented and can be enabled over the network by including `ClientPackingKeys` (compact `y_body` form) in the query. InspiRING is the default; if packing keys are missing, the server returns an error unless the client explicitly sets `packing_mode=tree`.
 
 ## Why PIR Sizes Are Constant
 
@@ -107,6 +101,14 @@ With seed expansion: ~230 KB (seeds replace half the polynomials)
 | Database size | Index k only changes polynomial coefficients, not structure |
 | Target index | Same RGSW structure regardless of which entry |
 | Number of shards | Shard ID is metadata, not ciphertext size |
+
+### Sharding Tradeoffs (Implementation Note)
+
+Our implementation keeps query size constant by sharding the database and sending `shard_id`
+in the clear. This is practical for large databases but **weakens privacy granularity**:
+an observer can learn which shard (range) is accessed. Sharding also adds storage/IO overhead
+and preprocessing for many shard files, and small databases still pay the full query size
+chosen by fixed parameters.
 
 ### Response Size Formula
 
@@ -205,59 +207,24 @@ Benchmarked on AMD/Intel x64 server:
 | Client: Extract result | ~5 ms |
 | **Total round-trip** | **~12 ms** |
 
-## Modulus Switching Tradeoffs
+### Measured Request/Response Sizes (d=2048, entry_size=32)
 
-Modulus switching reduces coefficient size from 8 bytes to 4 bytes by rescaling from q to q':
+Measured on 2026-01-12 using `benches/query_size_latency.rs` with `INSPIRE_BENCH_SIZES_ONLY=1`.
+Values are serialized payload sizes for a single request/response.
 
-```
-c' = round(c × q' / q)
-```
+| Variant | Request (bincode) | Response (bincode) | Request (JSON) | Response (JSON) | Notes |
+|---------|-------------------|--------------------|----------------|-----------------|-------|
+| InsPIRe^0 (NoPacking) | 384.7 KB | 1089.9 KB | 461.1 KB | 1305.9 KB | Full query + per-column response |
+| InsPIRe^1 (OnePacking) | 480.9 KB | 64.1 KB | 576.4 KB | 76.8 KB | Full query + packed response (InspiRING) |
+| InsPIRe^2 (TwoPacking) | 288.7 KB | 64.1 KB | 346.5 KB | 76.9 KB | Seeded query + packed response (InspiRING) |
 
-### The Problem: Noise Amplification in External Product
+Notes:
+- JSON sizes reflect HTTP payload size and include key material when present.
+- Sizes vary with parameters and serialization format.
 
-For RGSW queries used in external product, the rounding error is amplified:
+## Modulus Switching Status
 
-```
-added_error ≈ ℓ × B × (q / q')
-
-Where:
-  ℓ = gadget digits (3)
-  B = gadget base (2^20)
-  q / q' = modulus ratio (≈2^26 for q≈2^56, q'=2^30)
-
-Current: 3 × 2^20 × 2^26 = 3×2^46 ≈ 2.1×10^14
-Allowed: q / (2p) ≈ 2^56 / 2^17 = 2^39 ≈ 5.5×10^11
-
-Result: Error exceeds threshold by ~128×, causing decryption failures.
-```
-
-### Can We Fix It?
-
-To make q'=2^30 work, we need: `ℓ × B < 2^13 ≈ 8192`
-
-| Gadget Base (B) | Digits (ℓ) | B^ℓ ≥ q? | ℓ × B | Works? |
-|-----------------|------------|----------|-------|--------|
-| 2^20 (current)  | 3          | ✓        | 3×2^20 | ✗ |
-| 2^10            | 6          | ✓        | 6144   | ✓ |
-| 2^8             | 8          | ✓        | 2048   | ✓ |
-
-### The Tradeoff: It's a Wash
-
-RGSW ciphertext has **2ℓ rows**. Changing parameters:
-
-| Config | Rows | Seeded Size | + Modulus Switch | Net Size |
-|--------|------|-------------|------------------|----------|
-| ℓ=3, B=2^20 (current) | 6 | 96 KB | ✗ (broken) | 96 KB |
-| ℓ=6, B=2^10 | 12 | 192 KB | ✓ (50% off) | 96 KB |
-| ℓ=8, B=2^8 | 16 | 261 KB | ✓ (50% off) | 130 KB |
-
-**Conclusion**: Doubling ℓ to enable modulus switching results in the same or worse final size. Seeded-only compression (96 KB) is the practical optimum for current security parameters. Switched queries are currently supported only in single-modulus mode.
-
-### When Modulus Switching Does Help
-
-- **RLWE responses** (no external product amplification)
-- **Different parameter regimes** (smaller gadget base already chosen for other reasons)
-- **Lower security levels** (smaller q allows smaller q' ratio)
+The experimental modulus-switching variant (InsPIRe^2+) has been removed. Current recommendations focus on seed expansion plus InspiRING packing (InsPIRe^2).
 
 ## Why Generic Compression Won't Help
 
