@@ -1,4 +1,6 @@
 ![CI](https://github.com/igor53627/inspire-rs/actions/workflows/ci.yml/badge.svg)
+[![Crates.io](https://img.shields.io/crates/v/inspire.svg)](https://crates.io/crates/inspire)
+[![Docs](https://docs.rs/inspire/badge.svg)](https://docs.rs/inspire)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/igor53627/inspire-rs)
 [![Interactive Visualization](https://img.shields.io/badge/Demo-Protocol%20Visualization-blue)](https://igor53627.github.io/inspire-rs/protocol-visualization.html)
 
