@@ -67,6 +67,10 @@ harness = false
 name = "respond"
 harness = false
 
+[[bench]]
+name = "query_size_latency"
+harness = false
+
 [[bin]]
 name = "inspire-server"
 path = "src/bin/server.rs"

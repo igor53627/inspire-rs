@@ -89,7 +89,7 @@ The key insight: storing value `y_k` at coefficient `k` of polynomial `h(X)`, th
 | InspiRING (2-matrix) | 2 (seeds only) | 64 bytes |
 | **Reduction** | **5.5x** | **16,000x** |
 
-**Note**: The conceptual 64-byte figure refers only to InspiRING packing-key seeds. The actual `ServerCrs` in this implementation is ~40-50 MB (d=2048), dominated by `crs_a_vectors` (d×d coefficients ≈ 33 MB) and offline precomputation. The HTTP server currently uses **tree packing** (`respond_one_packing`); InspiRING 2-matrix packing (`respond_inspiring`) is available for local experiments. Default parameters now use CRT moduli (two residues per coefficient); single-modulus params remain for switched-query experiments.
+**Note**: The conceptual 64-byte figure refers only to InspiRING packing-key seeds. The actual `ServerCrs` in this implementation is ~40-50 MB (d=2048), dominated by `crs_a_vectors` (d×d coefficients ≈ 33 MB) and offline precomputation. The HTTP server defaults to **InspiRING** when clients send packing keys; tree packing is opt-in via `packing_mode=tree`. Default parameters now use CRT moduli (two residues per coefficient); single-modulus params remain for switched-query experiments.
 
 ## Building
 
@@ -161,18 +161,15 @@ cargo run --release --bin inspire-setup -- \
 
 ## Communication Costs
 
-InsPIRe offers 4 protocol variants with different bandwidth/computation tradeoffs:
+InsPIRe offers 3 protocol variants with different bandwidth/computation tradeoffs:
 
 | Variant | Query | Response | Total | Reduction |
 |---------|-------|----------|-------|-----------|
 | **InsPIRe^0** (NoPacking) | 192 KB | 545 KB | **737 KB** | baseline |
 | **InsPIRe^1** (OnePacking) | 192 KB | 32 KB | **224 KB** | 3.3x |
 | **InsPIRe^2** (Seeded+Packed) | 96 KB | 32 KB | **128 KB** | 5.7x |
-| **InsPIRe^2+** (Switched+Packed)* | 48 KB | 32 KB | **80 KB** | 9.2x |
 
-*InsPIRe^2+ uses modulus switching which may exceed noise budget with default parameters and is only supported for single-modulus params.
-
-**Production recommendation**: use **InsPIRe^2 (TwoPacking)** — seeded query + packed response — and avoid modulus switching.
+**Production recommendation**: use **InsPIRe^2 (TwoPacking)** — seeded query + packed response.
 
 These costs are **independent of database size**—the same whether querying 1 MB or 73 GB.
 
@@ -227,17 +224,17 @@ The implementation supports two packing approaches:
 
 | Approach | Used By | Complexity | Notes |
 |----------|---------|------------|-------|
-| Tree packing | `respond_one_packing()`, HTTP server | O(log d) key-switches | Default for networked API |
-| InspiRING 2-matrix | `respond_inspiring()` | O(γ × ℓ × n) online | Local experiments only |
+| Tree packing | `respond_one_packing()` | O(log d) key-switches | Opt-in via `packing_mode=tree` |
+| InspiRING 2-matrix | `respond_inspiring()` | O(γ × ℓ × n) online | Default for networked API (requires packing keys) |
 
-**Tree packing** (via `automorph_pack`) is the default for the HTTP server. The server uses `respond_one_packing()` to return 32 KB packed responses, and the client uses `extract_with_variant(..., InspireVariant::OnePacking)` to unpack. This uses log(d) Galois key-switching matrices stored in the CRS.
+**Tree packing** (via `automorph_pack`) is available as an explicit fallback. Set `packing_mode=tree` and use `extract_with_variant(..., InspireVariant::OnePacking)` to unpack. This uses log(d) Galois key-switching matrices stored in the CRS.
 
 **InspiRING 2-matrix** packing is implemented in `inspiring2` module with optimizations matching Google's reference:
 - NTT-domain automorphisms via precomputed permutation tables
 - Fused multiply-accumulate in NTT domain
 - Pre-cached bold_t in NTT form for zero-conversion online phase
 
-Note: InspiRING requires `ClientPackingKeys` which are not currently transmitted over the network API.
+**HTTP API note:** Query JSON includes `packing_mode` (`\"inspiring\"` or `\"tree\"`, default `\"inspiring\"`). If `packing_mode=\"inspiring\"` and `inspiring_packing_keys` are missing, the server returns `400` with a descriptive error. Use `packing_mode=\"tree\"` to opt in to tree packing (both in-memory and mmap modes support InspiRING when keys are present).
 
 Run benchmarks: `cargo bench --bench packing`
 

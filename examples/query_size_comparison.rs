@@ -8,10 +8,8 @@
 //! Run: cargo run --release --example query_size_comparison
 
 use inspire_pir::math::GaussianSampler;
-use inspire_pir::modulus_switch::DEFAULT_SWITCHED_Q;
 use inspire_pir::params::InspireParams;
 use inspire_pir::pir::{query, query_seeded, setup};
-use inspire_pir::rgsw::switched_gadget_params;
 
 fn main() {
     println!("=== InsPIRe Communication Cost Analysis ===\n");
@@ -21,9 +19,6 @@ fn main() {
     let d = params.ring_dim;
     let q = params.q;
     let gadget_len = params.gadget_len;
-    let switched_gadget = switched_gadget_params(q, params.p, DEFAULT_SWITCHED_Q);
-    let (switched_gadget_base, switched_gadget_len) =
-        switched_gadget.unwrap_or((params.gadget_base, params.gadget_len));
 
     println!("Parameters:");
     println!("  Ring dimension (d): {}", d);
@@ -33,15 +28,6 @@ fn main() {
         "  Gadget base: 2^{}",
         (params.gadget_base as f64).log2() as u32
     );
-    if switched_gadget.is_some()
-        && (switched_gadget_base != params.gadget_base || switched_gadget_len != params.gadget_len)
-    {
-        println!(
-            "  Switched gadget base: 2^{} (l={})",
-            (switched_gadget_base as f64).log2() as u32,
-            switched_gadget_len
-        );
-    }
     println!();
 
     // Theoretical sizes
@@ -50,7 +36,6 @@ fn main() {
     // RGSW query: 2*l rows, each row has 2 polynomials of d coefficients (8 bytes each)
     let rgsw_full_size = 2 * gadget_len * 2 * d * 8;
     let rgsw_seeded_size = 2 * gadget_len * d * 8 + 2 * gadget_len * 32; // b polys + seeds
-    let rgsw_switched_size = 2 * switched_gadget_len * d * 4 + 2 * switched_gadget_len * 32; // 4 bytes after modswitch
 
     println!("Query (RGSW ciphertext):");
     println!(
@@ -63,12 +48,6 @@ fn main() {
         rgsw_seeded_size,
         rgsw_seeded_size as f64 / 1024.0
     );
-    println!(
-        "  Switched: {:>8} bytes ({:.1} KB)*",
-        rgsw_switched_size,
-        rgsw_switched_size as f64 / 1024.0
-    );
-    println!("  *Switched uses a smaller gadget base to satisfy noise bounds");
     println!();
 
     // Response sizes
@@ -141,12 +120,6 @@ fn main() {
             query_size: rgsw_seeded_size,
             response_size: response_packed,
             notes: "Best practical option",
-        },
-        VariantInfo {
-            name: "InsPIRe^2+ (Switched+Packed)",
-            query_size: rgsw_switched_size,
-            response_size: response_packed,
-            notes: "Noise-safe gadget*",
         },
     ];
 

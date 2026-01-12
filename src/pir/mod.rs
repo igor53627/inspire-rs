@@ -59,14 +59,13 @@ pub use extract::{extract, extract_inspiring, extract_two_packing, extract_with_
 #[cfg(feature = "server")]
 pub use mmap::{load_shard_binary, save_shards_binary, MmapDatabase};
 pub use query::{
-    query, query_seeded, query_switched, ClientQuery, ClientState, SeededClientQuery,
-    SwitchedClientQuery,
+    query, query_seeded, ClientQuery, ClientState, PackingMode, SeededClientQuery,
 };
 pub use respond::{
     respond, respond_inspiring, respond_one_packing, respond_seeded, respond_seeded_inspiring,
-    respond_seeded_packed, respond_seeded_with_variant, respond_sequential, respond_switched,
-    respond_switched_packed, respond_with_variant, ServerResponse,
+    respond_seeded_packed, respond_seeded_with_variant, respond_sequential, respond_with_variant,
+    ServerResponse,
 };
 #[cfg(feature = "server")]
-pub use respond::{respond_mmap, respond_mmap_one_packing};
+pub use respond::{respond_mmap, respond_mmap_inspiring, respond_mmap_one_packing};
 pub use setup::{setup, EncodedDatabase, InspireCrs, ServerCrs, ShardData};

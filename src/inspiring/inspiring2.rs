@@ -606,15 +606,20 @@ pub struct ClientPackingKeys {
     /// y_body[k] = τ_g(s)·g^k - s·w_mask[k] + error
     pub y_body: Vec<Poly>,
     /// z_body: key-switching body for conjugation h (full packing only)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub z_body: Vec<Poly>,
     /// Pre-rotated y_all = [τ_{g^0}(y_body), τ_{g^1}(y_body), ...] (coefficient form)
     /// This is what gets used in packing_online()
+    #[serde(skip_serializing, skip_deserializing)]
     pub y_all: Vec<Vec<Poly>>,
     /// y_all in NTT form for fast multiplication
+    #[serde(skip_serializing, skip_deserializing)]
     pub y_all_ntt: Vec<Vec<Poly>>,
     /// y_bar_all for full packing (coefficient form)
+    #[serde(skip_serializing, skip_deserializing)]
     pub y_bar_all: Vec<Vec<Poly>>,
     /// y_bar_all in NTT form
+    #[serde(skip_serializing, skip_deserializing)]
     pub y_bar_all_ntt: Vec<Vec<Poly>>,
     /// Whether this is for full packing
     pub full_key: bool,

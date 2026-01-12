@@ -22,8 +22,9 @@ use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use inspire_pir::pir::{
-    respond_inspiring, respond_mmap_one_packing, respond_one_packing, respond_seeded_packed,
-    ClientQuery, EncodedDatabase, InspireCrs, MmapDatabase, SeededClientQuery, ServerResponse,
+    respond_inspiring, respond_mmap_one_packing, respond_one_packing, respond_seeded_inspiring,
+    respond_seeded_packed, respond_mmap_inspiring, ClientQuery, EncodedDatabase, InspireCrs,
+    MmapDatabase, PackingMode, SeededClientQuery, ServerResponse,
 };
 
 #[derive(Parser)]
@@ -125,15 +126,37 @@ async fn handle_query(
     // Use InspiRING if packing keys available (~35x faster), otherwise tree packing
     let response = match &state.db {
         DatabaseMode::InMemory(encoded_db) => {
-            if query.inspiring_packing_keys.is_some() {
-                respond_inspiring(&state.crs, encoded_db, &query)
-            } else {
-                respond_one_packing(&state.crs, encoded_db, &query)
+            match query.packing_mode {
+                PackingMode::Inspiring => {
+                    if query.inspiring_packing_keys.is_none() {
+                        return Err((
+                            StatusCode::BAD_REQUEST,
+                            Json(ErrorResponse {
+                                error: "InspiRING packing keys missing (set packing_mode=tree to use tree packing)".to_string(),
+                            }),
+                        ));
+                    }
+                    respond_inspiring(&state.crs, encoded_db, &query)
+                }
+                PackingMode::Tree => respond_one_packing(&state.crs, encoded_db, &query),
             }
         }
         DatabaseMode::Mmap(mmap_db) => {
-            // TODO: Add respond_mmap_inspiring when needed
-            respond_mmap_one_packing(&state.crs, mmap_db, &query)
+            match query.packing_mode {
+                PackingMode::Inspiring => {
+                    if query.inspiring_packing_keys.is_none() {
+                        return Err((
+                            StatusCode::BAD_REQUEST,
+                            Json(ErrorResponse {
+                                error: "InspiRING packing keys missing (set packing_mode=tree to use tree packing)"
+                                    .to_string(),
+                            }),
+                        ));
+                    }
+                    respond_mmap_inspiring(&state.crs, mmap_db, &query)
+                }
+                PackingMode::Tree => respond_mmap_one_packing(&state.crs, mmap_db, &query),
+            }
         }
     }
     .map_err(|e| {
@@ -160,10 +183,39 @@ async fn handle_seeded_query(
     let start = Instant::now();
 
     let response = match &state.db {
-        DatabaseMode::InMemory(encoded_db) => respond_seeded_packed(&state.crs, encoded_db, &query),
+        DatabaseMode::InMemory(encoded_db) => match query.packing_mode {
+            PackingMode::Inspiring => {
+                if query.inspiring_packing_keys.is_none() {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(ErrorResponse {
+                            error: "InspiRING packing keys missing (set packing_mode=tree to use tree packing)".to_string(),
+                        }),
+                    ));
+                }
+                respond_seeded_inspiring(&state.crs, encoded_db, &query)
+            }
+            PackingMode::Tree => respond_seeded_packed(&state.crs, encoded_db, &query),
+        },
         DatabaseMode::Mmap(mmap_db) => {
-            let expanded = query.expand();
-            respond_mmap_one_packing(&state.crs, mmap_db, &expanded)
+            match query.packing_mode {
+                PackingMode::Inspiring => {
+                    if query.inspiring_packing_keys.is_none() {
+                        return Err((
+                            StatusCode::BAD_REQUEST,
+                            Json(ErrorResponse {
+                                error: "InspiRING packing keys missing (set packing_mode=tree to use tree packing)"
+                                    .to_string(),
+                            }),
+                        ));
+                    }
+                    respond_mmap_inspiring(&state.crs, mmap_db, &query.expand())
+                }
+                PackingMode::Tree => {
+                    let expanded = query.expand();
+                    respond_mmap_one_packing(&state.crs, mmap_db, &expanded)
+                }
+            }
         }
     }
     .map_err(|e| {
