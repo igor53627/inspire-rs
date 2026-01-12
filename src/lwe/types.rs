@@ -16,9 +16,9 @@ use serde::{Deserialize, Serialize};
 /// # Example
 ///
 /// ```
-/// use inspire_pir::lwe::LweSecretKey;
-/// use inspire_pir::math::GaussianSampler;
-/// use inspire_pir::math::mod_q::DEFAULT_Q;
+/// use inspire::lwe::LweSecretKey;
+/// use inspire::math::GaussianSampler;
+/// use inspire::math::mod_q::DEFAULT_Q;
 ///
 /// let mut sampler = GaussianSampler::new(3.2);
 /// let sk = LweSecretKey::generate(256, DEFAULT_Q, &mut sampler);
@@ -52,8 +52,8 @@ pub struct LweSecretKey {
 /// # Example
 ///
 /// ```
-/// use inspire_pir::lwe::{LweSecretKey, LweCiphertext};
-/// use inspire_pir::math::mod_q::DEFAULT_Q;
+/// use inspire::lwe::{LweSecretKey, LweCiphertext};
+/// use inspire::math::mod_q::DEFAULT_Q;
 ///
 /// let sk = LweSecretKey::from_coeffs(vec![1, 2, 3, 4], DEFAULT_Q);
 /// let ct = LweCiphertext::zero(4, DEFAULT_Q);

@@ -12,7 +12,7 @@
 /// # Example
 ///
 /// ```
-/// use inspire_pir::math::modular::ModQ;
+/// use inspire::math::modular::ModQ;
 ///
 /// let q = 1152921504606830593u64;
 /// let sum = ModQ::add(100, 200, q);

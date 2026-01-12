@@ -2,9 +2,9 @@
 //!
 //! Compares serialized sizes of ClientQuery vs SeededClientQuery
 
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{query, query_seeded, setup};
+use inspire::math::GaussianSampler;
+use inspire::params::InspireParams;
+use inspire::pir::{query, query_seeded, setup};
 
 fn main() -> eyre::Result<()> {
     println!("Seed Expansion Benchmark");
@@ -22,7 +22,7 @@ fn main() -> eyre::Result<()> {
                 sigma: 6.4,
                 gadget_base: 1 << 20,
                 gadget_len: 3,
-                security_level: inspire_pir::params::SecurityLevel::Bits128,
+                security_level: inspire::params::SecurityLevel::Bits128,
             },
         ),
         ("d=2048 (production)", InspireParams::secure_128_d2048()),

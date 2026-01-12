@@ -14,14 +14,14 @@ use serde::Deserialize;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use inspire_pir::ethereum_db::EthereumStateDb;
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::{InspireVariant, ShardConfig};
-use inspire_pir::pir::{
+use inspire::ethereum_db::EthereumStateDb;
+use inspire::math::GaussianSampler;
+use inspire::params::{InspireVariant, ShardConfig};
+use inspire::pir::{
     extract_inspiring, extract_with_variant, query, query_seeded, ClientQuery, PackingMode,
     SeededClientQuery, ServerCrs, ServerResponse,
 };
-use inspire_pir::rlwe::RlweSecretKey;
+use inspire::rlwe::RlweSecretKey;
 
 #[derive(Parser)]
 #[command(name = "inspire-client")]

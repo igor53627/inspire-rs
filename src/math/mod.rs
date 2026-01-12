@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```
-//! use inspire_pir::math::{Poly, NttContext};
+//! use inspire::math::{Poly, NttContext};
 //!
 //! // Create a polynomial and convert to NTT domain
 //! let ctx = NttContext::with_default_q(256);

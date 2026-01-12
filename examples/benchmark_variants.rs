@@ -2,9 +2,9 @@
 //!
 //! Run with: cargo run --example benchmark_variants --release
 
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::{InspireParams, SecurityLevel};
-use inspire_pir::pir::{extract, query, respond, setup};
+use inspire::math::GaussianSampler;
+use inspire::params::{InspireParams, SecurityLevel};
+use inspire::pir::{extract, query, respond, setup};
 use std::time::Instant;
 
 fn main() {

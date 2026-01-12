@@ -6,9 +6,9 @@ use std::fs::File;
 use std::io::BufReader;
 use std::time::Instant;
 
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::pir::{extract, query, respond, EncodedDatabase, ServerCrs};
-use inspire_pir::rlwe::RlweSecretKey;
+use inspire::math::GaussianSampler;
+use inspire::pir::{extract, query, respond, EncodedDatabase, ServerCrs};
+use inspire::rlwe::RlweSecretKey;
 
 fn main() -> eyre::Result<()> {
     let pir_dir = std::path::Path::new("sepolia-test/pir");

@@ -4,9 +4,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{
+use inspire::math::GaussianSampler;
+use inspire::params::InspireParams;
+use inspire::pir::{
     extract_inspiring, query, respond_inspiring, respond_one_packing, setup, ClientQuery,
     EncodedDatabase, PackingMode, ServerCrs, ServerResponse,
 };
@@ -73,7 +73,7 @@ fn test_params() -> InspireParams {
         sigma: 6.4,
         gadget_base: 1 << 20,
         gadget_len: 3,
-        security_level: inspire_pir::params::SecurityLevel::Bits128,
+        security_level: inspire::params::SecurityLevel::Bits128,
     }
 }
 

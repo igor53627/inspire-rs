@@ -16,8 +16,8 @@
 //! # Example
 //!
 //! ```
-//! use inspire_pir::math::{Poly, NttContext};
-//! use inspire_pir::math::mod_q::DEFAULT_Q;
+//! use inspire::math::{Poly, NttContext};
+//! use inspire::math::mod_q::DEFAULT_Q;
 //!
 //! let ctx = NttContext::with_default_q(256);
 //!
@@ -53,8 +53,8 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 /// # Example
 ///
 /// ```
-/// use inspire_pir::math::Poly;
-/// use inspire_pir::math::mod_q::DEFAULT_Q;
+/// use inspire::math::Poly;
+/// use inspire::math::mod_q::DEFAULT_Q;
 ///
 /// let poly = Poly::constant(42, 256, DEFAULT_Q);
 /// assert_eq!(poly.coeff(0), 42);

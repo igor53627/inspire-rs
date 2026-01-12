@@ -1,4 +1,4 @@
-# Security Notes for inspire-pir
+# Security Notes for inspire
 
 - **Supported variants**: InsPIRe^0 (NoPacking), InsPIRe^1 (OnePacking), InsPIRe^2 (Seeded+Packed). These are the only production-supported modes.
 - **Removed variant**: The experimental modulus-switching path (often called InsPIRe^2+) has been **removed** because modulus-switch noise exceeded the decryption bound with default parameters. The code, APIs, benches, and docs no longer expose or endorse this variant.

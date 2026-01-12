@@ -2,9 +2,9 @@
 //!
 //! Tests the full PIR protocol: Setup → Query → Respond → Extract = Original Entry
 
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::{InspireParams, InspireVariant, SecurityLevel};
-use inspire_pir::pir::{
+use inspire::math::GaussianSampler;
+use inspire::params::{InspireParams, InspireVariant, SecurityLevel};
+use inspire::pir::{
     extract, extract_inspiring, extract_with_variant, query, query_seeded, respond,
     respond_inspiring, respond_seeded_packed, respond_with_variant, setup, PackingMode,
 };

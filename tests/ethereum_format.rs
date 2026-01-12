@@ -2,9 +2,9 @@
 //!
 //! Tests PIR with Ethereum account and storage entry structures.
 
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::{InspireParams, SecurityLevel};
-use inspire_pir::pir::{extract, query, respond, setup};
+use inspire::math::GaussianSampler;
+use inspire::params::{InspireParams, SecurityLevel};
+use inspire::pir::{extract, query, respond, setup};
 
 fn test_params() -> InspireParams {
     InspireParams {

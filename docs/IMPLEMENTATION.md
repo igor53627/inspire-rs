@@ -32,7 +32,7 @@ The 73 GB Ethereum state is sharded into ~1 GB chunks:
 ### 3. Architecture
 
 ```
-inspire-pir/
+inspire/
 ├── src/
 │   ├── lib.rs                 # Public API
 │   ├── params.rs              # Parameter sets

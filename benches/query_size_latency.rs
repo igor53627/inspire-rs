@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::{InspireParams, InspireVariant};
-use inspire_pir::pir::{
+use inspire::math::GaussianSampler;
+use inspire::params::{InspireParams, InspireVariant};
+use inspire::pir::{
     extract_inspiring, extract_with_variant, query, query_seeded, respond, respond_inspiring,
     respond_one_packing, respond_seeded_inspiring, respond_seeded_packed, setup, PackingMode,
 };

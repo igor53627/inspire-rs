@@ -14,7 +14,7 @@
 //! # Example
 //!
 //! ```
-//! use inspire_pir::params::{InspireParams, SecurityLevel};
+//! use inspire::params::{InspireParams, SecurityLevel};
 //!
 //! // Use recommended 128-bit secure parameters
 //! let params = InspireParams::secure_128_d2048();
@@ -43,7 +43,7 @@ pub const DEFAULT_CRT_MODULI: [u64; 2] = [268_369_921, 249_561_089];
 /// # Example
 ///
 /// ```
-/// use inspire_pir::params::SecurityLevel;
+/// use inspire::params::SecurityLevel;
 ///
 /// let level = SecurityLevel::Bits128;
 /// ```
@@ -70,7 +70,7 @@ pub enum SecurityLevel {
 /// # Example
 ///
 /// ```
-/// use inspire_pir::params::InspireVariant;
+/// use inspire::params::InspireVariant;
 ///
 /// let variant = InspireVariant::default(); // NoPacking
 /// assert_eq!(variant, InspireVariant::NoPacking);
@@ -120,7 +120,7 @@ pub enum InspireVariant {
 /// # Example
 ///
 /// ```
-/// use inspire_pir::params::InspireParams;
+/// use inspire::params::InspireParams;
 ///
 /// // Use recommended parameters
 /// let params = InspireParams::secure_128_d2048();
@@ -204,7 +204,7 @@ impl InspireParams {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::InspireParams;
+    /// use inspire::params::InspireParams;
     ///
     /// let params = InspireParams::secure_128_d2048();
     /// assert_eq!(params.ring_dim, 2048);
@@ -248,7 +248,7 @@ impl InspireParams {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::InspireParams;
+    /// use inspire::params::InspireParams;
     ///
     /// let params = InspireParams::secure_128_d4096();
     /// assert_eq!(params.ring_dim, 4096);
@@ -286,7 +286,7 @@ impl InspireParams {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::InspireParams;
+    /// use inspire::params::InspireParams;
     ///
     /// let params = InspireParams::secure_128_d2048();
     /// let delta = params.delta();
@@ -333,7 +333,7 @@ impl InspireParams {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::InspireParams;
+    /// use inspire::params::InspireParams;
     ///
     /// let params = InspireParams::secure_128_d2048();
     /// assert!(params.validate().is_ok());
@@ -417,7 +417,7 @@ impl Default for InspireParams {
 /// # Example
 ///
 /// ```
-/// use inspire_pir::params::ShardConfig;
+/// use inspire::params::ShardConfig;
 ///
 /// // Configure for Ethereum state database
 /// let config = ShardConfig::ethereum_state(2_417_514_276);
@@ -468,7 +468,7 @@ impl ShardConfig {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::ShardConfig;
+    /// use inspire::params::ShardConfig;
     ///
     /// // Ethereum mainnet has ~2.4 billion entries
     /// let config = ShardConfig::ethereum_state(2_417_514_276);
@@ -491,7 +491,7 @@ impl ShardConfig {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::ShardConfig;
+    /// use inspire::params::ShardConfig;
     ///
     /// let config = ShardConfig::ethereum_state(1_000_000);
     /// // 1 GB / 32 bytes = 33,554,432 entries per shard
@@ -512,7 +512,7 @@ impl ShardConfig {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::ShardConfig;
+    /// use inspire::params::ShardConfig;
     ///
     /// // Ethereum mainnet needs ~72 shards
     /// let config = ShardConfig::ethereum_state(2_417_514_276);
@@ -541,7 +541,7 @@ impl ShardConfig {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::ShardConfig;
+    /// use inspire::params::ShardConfig;
     ///
     /// let config = ShardConfig::ethereum_state(2_417_514_276);
     /// let (shard_id, local_idx) = config.index_to_shard(100_000_000);
@@ -574,7 +574,7 @@ impl ShardConfig {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::params::ShardConfig;
+    /// use inspire::params::ShardConfig;
     ///
     /// let config = ShardConfig::ethereum_state(2_417_514_276);
     ///

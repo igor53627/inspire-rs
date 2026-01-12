@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::InspireParams;
-use inspire_pir::params::InspireVariant;
-use inspire_pir::pir::{
+use inspire::math::GaussianSampler;
+use inspire::params::InspireParams;
+use inspire::params::InspireVariant;
+use inspire::pir::{
     extract_with_variant, query, respond, respond_sequential, respond_with_variant, setup,
 };
 
@@ -15,7 +15,7 @@ fn test_params() -> InspireParams {
         sigma: 6.4,
         gadget_base: 1 << 20,
         gadget_len: 3,
-        security_level: inspire_pir::params::SecurityLevel::Bits128,
+        security_level: inspire::params::SecurityLevel::Bits128,
     }
 }
 

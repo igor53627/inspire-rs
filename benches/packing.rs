@@ -1,15 +1,15 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use inspire_pir::inspiring::{
+use inspire::inspiring::{
     pack_inspiring_legacy, pack_lwes, packing_offline, packing_online, packing_online_fully_ntt,
     precompute_inspiring, ClientPackingKeys, GeneratorPowers, OfflinePackingKeys, PackParams,
     YConstants,
 };
-use inspire_pir::ks::generate_automorphism_ks_matrix;
-use inspire_pir::math::{GaussianSampler, NttContext, Poly};
-use inspire_pir::params::InspireParams;
-use inspire_pir::pir::setup;
-use inspire_pir::rgsw::GadgetVector;
-use inspire_pir::rlwe::RlweSecretKey;
+use inspire::ks::generate_automorphism_ks_matrix;
+use inspire::math::{GaussianSampler, NttContext, Poly};
+use inspire::params::InspireParams;
+use inspire::pir::setup;
+use inspire::rgsw::GadgetVector;
+use inspire::rlwe::RlweSecretKey;
 
 fn test_params() -> InspireParams {
     InspireParams {
@@ -20,7 +20,7 @@ fn test_params() -> InspireParams {
         sigma: 6.4,
         gadget_base: 1 << 20,
         gadget_len: 3,
-        security_level: inspire_pir::params::SecurityLevel::Bits128,
+        security_level: inspire::params::SecurityLevel::Bits128,
     }
 }
 
@@ -53,7 +53,7 @@ fn pack_lwes_benchmark(c: &mut Criterion) {
                 msg_coeffs[0] = msg;
                 let msg_poly = Poly::from_coeffs(msg_coeffs, q);
                 let rlwe_ct =
-                    inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
+                    inspire::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
                 rlwe_ct.sample_extract_coeff0()
             })
             .collect();
@@ -96,7 +96,7 @@ fn inspiring2_benchmark(c: &mut Criterion) {
                 msg_coeffs[0] = msg;
                 let msg_poly = Poly::from_coeffs(msg_coeffs, q);
                 let rlwe_ct =
-                    inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
+                    inspire::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
                 rlwe_ct.sample_extract_coeff0()
             })
             .collect();
@@ -149,7 +149,7 @@ fn comparison_benchmark(c: &mut Criterion) {
             msg_coeffs[0] = msg;
             let msg_poly = Poly::from_coeffs(msg_coeffs, q);
             let rlwe_ct =
-                inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
+                inspire::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
             rlwe_ct.sample_extract_coeff0()
         })
         .collect();
@@ -201,7 +201,7 @@ fn production_comparison_benchmark(c: &mut Criterion) {
             msg_coeffs[0] = msg;
             let msg_poly = Poly::from_coeffs(msg_coeffs, q);
             let rlwe_ct =
-                inspire_pir::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
+                inspire::rlwe::RlweCiphertext::trivial_encrypt(&msg_poly, delta, &params);
             rlwe_ct.sample_extract_coeff0()
         })
         .collect();

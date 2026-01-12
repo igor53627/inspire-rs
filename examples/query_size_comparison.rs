@@ -7,9 +7,9 @@
 //!
 //! Run: cargo run --release --example query_size_comparison
 
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{query, query_seeded, setup};
+use inspire::math::GaussianSampler;
+use inspire::params::InspireParams;
+use inspire::pir::{query, query_seeded, setup};
 
 fn main() {
     println!("=== InsPIRe Communication Cost Analysis ===\n");

@@ -19,8 +19,8 @@
 //! # Example
 //!
 //! ```ignore
-//! use inspire_pir::rgsw::{RgswCiphertext, GadgetVector, external_product};
-//! use inspire_pir::rlwe::RlweCiphertext;
+//! use inspire::rgsw::{RgswCiphertext, GadgetVector, external_product};
+//! use inspire::rlwe::RlweCiphertext;
 //!
 //! let gadget = GadgetVector::new(1 << 20, 3, q);
 //! let rgsw_ct = RgswCiphertext::encrypt(...);

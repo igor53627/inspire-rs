@@ -19,7 +19,7 @@
 //! # Example
 //!
 //! ```
-//! use inspire_pir::math::ntt::NttContext;
+//! use inspire::math::ntt::NttContext;
 //!
 //! let ctx = NttContext::with_default_q(256);
 //!
@@ -51,7 +51,7 @@ use super::mod_q::DEFAULT_Q;
 /// # Example
 ///
 /// ```
-/// use inspire_pir::math::ntt::NttContext;
+/// use inspire::math::ntt::NttContext;
 ///
 /// let ctx = NttContext::with_default_q(2048);
 /// assert_eq!(ctx.dimension(), 2048);
@@ -97,8 +97,8 @@ impl NttContext {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::math::ntt::NttContext;
-    /// use inspire_pir::math::mod_q::DEFAULT_Q;
+    /// use inspire::math::ntt::NttContext;
+    /// use inspire::math::mod_q::DEFAULT_Q;
     ///
     /// let ctx = NttContext::new(2048, DEFAULT_Q);
     /// assert_eq!(ctx.dimension(), 2048);

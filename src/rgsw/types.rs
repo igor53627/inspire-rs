@@ -28,8 +28,8 @@ fn sample_error_poly(dim: usize, moduli: &[u64], sampler: &mut GaussianSampler) 
 /// # Example
 ///
 /// ```
-/// use inspire_pir::rgsw::GadgetVector;
-/// use inspire_pir::math::mod_q::DEFAULT_Q;
+/// use inspire::rgsw::GadgetVector;
+/// use inspire::math::mod_q::DEFAULT_Q;
 ///
 /// let gadget = GadgetVector::new(1 << 20, 3, DEFAULT_Q);
 /// assert_eq!(gadget.len, 3);

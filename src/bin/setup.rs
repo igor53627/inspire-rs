@@ -14,10 +14,10 @@ use tiny_keccak::{Hasher, Keccak};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use inspire_pir::ethereum_db::EthereumStateDb;
-use inspire_pir::math::GaussianSampler;
-use inspire_pir::params::InspireParams;
-use inspire_pir::pir::{save_shards_binary, setup, EncodedDatabase, ServerCrs};
+use inspire::ethereum_db::EthereumStateDb;
+use inspire::math::GaussianSampler;
+use inspire::params::InspireParams;
+use inspire::pir::{save_shards_binary, setup, EncodedDatabase, ServerCrs};
 
 /// Number of buckets for sparse index (2^18 = 256K)
 const NUM_BUCKETS: usize = 262_144;

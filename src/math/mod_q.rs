@@ -17,7 +17,7 @@
 //! # Example
 //!
 //! ```
-//! use inspire_pir::math::mod_q::{ModQ, DEFAULT_Q};
+//! use inspire::math::mod_q::{ModQ, DEFAULT_Q};
 //!
 //! let a = ModQ::new(100, DEFAULT_Q);
 //! let b = ModQ::new(200, DEFAULT_Q);
@@ -52,7 +52,7 @@ pub const DEFAULT_Q: u64 = 1152921504606830593;
 /// # Example
 ///
 /// ```
-/// use inspire_pir::math::mod_q::{ModQ, DEFAULT_Q};
+/// use inspire::math::mod_q::{ModQ, DEFAULT_Q};
 ///
 /// let x = ModQ::new(42, DEFAULT_Q);
 /// let y = ModQ::new(7, DEFAULT_Q);
@@ -89,7 +89,7 @@ impl ModQ {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::math::mod_q::{ModQ, DEFAULT_Q};
+    /// use inspire::math::mod_q::{ModQ, DEFAULT_Q};
     ///
     /// let x = ModQ::new(42, DEFAULT_Q);
     /// assert_eq!(x.value(), 42);
@@ -120,7 +120,7 @@ impl ModQ {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::math::mod_q::ModQ;
+    /// use inspire::math::mod_q::ModQ;
     ///
     /// let x = ModQ::with_default_q(100);
     /// assert_eq!(x.value(), 100);
@@ -226,7 +226,7 @@ impl ModQ {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::math::mod_q::{ModQ, DEFAULT_Q};
+    /// use inspire::math::mod_q::{ModQ, DEFAULT_Q};
     ///
     /// let base = ModQ::new(2, DEFAULT_Q);
     /// let result = base.pow(10);
@@ -262,7 +262,7 @@ impl ModQ {
     /// # Example
     ///
     /// ```
-    /// use inspire_pir::math::mod_q::{ModQ, DEFAULT_Q};
+    /// use inspire::math::mod_q::{ModQ, DEFAULT_Q};
     ///
     /// let a = ModQ::new(12345, DEFAULT_Q);
     /// let a_inv = a.inv().unwrap();

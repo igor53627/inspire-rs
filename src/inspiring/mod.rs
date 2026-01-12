@@ -15,10 +15,10 @@
 //! # Example Usage
 //!
 //! ```ignore
-//! use inspire_pir::inspiring::{pack, precompute_packing, pack_online, PackingPrecomputation};
-//! use inspire_pir::ks::KeySwitchingMatrix;
-//! use inspire_pir::lwe::LweCiphertext;
-//! use inspire_pir::params::InspireParams;
+//! use inspire::inspiring::{pack, precompute_packing, pack_online, PackingPrecomputation};
+//! use inspire::ks::KeySwitchingMatrix;
+//! use inspire::lwe::LweCiphertext;
+//! use inspire::params::InspireParams;
 //!
 //! let params = InspireParams::secure_128_d2048();
 //!

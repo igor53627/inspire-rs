@@ -19,9 +19,9 @@
 //! # Example
 //!
 //! ```ignore
-//! use inspire_pir::pir::{setup, query, respond, extract};
-//! use inspire_pir::params::InspireParams;
-//! use inspire_pir::math::GaussianSampler;
+//! use inspire::pir::{setup, query, respond, extract};
+//! use inspire::params::InspireParams;
+//! use inspire::math::GaussianSampler;
 //!
 //! let params = InspireParams::default();
 //! let database = vec![0u8; 1024 * 32]; // 1024 entries of 32 bytes each

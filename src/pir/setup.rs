@@ -11,9 +11,9 @@
 //! # Example
 //!
 //! ```ignore
-//! use inspire_pir::pir::setup;
-//! use inspire_pir::params::InspireParams;
-//! use inspire_pir::math::GaussianSampler;
+//! use inspire::pir::setup;
+//! use inspire::params::InspireParams;
+//! use inspire::math::GaussianSampler;
 //!
 //! let params = InspireParams::secure_128_d2048();
 //! let database = vec![0u8; 1024 * 32]; // 1024 entries of 32 bytes

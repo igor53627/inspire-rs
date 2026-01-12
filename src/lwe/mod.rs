@@ -30,9 +30,9 @@
 //! # Example
 //!
 //! ```
-//! use inspire_pir::lwe::{LweSecretKey, LweCiphertext};
-//! use inspire_pir::math::GaussianSampler;
-//! use inspire_pir::math::mod_q::DEFAULT_Q;
+//! use inspire::lwe::{LweSecretKey, LweCiphertext};
+//! use inspire::math::GaussianSampler;
+//! use inspire::math::mod_q::DEFAULT_Q;
 //!
 //! let mut sampler = GaussianSampler::new(3.2);
 //! let sk = LweSecretKey::generate(256, DEFAULT_Q, &mut sampler);

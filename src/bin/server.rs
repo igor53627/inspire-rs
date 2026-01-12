@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
-use inspire_pir::pir::{
+use inspire::pir::{
     respond_inspiring, respond_mmap_one_packing, respond_one_packing, respond_seeded_inspiring,
     respond_seeded_packed, respond_mmap_inspiring, ClientQuery, EncodedDatabase, InspireCrs,
     MmapDatabase, PackingMode, SeededClientQuery, ServerResponse,
@@ -277,7 +277,7 @@ async fn main() -> Result<()> {
             ));
         }
 
-        let shard_config = inspire_pir::params::ShardConfig {
+        let shard_config = inspire::params::ShardConfig {
             shard_size_bytes: (crs.ring_dim() as u64) * 32,
             entry_size_bytes: 32,
             total_entries: metadata.entry_count,

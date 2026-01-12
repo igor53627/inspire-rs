@@ -31,8 +31,8 @@ fn sample_error_poly(dim: usize, moduli: &[u64], sampler: &mut GaussianSampler) 
 /// # Example
 ///
 /// ```ignore
-/// use inspire_pir::ks::{KeySwitchingMatrix, generate_ks_matrix};
-/// use inspire_pir::rgsw::GadgetVector;
+/// use inspire::ks::{KeySwitchingMatrix, generate_ks_matrix};
+/// use inspire::rgsw::GadgetVector;
 ///
 /// let gadget = GadgetVector::new(1 << 20, 3, q);
 /// let ks_matrix = generate_ks_matrix(&from_key, &to_key, &gadget, &mut sampler, &ctx);

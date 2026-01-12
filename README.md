@@ -104,7 +104,7 @@ The library supports building for `wasm32-unknown-unknown` targets (browsers) by
 ```toml
 # In your Cargo.toml
 [dependencies]
-inspire-pir = { version = "0.1", default-features = false }
+inspire = { version = "0.1", default-features = false }
 ```
 
 Build with wasm-pack:
@@ -180,8 +180,8 @@ These costs are **independent of database size**—the same whether querying 1 M
 ### Protocol Variants
 
 ```rust
-use inspire_pir::{query, query_seeded, respond_one_packing, respond_seeded_packed};
-use inspire_pir::params::InspireVariant;
+use inspire::{query, query_seeded, respond_one_packing, respond_seeded_packed};
+use inspire::params::InspireVariant;
 
 // InsPIRe^0: Simple, no packing
 let response = respond(&crs, &db, &query)?;
